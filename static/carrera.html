@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="es">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="calma-datos" content="/api/carrera">
+<meta name="calma-entrada" content="espera">
+<meta name="theme-color" content="#F4F5F0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#171A16" media="(prefers-color-scheme: dark)">
+<title>Carrera</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.json" crossorigin="use-credentials">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Carrera">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="/calma.css?v=3006c142">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="/calma.js?v=3006c142"></script>
+<script src="/anime-4.5.0.min.js"></script>
+<script src="/anima.js?v=3006c142"></script>
+<style>
+  /* Estilo Calma: tokens y componentes en /calma.css (fuente: ~/estilo). Aquí solo lo de carrera. */
+  body { padding: 16px; padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px)); }
+  .app { max-width: 1120px; margin: 0 auto; display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+  .col { display: grid; gap: 14px; align-content: start; min-width: 0; }
+  @media (min-width: 920px) { .app { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); } }
+  .top { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 4px 2px 0; }
+  h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -.02em; }
+  .top nav { margin-left: auto; display: flex; gap: 6px; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .top nav a { text-decoration: none; }
+  #estado { font-size: 13px; color: var(--suave); }
+  .carta { padding: 16px; min-width: 0; }
+  .carta h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .carta h2 .der { margin-left: auto; font-weight: 400; }
+  .vacio { margin: 0; padding: 8px 2px; font-size: 14px; color: var(--suave); }
+
+  .eti-sup { font-size: 13px; color: var(--suave); }
+  .cifra { font-size: 46px; font-weight: 700; letter-spacing: -.03em; line-height: 1.1; margin: 2px 0; font-variant-numeric: tabular-nums; }
+  .bajo { margin: 0 0 12px; font-size: 14px; color: var(--suave); }
+  .tres { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+  .tres div { background: var(--carta-2); border-radius: var(--r-s); padding: 10px; min-width: 0; }
+  .tres small { display: block; font-size: 12px; color: var(--suave); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tres b { font-size: 17px; font-weight: 650; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .proy { margin: 12px 0 0; font-size: 14px; }
+
+  .ses { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .ses li { display: grid; grid-template-columns: 4.2em minmax(0, 1fr) auto; gap: 10px; align-items: center;
+            padding: 10px; border-radius: var(--r-s); background: var(--carta-2); }
+  .ses .d { font-size: 13px; font-weight: 600; color: var(--suave); }
+  .ses .n { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ses .n i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--c); margin-right: 8px; vertical-align: 1px; }
+  .ses li.hecho .n { color: var(--suave); text-decoration: line-through; text-decoration-color: var(--tenue); }
+  .ses li.hoy { box-shadow: inset 0 0 0 2px var(--acento); }
+
+  .ins { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; }
+  .ins li { display: flex; gap: 10px; font-size: 14px; line-height: 1.45; }
+  .ins li::before { content: "→"; color: var(--acento); font-weight: 700; }
+
+  table.ritmos { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table.ritmos td { padding: 8px 4px; border-bottom: 1px solid var(--linea); }
+  table.ritmos tr:last-child td { border-bottom: 0; }
+  table.ritmos td:last-child { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  table.ritmos small { display: block; color: var(--suave); font-size: 12px; }
+
+  .lienzo { position: relative; height: 240px; }
+  .leyenda { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: -4px 0 10px; font-size: 13px; color: var(--suave); }
+  .leyenda span { display: inline-flex; align-items: center; gap: 6px; }
+  .leyenda s { display: inline-block; width: 16px; height: 0; border-top: 2px solid var(--c); text-decoration: none; }
+  .leyenda s.raya { border-top-style: dashed; }
+  .leyenda s.punto { width: 9px; height: 9px; border: 0; border-radius: 50%; background: var(--c); }
+  .leyenda s.caja { width: 12px; height: 10px; border: 0; border-radius: 3px; background: var(--c); }
+  details.datos { margin-top: 8px; font-size: 13px; color: var(--suave); }
+  details.datos summary { cursor: pointer; width: max-content; }
+  details.datos .scroll { max-height: 240px; overflow: auto; }
+  details.datos table { width: 100%; border-collapse: collapse; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  details.datos th, details.datos td { text-align: right; padding: 4px 6px; border-bottom: 1px solid var(--linea); font-weight: 400; white-space: nowrap; }
+  details.datos th:first-child, details.datos td:first-child { text-align: left; }
+  details.como p { font-size: 14px; color: var(--suave); margin: 8px 0 0; }
+  details.como summary { cursor: pointer; font-weight: 600; }
+  .puerta input { width: 100%; }
+  .puerta button { width: 100%; }
+</style>
+<body>
+
+<div class="puerta c-puerta" id="puerta">
+  <form id="f-clave">
+    <h2>Carrera</h2>
+    <p id="puerta-msg">Contraseña de todo</p>
+    <input class="c-campo" type="password" name="pass" required autocomplete="current-password" aria-label="Contraseña">
+    <button class="c-btn pri" type="submit">Entrar</button>
+  </form>
+</div>
+
+<div class="app">
+  <header class="top">
+    <h1>Carrera</h1>
+    <span id="estado">Cargando…</span>
+    <nav><a class="c-btn mini" href="/">Hoy</a><a class="c-btn mini" href="/habitos.html">Hábitos</a><a class="c-btn mini" href="/pendientes.html">Pendientes</a><a class="c-btn mini" href="/sueno.html">Sueño</a><a class="c-btn mini" href="/comida.html">Comida</a><a class="c-btn mini" href="/gastos.html">Gastos</a></nav>
+  </header>
+
+  <div class="col">
+    <section class="carta c-carta" aria-labelledby="t-ahora">
+      <div class="eti-sup" id="t-ahora">Tu 5k ahora</div>
+      <div class="cifra" id="est">—</div>
+      <p class="bajo" id="fuente"></p>
+      <div class="c-barra" id="progreso" role="img"><i></i></div>
+      <div class="tres">
+        <div><small>Objetivo</small><b id="obj">22:00</b></div>
+        <div><small>Te faltan</small><b id="falta">—</b></div>
+        <div><small>Quedan</small><b id="quedan">—</b></div>
+      </div>
+      <p class="proy" id="proy"></p>
+    </section>
+
+    <section class="carta c-carta" aria-labelledby="t-semana">
+      <h2 id="t-semana"><span id="sem-tit">Esta semana</span> <span id="sem-chips"></span></h2>
+      <ul class="ses" id="ses"></ul>
+      <ul class="ins" id="notas"></ul>
+    </section>
+
+    <section class="carta c-carta" aria-labelledby="t-ritmos">
+      <h2 id="t-ritmos">Tus ritmos <span class="der c-eti">salen de tu 5k estimado</span></h2>
+      <table class="ritmos" id="ritmos"></table>
+    </section>
+
+    <section class="carta c-carta">
+      <details class="como">
+        <summary>Cómo se ajusta el plan</summary>
+        <p>Cada madrugada (04:30) se recalcula todo con lo que has hecho de verdad: los días de carrera del calendario de todo, lo que marcas y lo que apuntas con el atajo o el bot.</p>
+        <p><b>Volumen.</b> Si haces todas las carreras de la semana, la siguiente sube un escalón. Si haces una de dos, se mantiene. Si no corres, baja un escalón. Cada tres subidas toca una semana de descarga para asimilar.</p>
+        <p><b>Ritmos.</b> Salen de tu 5k estimado. Los tests (semanas 2, 8 y 14) lo fijan; una carrera normal solo puede bajarlo, nunca subirlo (con la fórmula de Riegel).</p>
+        <p><b>Fases.</b> Base hasta finales de enero: rodaje suave y rodaje largo, compatible con perder grasa. Febrero: series y tempo. La primera semana de marzo, afinar a ritmo de carrera, y la carrera el domingo 14 de marzo (ese día se añade solo al calendario).</p>
+        <p><b>Tu semana manda.</b> El plan solo decide qué sesión toca en tus días de carrera. Si mueves un día en todo o con el bot, la sesión se va con él.</p>
+      </details>
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="carta c-carta" aria-labelledby="t-camino">
+      <h2 id="t-camino">Camino a los 22:00 <span class="der c-eti">más abajo, más rápido</span></h2>
+      <div class="leyenda" id="ley-camino"></div>
+      <div class="lienzo"><canvas id="g-camino" role="img" aria-label="Estimación del 5k por semana frente al camino al objetivo"></canvas></div>
+      <details class="datos"><summary>Ver los datos</summary><div class="scroll" id="t-camino-d"></div></details>
+    </section>
+
+    <section class="carta c-carta" aria-labelledby="t-vol">
+      <h2 id="t-vol">Minutos por semana</h2>
+      <div class="leyenda" id="ley-vol"></div>
+      <div class="lienzo"><canvas id="g-vol" role="img" aria-label="Minutos de carrera planificados y hechos por semana"></canvas></div>
+      <details class="datos"><summary>Ver los datos</summary><div class="scroll" id="t-vol-d"></div></details>
+    </section>
+
+    <section class="carta c-carta" aria-labelledby="t-ritmo">
+      <h2 id="t-ritmo">Ritmo de cada carrera</h2>
+      <div id="ritmo-cuerpo">
+        <div class="leyenda" id="ley-ritmo"></div>
+        <div class="lienzo"><canvas id="g-ritmo" role="img" aria-label="Ritmo por kilómetro de cada carrera"></canvas></div>
+        <details class="datos"><summary>Ver los datos</summary><div class="scroll" id="t-ritmo-d"></div></details>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const el = (t, cls, txt) => { const e = document.createElement(t); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+const DIAS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+const fecha = s => new Date(s + "T12:00:00");
+const corta = s => `${fecha(s).getDate()} ${MESES[fecha(s).getMonth()]}`;
+const mas = (s, n) => { const d = fecha(s); d.setDate(d.getDate() + n); return d.toLocaleDateString("sv"); };
+const mmss = s => s == null ? "—" : `${Math.floor(Math.round(s) / 60)}:${String(Math.round(s) % 60).padStart(2, "0")}`;
+const HOY = new Date().toLocaleDateString("sv");
+// color = identidad del tipo de sesión, orden fijo (paleta validada de calma.css)
+const TIPOS = [["suave", "Rodaje suave"], ["largo", "Rodaje largo"], ["series", "Series"], ["tempo", "Tempo"], ["test", "Test o carrera"], ["libre", "Otra"]];
+const serie = tipo => `var(--serie-${TIPOS.findIndex(t => t[0] === tipo) + 1})`;
+let R = null;
+
+function puerta(mostrar, msg) {
+  $("#puerta").toggleAttribute("data-on", mostrar);
+  $("#puerta-msg").textContent = msg || "Contraseña de todo";
+  $("#puerta-msg").classList.toggle("mal", !!msg);
+  if (mostrar) $("#puerta input").focus();
+}
+
+async function cargar() {
+  try {
+    const r = await fetch("/api/carrera");
+    if (r.status === 401) { $("#estado").textContent = ""; return puerta(true); }
+    if (!r.ok) throw new Error(r.status);
+    R = await r.json();
+    puerta(false);
+    $("#estado").textContent = "";
+    pinta();
+    anima.entrada();
+  } catch (e) {
+    $("#estado").textContent = "Sin conexión";
+  }
+}
+
+function pinta() {
+  const e = R.estimacion, obj = R.objetivo.seg, ini = R.historial[0].seg;
+  calma.cuenta($("#est"), e.seg, mmss, 700);
+  $("#fuente").textContent = `Según ${e.fuente}` + (e.dia ? ` (${corta(e.dia)})` : "");
+  const p = Math.max(0, Math.min(100, (ini - e.seg) / (ini - obj) * 100));
+  $("#progreso").style.setProperty("--p", p + "%");
+  anima.llena("#progreso");
+  $("#progreso").setAttribute("aria-label", `Llevas el ${Math.round(p)} % del camino de ${mmss(ini)} a ${mmss(obj)}`);
+  $("#obj").textContent = mmss(obj);
+  $("#falta").textContent = e.seg > obj ? `${Math.round(e.seg - obj)} s` : "¡nada!";
+  const dias = Math.round((fecha(R.objetivo.dia) - fecha(HOY)) / 864e5);
+  $("#quedan").textContent = dias > 13 ? `${Math.ceil(dias / 7)} sem` : `${Math.max(0, dias)} días`;
+  $("#proy").textContent = R.proyeccion.texto;
+  if (e.seg <= obj) calma.fiesta("carrera-objetivo");
+
+  // esta semana
+  const w = R.semanas[Math.max(0, R.semana - 1)];
+  $("#sem-tit").textContent = R.semana ? `Semana ${R.semana} de ${R.n_semanas} · ${w.fase}` : `Empieza el ${corta(R.inicio)} · ${w.fase}`;
+  $("#sem-chips").replaceChildren(...[w.descarga && ["Descarga", "ojo"], w.test && ["Test", "ok"]].filter(Boolean)
+    .map(([t, c]) => el("span", `c-chip ${c}`, t)));
+  $("#ses").replaceChildren(...(R.agenda.length ? R.agenda.map(a => {
+    const li = el("li", [a.hecho && "hecho", a.dia === HOY && "hoy"].filter(Boolean).join(" "));
+    const n = el("span", "n");
+    const punto = el("i");
+    punto.style.setProperty("--c", serie(a.tipo));
+    n.append(punto, a.n);
+    li.append(el("span", "d", `${DIAS[fecha(a.dia).getDay()]} ${fecha(a.dia).getDate()}`), n,
+              el("span", a.hecho ? "c-chip ok" : "c-eti", a.hecho ? "Hecho" : a.dia < HOY ? "Pendiente" : ""));
+    return li;
+  }) : [el("p", "vacio", "No hay días de carrera en el calendario estas dos semanas.")]));
+  $("#notas").replaceChildren(...R.notas.map(t => el("li", null, t)));
+
+  // ritmos
+  const r = R.ritmos;
+  const filas = [["Rodaje suave y largo", "conversación, sin sufrir", `${mmss(r.suave[0])}–${mmss(r.suave[1])}`],
+                 ["Tempo", "cómodamente duro", `${mmss(r.tempo[0])}–${mmss(r.tempo[1])}`],
+                 ["Series de 1000 m", "algo más rápido que tu 5k", mmss(r.series)],
+                 ["Objetivo", `22:00 son ${mmss(r.objetivo)} cada km`, mmss(r.objetivo)]];
+  $("#ritmos").replaceChildren(...filas.map(([a, b, c]) => {
+    const tr = el("tr"), td = el("td", null, a);
+    td.append(el("small", null, b));
+    tr.append(td, el("td", null, c + " /km"));
+    return tr;
+  }));
+  graficas();
+}
+
+// ---------- gráficas (Chart.js; sin la librería la página funciona igual) ----------
+const graf = {};
+function tokens() {
+  const s = getComputedStyle(document.documentElement), v = n => s.getPropertyValue(n).trim();
+  const t = {texto: v("--texto"), suave: v("--suave"), tenue: v("--tenue"), linea: v("--linea"), acento: v("--acento"),
+             carta: v("--carta"), fuente: v("--fuente")};
+  t.tipo = Object.fromEntries(TIPOS.map((x, i) => [x[0], v(`--serie-${i + 1}`)]));
+  return t;
+}
+function base(t, yfmt) {
+  return {
+    responsive: true, maintainAspectRatio: false,
+    interaction: {mode: "index", intersect: false},
+    animation: anima.graficas(300),   // se dibujan solas, semana a semana
+    plugins: {
+      legend: {display: false},
+      tooltip: {backgroundColor: t.texto, titleColor: t.carta, bodyColor: t.carta, padding: 10, cornerRadius: 8,
+                displayColors: false, titleFont: {family: t.fuente, weight: "600"}, bodyFont: {family: t.fuente}},
+    },
+    scales: {
+      x: {grid: {display: false}, border: {color: t.linea},
+          ticks: {color: t.tenue, font: {family: t.fuente, size: 11}, maxRotation: 0, autoSkipPadding: 14}},
+      y: {grid: {color: t.linea}, border: {display: false},
+          ticks: {color: t.tenue, font: {family: t.fuente, size: 11}, maxTicksLimit: 5, callback: yfmt}},
+    },
+  };
+}
+function dibuja(id, config) { graf[id]?.destroy(); graf[id] = new Chart(document.getElementById(id), config); }
+function leyenda(sel, items) {
+  $(sel).replaceChildren(...items.map(([txt, c, forma]) => {
+    const s = el("span"), m = el("s", forma || "");
+    m.style.setProperty("--c", c);
+    s.append(m, document.createTextNode(txt));
+    return s;
+  }));
+}
+function tabla(sel, cab, filas) {
+  const t = el("table"), h = el("tr");
+  cab.forEach(x => h.append(el("th", null, x)));
+  t.append(h);
+  filas.forEach(f => { const tr = el("tr"); f.forEach(x => tr.append(el("td", null, x))); t.append(tr); });
+  $(sel).replaceChildren(t);
+}
+
+function graficas() {
+  if (!window.Chart || !R) return;
+  const t = tokens(), W = R.semanas;
+  const etiquetas = W.map(w => corta(mas(w.lunes, 6)));
+  const actual = Math.max(0, R.semana - 1);
+
+  // 1. estimación frente al camino lineal hasta el objetivo
+  const ds = [
+    {label: "Tu estimación", data: W.map(w => w.est), borderColor: t.acento, backgroundColor: t.acento, stepped: true,
+     borderWidth: 2, pointRadius: W.map(w => w.test && w.est != null ? 4 : 0), pointHoverRadius: 4, spanGaps: false},
+    {label: "Camino a 22:00", data: W.map(w => w.camino), borderColor: t.suave, borderWidth: 1.5, borderDash: [4, 4],
+     pointRadius: 0, pointHoverRadius: 3},
+  ];
+  if (R.proyeccion.seg) ds.push({label: "Proyección", borderColor: t.acento, borderWidth: 2, borderDash: [2, 4], pointRadius: 0,
+    data: W.map((w, i) => i < actual ? null : Math.round(R.estimacion.seg + (R.proyeccion.seg - R.estimacion.seg) * (i - actual) / (W.length - 1 - actual || 1)))});
+  const oc = base(t, mmss);
+  oc.plugins.tooltip.callbacks = {title: c => `Semana ${c[0].dataIndex + 1} · hasta el ${etiquetas[c[0].dataIndex]}`,
+                                  label: c => c.raw == null ? null : `${c.dataset.label}: ${mmss(c.raw)}`};
+  const vals = W.flatMap(w => [w.est, w.camino]).filter(v => v != null).concat(R.proyeccion.seg || []);
+  oc.scales.y.min = Math.floor((Math.min(...vals) - 20) / 60) * 60;   // minutos redondos en el eje
+  oc.scales.y.max = Math.ceil((Math.max(...vals) + 20) / 60) * 60;
+  oc.scales.y.ticks.stepSize = 60;
+  dibuja("g-camino", {type: "line", data: {labels: etiquetas, datasets: ds}, options: oc});
+  leyenda("#ley-camino", [["Tu estimación", t.acento], ["Camino a 22:00", t.suave, "raya"], ...(R.proyeccion.seg ? [["Proyección", t.acento, "raya"]] : [])]);
+  tabla("#t-camino-d", ["Semana", "Hasta", "Estimación", "Camino"], W.map((w, i) => [w.n, etiquetas[i], mmss(w.est), mmss(w.camino)]));
+
+  // 2. minutos planificados (fondo) y hechos (encima) por semana
+  const ov = base(t, v => v + "′");
+  ov.scales.y.beginAtZero = true;
+  ov.plugins.tooltip.callbacks = {
+    title: c => { const w = W[c[0].dataIndex]; return `Semana ${w.n} · ${w.fase}${w.descarga ? " · descarga" : ""}${w.test ? " · test" : ""}`; },
+    label: c => c.raw == null ? null : `${c.dataset.label}: ${c.raw} min` + (c.datasetIndex === 1 && W[c.dataIndex].hecho_km ? ` (${String(W[c.dataIndex].hecho_km).replace(".", ",")} km)` : ""),
+    afterBody: c => W[c[0].dataIndex].sesiones.map(s => "· " + s.n),
+  };
+  dibuja("g-vol", {type: "bar", options: ov, data: {labels: W.map(w => `S${w.n}`), datasets: [
+    {label: "Planificado", data: W.map(w => w.plan_min), grouped: false, barPercentage: .9, categoryPercentage: .9, borderRadius: 4,
+     borderSkipped: "start", backgroundColor: W.map((w, i) => i === actual ? t.acento + "44" : t.tenue + (w.estado === "futura" ? "33" : "66"))},
+    {label: "Hecho", data: W.map(w => w.estado === "futura" ? null : w.hecho_min), grouped: false, barPercentage: .5, categoryPercentage: .9,
+     borderRadius: 4, borderSkipped: "start", backgroundColor: t.acento},
+  ]}});
+  leyenda("#ley-vol", [["Planificado", t.tenue + "88", "caja"], ["Hecho", t.acento, "caja"]]);
+  tabla("#t-vol-d", ["Semana", "Fase", "Plan", "Hecho", "Km"], W.map(w => [`${w.n} (${corta(w.lunes)})`, w.fase + (w.descarga ? " · descarga" : ""),
+    `${w.plan_min} min`, w.estado === "futura" ? "—" : `${w.hecho_min} min`, w.estado === "futura" ? "—" : String(w.hecho_km).replace(".", ",")]));
+
+  // 3. ritmo de cada carrera con las bandas de referencia
+  const cs = R.carreras.filter(c => c.ritmo);
+  if (!cs.length) {
+    $("#ritmo-cuerpo").replaceChildren(el("p", "vacio", "Cuando apuntes carreras con distancia y tiempo (atajo o bot: «he corrido 6 km en 36 min») verás aquí si vas a tus ritmos."));
+    return;
+  }
+  const x0 = fecha(R.inicio), dx = s => Math.round((fecha(s) - x0) / 864e5);
+  const xs = cs.map(c => dx(c.dia)), lo = Math.min(...xs, 0) - 3, hi = Math.max(...xs, dx(HOY)) + 3;
+  const banda = (y, label, dash) => ({type: "line", label, data: [{x: lo, y}, {x: hi, y}], borderColor: t.suave, borderWidth: 1,
+                                      borderDash: dash, pointRadius: 0, pointHoverRadius: 0});
+  const tipos = TIPOS.filter(([k]) => cs.some(c => c.tipo === k));
+  const or = base(t, mmss);
+  or.interaction = {mode: "nearest", intersect: true};
+  or.scales.x = {type: "linear", min: lo, max: hi, grid: {display: false}, border: {color: t.linea},
+                 ticks: {color: t.tenue, font: {family: t.fuente, size: 11}, maxTicksLimit: 6, callback: v => corta(mas(R.inicio, v))}};
+  or.scales.y.reverse = true;   // arriba lo rápido
+  Object.assign(or.scales.y.ticks, {stepSize: 30, maxTicksLimit: 9});
+  or.plugins.tooltip.callbacks = {title: () => null, label: c => {
+    if (!c.raw.c) return `${c.dataset.label}: ${mmss(c.raw.y)} /km`;
+    const k = c.raw.c;
+    return [`${corta(k.dia)} · ${c.dataset.label}`, `${String(k.km).replace(".", ",")} km en ${mmss(k.seg)} · ${mmss(k.ritmo)} /km`];
+  }};
+  dibuja("g-ritmo", {type: "scatter", options: or, data: {datasets: [
+    ...tipos.map(([k, n]) => ({label: n, data: cs.filter(c => c.tipo === k).map(c => ({x: dx(c.dia), y: c.ritmo, c})),
+      backgroundColor: t.tipo[k], borderColor: t.carta, borderWidth: 2, pointRadius: 6, pointHoverRadius: 8})),
+    banda(R.ritmos.suave[1], "Suave, como mucho", [4, 4]), banda(R.ritmos.suave[0], "Suave, como poco", [4, 4]),
+    banda(R.ritmos.objetivo, "Ritmo de 22:00", [2, 3]),
+  ]}});
+  leyenda("#ley-ritmo", [...tipos.map(([k, n]) => [n, t.tipo[k], "punto"]), ["Banda suave", t.suave, "raya"], ["Ritmo de 22:00", t.suave, "raya"]]);
+  tabla("#t-ritmo-d", ["Día", "Tipo", "Km", "Tiempo", "Ritmo"], cs.slice().reverse().map(c =>
+    [corta(c.dia), (TIPOS.find(x => x[0] === c.tipo) || ["", "Otra"])[1], String(c.km).replace(".", ","), mmss(c.seg), mmss(c.ritmo) + " /km"]));
+}
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", graficas);
+
+$("#f-clave").onsubmit = async e => {
+  e.preventDefault();
+  const inp = e.target.pass;
+  const r = await fetch("/api/login", {method: "POST", headers: {"Content-Type": "application/json"},
+                                       body: JSON.stringify({pass: inp.value})}).catch(() => null);
+  if (r && r.ok) { inp.value = ""; await cargar(); }
+  else puerta(true, r && r.status === 401 ? "Contraseña incorrecta" : "No se pudo conectar");
+};
+cargar();
+</script>
+</body>
+</html>

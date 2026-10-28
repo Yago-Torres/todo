@@ -1,0 +1,888 @@
+<!doctype html>
+<html lang="es">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="calma-datos" content="/api/state">
+<meta name="calma-entrada" content="espera">
+<meta name="theme-color" content="#F4F5F0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#171A16" media="(prefers-color-scheme: dark)">
+<title>Todo</title>
+<link rel="icon" href="/favicon.ico" sizes="32x32">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<!-- añadido a la pantalla de inicio del iPhone: sin barras de Safari y con nombre corto -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.json" crossorigin="use-credentials">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Todo">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="/calma.css?v=3006c142">
+<script src="/calma.js?v=3006c142"></script>
+<!-- anime.js servido desde aquí, sin CDN; si no carga, la página funciona igual sin animaciones -->
+<script src="/anime-4.5.0.min.js"></script>
+<script src="/anima.js?v=3006c142"></script>
+<style>
+  /* Estilo Calma: tokens y componentes en /calma.css (fuente: ~/estilo). Aquí solo lo de todo. */
+  /* sin bloquear html y body (height 100% + overflow hidden): en la app instalada del iPhone eso hacía
+     que iOS midiera la pantalla sin las zonas de arriba y abajo, y el menú fijo quedaba flotando más arriba.
+     .app ya mide justo una pantalla (100dvh), así que la página sigue sin hacer scroll. */
+
+  /* ---------- armazón: una sola pantalla, sin scroll ---------- */
+  .app {
+    height: calc(100dvh - env(safe-area-inset-top, 0px)); display: grid; gap: 12px; padding: 12px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    grid-template-rows: auto minmax(0, 1fr) minmax(0, 1fr);
+    /* en modo app del iPhone la franja del indicador de inicio entra en el viewport */
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* ---------- cabecera ---------- */
+  .top { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 16px; padding: 4px 6px 0; }
+  .top h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -.02em; }
+  .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 0; font-size: 14px; color: var(--suave); }
+  .meta b { font-weight: 500; color: var(--texto); }
+  .meta .pill { padding: 3px 10px; border-radius: 999px; background: var(--acento-suave); color: var(--acento); font-weight: 600; font-size: 13px; }
+  .meta .mejor { display: inline-flex; align-items: center; gap: 2px; font-size: 13px; }
+  .meta .mejor:empty { display: none; }
+
+  /* ---------- la llama de las rachas largas (SVG, no emoji) ---------- */
+  .llama { width: 13px; height: 13px; flex: 0 0 13px; fill: var(--c); margin-right: 3px; transform-origin: 50% 90%; animation: llama 1.8s ease-in-out infinite; }
+  @keyframes llama { 0%, 100% { transform: rotate(-4deg) scale(1); } 50% { transform: rotate(3deg) scale(1.06, 1.16); } }
+  @media (prefers-reduced-motion: reduce) { .llama { animation: none; } }
+  #estado { font-size: 13px; }
+  #estado:empty { display: none; }
+  .top .ir { margin-left: auto; display: flex; gap: 6px; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .top .ir a { text-decoration: none; }
+
+  /* ---------- paneles ---------- */
+  .panel {
+    background: var(--carta); border-radius: var(--r); box-shadow: var(--sombra);
+    min-height: 0; min-width: 0; overflow: hidden;
+    display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+  /* el calendario no llena dos filas: debajo van las rachas, que necesitan ancho */
+  #p-habitos { grid-area: 2 / 1 / 4 / 2; }
+  #p-mes     { grid-area: 2 / 2 / 3 / 3; grid-template-rows: auto auto minmax(0, 1fr); }
+  #p-rachas  { grid-area: 3 / 2 / 4 / 3; }
+
+  .panel > h2 {
+    margin: 0; padding: 14px 16px 8px; display: flex; align-items: center; gap: 8px;
+    font-size: 16px; font-weight: 600; letter-spacing: -.01em;
+  }
+  .panel > h2 em { font-style: normal; font-weight: 500; color: var(--suave); font-size: 14px; }
+  .panel > h2 .der { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+  .cuerpo { overflow: auto; min-height: 0; padding: 2px 10px 12px; scrollbar-width: thin; }
+  .vacio { font-size: 14px; color: var(--suave); padding: 10px 6px; margin: 0; }
+
+  /* ---------- filas de hábito ---------- */
+  .fila {
+    display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+    background: none; border: 0; border-radius: var(--r-s); padding: 9px 8px; min-height: 50px;
+  }
+  .fila:hover { background: var(--carta-2); }
+  .fila .cua { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: var(--c); }
+  .fila .bx {
+    width: 24px; height: 24px; flex: 0 0 24px; display: grid; place-items: center;
+    border-radius: 50%; border: 2px solid color-mix(in oklab, var(--c) 40%, var(--linea)); font-size: 13px; font-weight: 700; line-height: 1;
+  }
+  /* cada hábito se marca con su color: la lista se va llenando de color a lo largo del día */
+  .fila[aria-pressed="true"] .bx { background: var(--c); border-color: var(--c); color: #fff; }
+  .fila .bx svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+  .fila .rn { display: inline-flex; align-items: center; }
+  .fila .rn.cero { color: var(--tenue); }
+  .fila .nom { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fila[aria-pressed="true"] .nom { color: var(--suave); text-decoration: line-through; text-decoration-color: var(--tenue); }
+  .fila .n { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .fila .u { font-size: 12px; color: var(--suave); }
+  .fila .plan { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--acento-suave); color: var(--acento); }
+
+  /* ---------- tareas (legado, sin interfaz desde el 21/10) ---------- */
+  .tarea { display: flex; align-items: flex-start; gap: 8px; padding: 8px 4px; border-bottom: 1px solid var(--linea); }
+  .tarea .bx, .tarea .x { background: none; border: 0; padding: 0; color: var(--suave); }
+  .tarea .txt { flex: 1; overflow-wrap: anywhere; }
+  .tarea.ok .txt { text-decoration: line-through; color: var(--suave); }
+  .tarea .dia { font-size: 12px; color: var(--suave); white-space: nowrap; }
+  .tarea .dia.tarde { color: var(--peligro); font-weight: 600; }
+
+  /* ---------- rachas ---------- */
+  /* una fila por hábito: nombre, 28 días y los números. Objetivo, renombrar y borrar van tras «Editar» */
+  .rs { display: grid; grid-template-columns: fit-content(10em) minmax(0, 1fr) auto; gap: 11px 14px; padding: 4px 6px; }
+  .rs > div { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; }
+  .rs .cab { font-size: 11px; color: var(--tenue); margin-bottom: -4px; }
+  .rs .cab > span:nth-child(2) { display: flex; justify-content: space-between; }
+  .rs .hb { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 14px; font-weight: 500; }
+  .rs .hb i { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: var(--c); }
+  .rs .hb span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rs .num { display: flex; align-items: baseline; justify-content: flex-end; gap: 8px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .rs .num b { display: inline-flex; align-items: center; justify-content: flex-end; font-size: 15px; font-weight: 650; min-width: 3.2em; }
+  .rs .num b.cero { color: var(--tenue); font-weight: 500; }
+  .rs .num small { font-size: 12px; color: var(--suave); min-width: 3.4em; text-align: right; }
+  .rs .cab .num b { font-size: 11px; font-weight: 500; color: var(--tenue); }
+  .rs .cab .num small { font-size: 11px; color: var(--tenue); }
+  .rs .ed { grid-column: 2 / -1; display: flex; align-items: center; justify-content: flex-end; gap: 4px; font-size: 13px; color: var(--suave); }
+  .rs .ed select { border: 1px solid var(--linea); border-radius: 6px; background: var(--carta-2); font: inherit; color: var(--texto); padding: 3px 4px; margin-right: 6px; }
+  .rs .acc { background: none; border: 0; padding: 4px 8px; border-radius: 6px; color: var(--suave); }
+  .rs .acc:hover { color: var(--texto); background: var(--carta-2); }
+  .tira { display: flex; gap: 2px; }
+  .tira.semanal { gap: 5px; }   /* 4 bloques anchos se leen mejor separados */
+  .tira i { flex: 1 1 0; min-width: 3px; height: 14px; display: block; border-radius: 3px; background: var(--carta-2); }
+  .tira i.on { background: var(--c); }
+  /* borrado: hay que teclear el nombre, nada de confirm() */
+  .rs .borrar { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; background: var(--peligro-suave); border-radius: var(--r-s); padding: 10px; }
+  .rs .borrar input { flex: 1 1 140px; min-width: 0; border: 1px solid var(--linea); border-radius: var(--r-s); padding: 9px 10px; font-size: 16px; background: var(--carta); }
+  .rs .borrar .btn:first-of-type { color: var(--peligro); }
+  .rs .borrar .btn:disabled { opacity: .45; }
+
+  /* ---------- calendario ---------- */
+  .paleta { display: flex; align-items: center; gap: 6px; overflow-x: auto; overscroll-behavior-x: contain; padding: 0 14px 10px; scrollbar-width: none; }
+  .paleta::-webkit-scrollbar { display: none; }
+  .paleta .eti { flex: 0 0 auto; font-size: 13px; color: var(--suave); margin-right: 2px; }
+  .paleta .ch {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 6px;
+    border: 1px solid var(--linea); background: var(--carta); border-radius: 999px; padding: 6px 12px;
+    font-size: 13px; font-weight: 500; touch-action: pan-x; user-select: none; -webkit-user-select: none;
+  }
+  .paleta .ch i { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: var(--c); }
+  .paleta .ch:hover { background: var(--carta-2); }
+  .paleta .ch[aria-pressed="true"] { background: var(--acento-suave); border-color: var(--acento); color: var(--acento); }
+  .fantasma {
+    position: fixed; z-index: 99; pointer-events: none; transform: translate(-50%, -150%);
+    background: var(--carta); border-radius: 999px; box-shadow: 0 8px 24px rgba(0, 0, 0, .15);
+    padding: 7px 14px; font-size: 13px; font-weight: 600; white-space: nowrap;
+  }
+  #p-mes .cuerpo { display: flex; flex-direction: column; }
+  .mes {
+    flex: 1 1 auto; min-height: 0; gap: 4px;
+    display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
+    align-content: start;   /* sin esto la fila "auto" de L M X J V S D se traga el hueco sobrante */
+    grid-template-rows: auto; grid-auto-rows: minmax(40px, 78px);  /* tope: a 1fr salen celdas deformes */
+  }
+  .mes > * { min-width: 0; min-height: 0; }
+  .mes.armado .dia:not(.hueco) { outline: 1px dashed var(--acento); outline-offset: -1px; }
+  .dow { font-size: 12px; font-weight: 500; color: var(--suave); text-align: center; padding: 2px 0 4px; }
+  .dia {
+    background: var(--carta-2); border: 1px solid transparent; border-radius: 8px;
+    min-width: 0; min-height: 0; overflow: hidden;
+    display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 5px;
+  }
+  .dia.hueco { visibility: hidden; }
+  .dia:hover { border-color: var(--linea); }
+  .dia > b { font-size: 12px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+  /* hoy: el número en una pastilla, que se vea sea cual sea el color de la casilla */
+  .dia.hoy > b { background: var(--texto); color: var(--carta); border-radius: 4px; padding: 2px 4px; margin: -2px -4px 0; }
+  .dia[aria-pressed="true"] { border-color: var(--acento); box-shadow: inset 0 0 0 1px var(--acento); }
+  /* mapa de calor como el de GitHub: cuantos más hábitos hechos ese día, más intenso */
+  :is(.dia, .ley i)[data-n="1"] { background: color-mix(in oklab, var(--acento) 18%, var(--carta-2)); }
+  :is(.dia, .ley i)[data-n="2"] { background: color-mix(in oklab, var(--acento) 38%, var(--carta-2)); }
+  :is(.dia, .ley i)[data-n="3"] { background: color-mix(in oklab, var(--acento) 62%, var(--carta-2)); }
+  :is(.dia, .ley i)[data-n="4"] { background: color-mix(in oklab, var(--acento) 86%, var(--carta-2)); }
+  .dia:is([data-n="3"], [data-n="4"]):not(.hoy) > b { color: var(--acento-texto); }
+  .ley { display: flex; justify-content: flex-end; align-items: center; gap: 3px; margin-top: 8px; font-size: 11px; color: var(--tenue); }
+  .ley i { width: 10px; height: 10px; border-radius: 3px; background: var(--carta-2); }
+  .ley span { margin: 0 3px; }
+  .dia.diana { outline: 2px solid var(--acento); outline-offset: -2px; background: var(--acento-suave); }
+  .dia .ms { display: flex; flex-wrap: wrap; gap: 3px; }
+  .dia .ms i { width: 7px; height: 7px; display: block; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 1.5px var(--carta); }
+  /* planificado y sin hacer: anillo, para distinguirlo de un hecho de un vistazo */
+  .dia .ms i.pdt { background: var(--carta); box-shadow: inset 0 0 0 1.5px var(--c); }
+  .dia .tk { font-size: 11px; color: var(--suave); margin-top: auto; }
+
+  /* ---------- formularios del pie de los paneles ---------- */
+  form { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 12px 12px; border-top: 1px solid var(--linea); }
+  form input, form select {
+    min-height: 44px; border: 1px solid var(--linea); border-radius: var(--r-s);
+    background: var(--carta-2); padding: 0 12px; min-width: 0; font-size: 16px;
+  }
+  form input:focus, form select:focus { outline: none; border-color: var(--acento); background: var(--carta); }
+  form input[type=text], form input[type=number] { flex: 1 1 120px; }
+  form input::placeholder { color: var(--tenue); }
+  form input[type=color] { flex: 0 0 44px; padding: 4px; }
+  form input[type=date] { flex: 1 1 128px; }
+  form select { flex: 0 0 auto; }
+  form .ok {
+    flex: 0 0 auto; min-width: 48px; min-height: 44px; padding: 0 14px; border: 0; border-radius: var(--r-s);
+    background: var(--acento); color: var(--acento-texto); font-weight: 600; font-size: 16px;
+  }
+  form .ok:hover { filter: brightness(1.06); }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; min-height: 30px;
+    padding: 0 10px; border-radius: 999px; border: 1px solid var(--linea);
+    background: var(--carta); font-size: 13px; font-weight: 500; color: var(--texto);
+  }
+  .btn:hover { background: var(--carta-2); }
+  .btn[hidden] { display: none; }
+
+  /* ---------- pestañas (solo móvil) ---------- */
+  .tabs { display: none; }
+
+  @media (max-width: 899px) {
+    .app {
+      gap: 10px; padding: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: auto auto minmax(0, 1fr);
+    }
+    .top h1 { font-size: 24px; }
+    .tabs { grid-row: 2; grid-column: 1; }
+    /* el display va en .c-seg; aquí solo hay que volver a enseñarlas */
+    .tabs.c-seg { display: grid; }
+    /* los IDs ganan a .panel por especificidad: si no se repite aquí la posición, los
+       paneles se quedan colocados en columnas que en móvil ya no existen. Sólo la
+       posición: el display se queda en .panel o [data-on] tampoco podría ganarle. */
+    #p-habitos, #p-rachas, #p-mes { grid-area: 3 / 1 / 4 / 2; }
+    #p-mes { grid-template-rows: auto auto minmax(0, 1fr); }
+    .panel { display: none; }
+    .panel[data-on] { display: grid; }
+
+    /* en móvil los 28 días van debajo del nombre, a todo el ancho */
+    .rs { grid-template-columns: minmax(0, 1fr) auto; gap: 18px 12px; padding: 6px 6px 10px; }
+    .rs .cab { display: none; }
+    .rs .hb { grid-area: 1 / 1; font-size: 16px; }
+    .rs .num { grid-area: 1 / 2; }
+    .rs .tira { grid-area: 2 / 1 / 3 / -1; margin-top: 8px; }
+    .rs .tira i { height: 18px; }
+    .rs .ed { grid-area: 1 / 2; }
+
+    .mes { grid-auto-rows: minmax(48px, 78px); flex: 0 1 auto; }
+    .dia > b { font-size: 13px; }
+    .dia .ms i { width: 8px; height: 8px; }
+    .paleta .ch { padding: 8px 14px; font-size: 14px; }
+  }
+
+  /* ---------- barra de deshacer ---------- */
+  /* deshacer-sobre-barra: en el móvil, por encima del menú de cristal */
+  @media all { .deshacer { bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important; } }
+  .deshacer {
+    position: fixed; left: 16px; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 180;
+    max-width: 460px; margin: 0 auto; display: none; align-items: center; gap: 12px;
+    padding: 12px 12px 12px 16px; border-radius: var(--r); background: var(--texto); color: var(--fondo);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .18);
+  }
+  .deshacer[data-on] { display: flex; }
+  .deshacer b { flex: 1; font-weight: 500; }
+  .deshacer button { border: 0; border-radius: var(--r-s); background: var(--acento); color: var(--acento-texto); padding: 8px 14px; font-weight: 600; }
+
+  /* ---------- la puerta ---------- */
+  .puerta form { border-top: 0; padding: 28px; }
+  .puerta input { width: 100%; }
+  .puerta button { width: 100%; min-height: 48px; border: 0; border-radius: var(--r-s); background: var(--acento); color: var(--acento-texto); font-weight: 600; font-size: 16px; }
+
+  /* pantallas muy bajas: la cabecera no puede comerse la única pantalla que hay */
+  @media (max-height: 560px) { .top h1 { font-size: 20px; } }
+
+  /* En el móvil la página crece con su contenido y hace scroll entera, como las demás. Fija a una
+     pantalla, en la app instalada del iPhone (que mide la pantalla sin la barra de estado) se quedaba
+     corta: el fondo cortado y el menú de abajo flotando sobre el hueco. En el ordenador, una pantalla. */
+  @media (max-width: 899px) {
+    /* más alta que la pantalla desde el primer instante, aunque aún no hayan llegado los datos: la app del
+       iPhone mide la pantalla sin la barra de estado, y una página que justo cabe deja el menú subido */
+    .app { height: auto; min-height: calc(100lvh + 1px); grid-template-rows: none; }
+  }
+</style>
+<body>
+
+
+<div class="puerta c-puerta" id="puerta">
+  <form id="f-clave">
+    <h2>Todo</h2>
+    <p id="puerta-msg">Contraseña</p>
+    <input class="c-campo" type="password" name="pass" required autocomplete="current-password" aria-label="Contraseña">
+    <button type="submit">Entrar</button>
+  </form>
+</div>
+
+<div class="deshacer" id="deshacer" role="status">
+  <b id="des-txt"></b>
+  <button id="des-btn">Deshacer</button>
+</div>
+
+<div class="app">
+
+  <header class="top">
+    <h1 id="saludo">Todo</h1>
+    <p class="meta">
+      <b id="hoy"></b>
+      <span class="pill" id="resumen"></span>
+      <span class="mejor" id="mejor"></span>
+      <span id="estado"></span>
+    </p>
+    <nav class="ir"><a class="c-btn mini" href="/">Hoy</a><a class="c-btn mini" href="/pendientes.html">Pendientes</a><a class="c-btn mini" href="/entreno.html">Entreno</a><a class="c-btn mini" href="/sueno.html">Sueño</a><a class="c-btn mini" href="/comida.html">Comida</a><a class="c-btn mini" href="/gastos.html">Gastos</a></nav>
+  </header>
+
+  <nav class="tabs c-seg" role="tablist" aria-label="Secciones"></nav>
+
+  <section class="panel" id="p-habitos" data-p="habitos" role="tabpanel" aria-label="Hábitos">
+    <h2>Hábitos <em id="hb-dia"></em>
+      <span class="der">
+        <button class="btn" id="hb-hoy" hidden>Volver a hoy</button>
+        <em id="hb-n"></em>
+      </span>
+    </h2>
+    <div class="cuerpo" id="c-habitos"></div>
+    <form id="f-habito">
+      <input type="text" name="n" placeholder="nuevo hábito" maxlength="60" required aria-label="Nombre del hábito">
+      <input type="color" name="c" value="#A6402F" aria-label="Color">
+      <select name="goal" aria-label="Días por semana"></select>
+      <button class="ok" type="submit" aria-label="Añadir hábito">+</button>
+    </form>
+  </section>
+
+  <section class="panel" id="p-rachas" data-p="rachas" role="tabpanel" aria-label="Rachas">
+    <h2>Rachas <span class="der"><em>últimos 28 días</em><button class="btn" id="rs-editar">Editar</button></span></h2>
+    <div class="cuerpo" id="c-rachas"></div>
+  </section>
+
+  <section class="panel" id="p-mes" data-p="mes" role="tabpanel" aria-label="Calendario">
+    <h2>
+      <button class="btn" id="prev" aria-label="Mes anterior">&lsaquo;</button>
+      <em id="mes-tit"></em>
+      <button class="btn" id="next" aria-label="Mes siguiente">&rsaquo;</button>
+      <span class="der"><em id="mes-n"></em></span>
+    </h2>
+    <div class="paleta" id="paleta"></div>
+    <div class="cuerpo">
+      <div class="mes" id="c-mes"></div>
+      <div class="ley" aria-hidden="true"><span>menos</span><i></i><i data-n="1"></i><i data-n="2"></i><i data-n="3"></i><i data-n="4"></i><span>más</span></div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const el = (t, cls) => Object.assign(document.createElement(t), cls ? {className: cls} : {});
+const DOW = ["L", "M", "X", "J", "V", "S", "D"];
+const DIAS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"];
+const cap = s => s[0].toUpperCase() + s.slice(1);
+const MES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+             "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+
+// Fecha local, nunca UTC: toISOString() cambia de día por la tarde en España.
+const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const add = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const lunes = d => add(d, -((d.getDay() + 6) % 7));   // semana ISO: empieza en lunes
+const uid = () => Math.random().toString(36).slice(2, 10);
+const dd = n => String(n).padStart(2, "0");
+const HOY = iso(new Date());
+
+let S = {todos: [], habits: [], log: {}, plan: {}};
+let mes = new Date();      // mes que pinta el calendario
+let sel = HOY;             // día que se está editando
+let armado = null;         // hábito "cargado" para planificar tocando días
+
+const hecho = (d, h) => (S.log[d] || []).includes(h);
+const hechos = d => S.log[d] || [];
+const planeado = (d, h) => (S.plan[d] || []).includes(h);
+const planeados = d => S.plan[d] || [];
+
+// ---------- animaciones (anime.js) ----------
+// Solo de adorno: sin anime.js o con "reducir movimiento" en el sistema, todo funciona igual y quieto.
+const MOV = !!window.anime && !matchMedia("(prefers-reduced-motion: reduce)").matches;
+const CHECK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12.5l4 4 8-9"/></svg>';
+const LLAMA = '<svg class="llama" viewBox="0 0 16 16" aria-hidden="true"><path d="M8.7 1c.4 2.4 4.3 4.1 4.3 8.2A5 5 0 0 1 8 14.5a5 5 0 0 1-5-5c0-2.1 1.1-3.4 2.2-4.4.1 1.4.8 2.4 1.8 2.8C6.6 5.3 7.2 2.8 8.7 1z"/></svg>';
+const RACHA_VIVA = 3;   // desde aquí la racha lleva llama
+
+// el número de la racha: con llama si es larga, apagado si es cero; data-cuenta para que cuente al cargar
+function numRacha(tag, cls, r) {
+  const n = el(tag, cls + (r ? "" : " cero"));
+  if (r >= RACHA_VIVA) n.insertAdjacentHTML("beforeend", LLAMA);
+  n.append(Object.assign(el("span"), {textContent: dd(r)}));
+  n.lastChild.dataset.cuenta = r;
+  return n;
+}
+
+// al marcar: el círculo salta y el check se dibuja; la racha de la fila da un brinco
+function animaMarca(h) {
+  const f = MOV && document.querySelector(`#c-habitos .fila[data-h="${h}"]`);
+  if (!f) return;
+  anime.animate(f.querySelector(".bx"), {scale: [.55, 1], duration: 360, ease: "outBack(3)"});
+  const p = f.querySelector(".bx path");
+  if (p) anime.animate(anime.svg.createDrawable(p), {draw: ["0 0", "0 1"], duration: 260, delay: 50, ease: "outQuad"});
+  anime.animate(f.querySelector(".rn"), {scale: [1.45, 1], duration: 380, ease: "outBack(2)"});
+}
+
+// la primera vez que se pinta la página: saludo letra a letra, filas en cascada,
+// el calendario se enciende en onda desde hoy y los números de racha cuentan hasta su valor
+function animaEntrada() {
+  anima.entrada();   // la común a todas las páginas (título y tarjetas); lo de abajo es lo propio de hábitos
+  if (!MOV) return;
+  const {animate, stagger} = anime;
+  animate("#c-habitos .fila", {x: [-10, 0], opacity: [0, 1], delay: stagger(35), duration: 420, ease: "outQuad"});
+  animate(".rs .tira i.on", {scale: [0, 1], delay: stagger(5, {start: 150}), duration: 320, ease: "outBack(2)"});
+  const dias = [...document.querySelectorAll("#c-mes .dia")];
+  animate(dias, {scale: [.8, 1], opacity: [0, 1], duration: 420, ease: "outQuad",
+    delay: stagger(16, {grid: [7, Math.ceil(dias.length / 7)], from: Math.max(0, dias.findIndex(x => x.matches(".hoy")))})});
+  for (const n of document.querySelectorAll("[data-cuenta]")) {
+    const o = {v: 0};
+    animate(o, {v: +n.dataset.cuenta, duration: 800, ease: "outQuad", onUpdate: () => { n.textContent = dd(Math.round(o.v)); }});
+  }
+}
+
+function marcar(d, h) {
+  const l = hechos(d);
+  S.log[d] = l.includes(h) ? l.filter(x => x !== h) : [...l, h];
+  if (!S.log[d].length) delete S.log[d];
+  guardar();
+  if (d === sel && hecho(d, h)) animaMarca(h);
+  // todo lo planificado de hoy hecho (o todos los hábitos, si no había plan): confeti, una vez al día
+  const objetivo = planeados(HOY).length ? planeados(HOY) : S.habits.map(x => x.id);
+  if (d === HOY && objetivo.length && objetivo.every(x => hecho(HOY, x))) calma.fiesta("todo-dia");
+}
+
+function planear(d, h) {
+  const l = planeados(d);
+  S.plan[d] = l.includes(h) ? l.filter(x => x !== h) : [...l, h];
+  if (!S.plan[d].length) delete S.plan[d];
+  guardar();
+}
+
+function racha(h) {
+  let d = new Date(), n = 0;
+  if (!hecho(iso(d), h)) d = add(d, -1);   // el día en curso todavía no rompe la racha
+  while (hecho(iso(d), h)) { n++; d = add(d, -1); }
+  return n;
+}
+
+const semana = (ref = new Date()) =>
+  Array.from({length: 7}, (_, i) => iso(add(lunes(ref), i)));
+
+const enSemana = (h, ref) => semana(ref).filter(d => d <= HOY && hecho(d, h)).length;
+
+function constancia(h, dias = 30) {
+  let n = 0;
+  for (let i = 0; i < dias; i++) if (hecho(iso(add(new Date(), -i)), h)) n++;
+  return Math.round(n * 100 / dias);
+}
+
+// ---------- guardado ----------
+let pend, sinGuardar = false, version = "";
+function guardar() {
+  sinGuardar = true;
+  render();
+  $("#estado").textContent = "Guardando…";
+  clearTimeout(pend);
+  pend = setTimeout(async () => {
+    sinGuardar = false;   // ya sale hacia el servidor
+    try {
+      const r = await fetch("/api/state", {
+        method: "PUT", headers: {"Content-Type": "application/json", "X-Version": version}, body: JSON.stringify(S),
+      });
+      if (r.status === 401) { $("#estado").textContent = "Sesión caducada"; return puerta(true); }
+      if (r.status === 409) { await refresca(); $("#estado").textContent = "Había cambios de otro sitio: repite lo último"; return; }
+      if (!r.ok) throw new Error(r.status);
+      version = r.headers.get("X-Version") || "";
+      S = normaliza(await r.json());   // el servidor devuelve el estado ya limpio
+      $("#estado").textContent = "Guardado";
+      render();
+    } catch (e) {
+      $("#estado").textContent = "Sin guardar";
+    }
+  }, 400);
+}
+
+// al volver a la app (o tras un 409) se trae lo último: una pestaña abierta desde ayer no guarda su copia vieja
+async function refresca() {
+  const r = await fetch("/api/state").catch(() => null);
+  if (!r || !r.ok || r.headers.get("X-Version") === version) return;
+  S = normaliza(await r.json());
+  version = r.headers.get("X-Version") || "";
+  render();
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && !sinGuardar) refresca(); });
+
+// un data.json viejo no trae las claves nuevas
+const normaliza = s => ({todos: [], habits: [], log: {}, plan: {}, rutinas: [], sesion: {}, peso: {}, actividad: {}, ...s});
+
+// ---------- la puerta ----------
+function puerta(mostrar, msg) {
+  const p = $("#puerta");
+  p.toggleAttribute("data-on", mostrar);
+  const m = $("#puerta-msg");
+  m.textContent = msg || "Contraseña";
+  m.classList.toggle("mal", !!msg);
+  if (mostrar) p.querySelector("input").focus();
+}
+
+async function cargar() {
+  try {
+    const r = await fetch("/api/state");
+    if (r.status === 401) return puerta(true);
+    if (!r.ok) throw new Error(r.status);
+    S = normaliza(await r.json());
+    version = r.headers.get("X-Version") || "";
+    puerta(false);
+    render();
+    animaEntrada();
+    marcaDesdeURL();
+  } catch (e) {
+    $("#estado").textContent = "Sin conexión";
+    render();
+  }
+}
+
+// ---------- hábitos ----------
+function habitos() {
+  const c = $("#c-habitos");
+  c.replaceChildren();
+  $("#hb-dia").textContent = sel === HOY ? "hoy" : `${+sel.slice(8)} ${MES[+sel.slice(5, 7) - 1].slice(0, 3)}`;
+  $("#hb-hoy").hidden = sel === HOY;
+  $("#hb-n").textContent = S.habits.length ? `${hechos(sel).length}/${S.habits.length}` : "0/0";
+
+  if (!S.habits.length) {
+    c.append(Object.assign(el("p", "vacio"), {textContent: "Sin hábitos. Añade uno abajo ↓"}));
+    return;
+  }
+  for (const h of S.habits) {
+    const on = hecho(sel, h.id), n = enSemana(h.id, new Date(sel + "T12:00"));
+    const b = el("button", "fila");
+    b.style.setProperty("--c", h.c);
+    b.dataset.h = h.id;
+    b.setAttribute("aria-pressed", on);
+    b.setAttribute("aria-label", `${h.n}, ${on ? "hecho" : "sin hacer"}`);
+    b.append(
+      el("span", "cua"),
+      Object.assign(el("span", "bx"), {innerHTML: on ? CHECK : ""}),
+      Object.assign(el("span", "nom"), {textContent: h.n}),
+    );
+    if (planeado(sel, h.id)) b.append(Object.assign(el("span", "plan"), {textContent: "plan"}));
+    b.append(
+      numRacha("span", "n rn", racha(h.id)),
+      Object.assign(el("span", "u"), {textContent: "racha"}),
+      Object.assign(el("span", "n"), {textContent: `${n}/${h.goal}`}),
+    );
+    b.onclick = () => marcar(sel, h.id);
+    c.append(b);
+  }
+}
+
+// ---------- marcar desde la notificación ----------
+// iOS no tiene botones en la notificación: tocarla abre /?hecho=<id> y marcamos aquí.
+let deshacerTimer;
+function marcaDesdeURL() {
+  const id = new URLSearchParams(location.search).get("hecho");
+  if (!id) return;
+  history.replaceState(null, "", location.pathname);   // que recargar no vuelva a marcar
+  const h = S.habits.find(x => x.id === id);
+  if (!h || hecho(HOY, id)) return;
+  marcar(HOY, id);
+  $("#des-txt").textContent = "Hecho: " + h.n;
+  $("#deshacer").toggleAttribute("data-on", true);
+  $("#des-btn").onclick = () => { marcar(HOY, id); ocultaDeshacer(); };
+  clearTimeout(deshacerTimer);
+  deshacerTimer = setTimeout(ocultaDeshacer, 9000);
+}
+
+const ocultaDeshacer = () => {
+  clearTimeout(deshacerTimer);
+  $("#deshacer").removeAttribute("data-on");
+};
+
+// ---------- rachas ----------
+let editando = false;   // a diario las rachas solo se miran: objetivo, renombrar y borrar van tras «Editar»
+
+function nombre(h) {
+  const s = el("span", "hb");
+  s.append(el("i"), Object.assign(el("span"), {textContent: h.n}));
+  return s;
+}
+
+// Un hábito de 1 vez por semana con 27 casillas vacías parece un fracaso cuando
+// en realidad va perfecto. Esos se pintan por semanas: 4 huecos, uno por semana.
+function tiraDe(h, dias) {
+  const tira = el("div", "tira" + (h.goal > 1 ? "" : " semanal"));
+  if (h.goal > 1) {
+    for (const d of dias) {
+      const i = el("i", hecho(d, h.id) ? "on" : "");
+      i.title = d;
+      tira.append(i);
+    }
+    return tira;
+  }
+  for (let atras = 3; atras >= 0; atras--) {
+    const l = lunes(add(new Date(), -atras * 7));
+    const semana7 = Array.from({length: 7}, (_, k) => iso(add(l, k)));
+    const cumplida = semana7.some(d => hecho(d, h.id));
+    const i = el("i", cumplida ? "on" : "");
+    i.title = `Semana del ${semana7[0]}: ${cumplida ? "hecho" : "sin hacer"}`;
+    tira.append(i);
+  }
+  return tira;
+}
+
+function pideBorrar(fila, h) {
+  const td = el("div", "borrar");
+  const inp = el("input");
+  inp.type = "text";
+  inp.placeholder = `escribe "${h.n}"`;
+  inp.setAttribute("aria-label", `Escribe ${h.n} para confirmar que quieres borrarlo`);
+  inp.autocapitalize = "off";
+  inp.autocomplete = "off";
+  const si = el("button", "btn");
+  si.textContent = "Borrar del todo";
+  si.disabled = true;
+  const no = el("button", "btn");
+  no.textContent = "Cancelar";
+  // comparación laxa a propósito: la confirmación es contra los despistes, no contra un atacante
+  inp.oninput = () => { si.disabled = inp.value.trim().toLowerCase() !== h.n.trim().toLowerCase(); };
+  inp.onkeydown = e => { if (e.key === "Enter" && !si.disabled) si.click(); if (e.key === "Escape") no.click(); };
+  si.onclick = () => { S.habits = S.habits.filter(o => o !== h); guardar(); };
+  no.onclick = () => rachas();
+  td.append(inp, si, no);
+  fila.replaceChildren(td);
+  inp.focus();
+}
+
+function rachas() {
+  const c = $("#c-rachas");
+  c.replaceChildren();
+  $("#rs-editar").hidden = !S.habits.length;
+  $("#rs-editar").textContent = editando ? "Listo" : "Editar";
+  if (!S.habits.length) {
+    c.append(Object.assign(el("p", "vacio"), {textContent: "Sin hábitos que medir."}));
+    return;
+  }
+  const dias = Array.from({length: 28}, (_, i) => iso(add(new Date(), i - 27)));
+  const rs = el("div", "rs");
+  if (!editando) {
+    const eje = el("span"), num = el("span", "num");
+    eje.append(Object.assign(el("span"), {textContent: "hace 4 semanas"}), Object.assign(el("span"), {textContent: "hoy"}));
+    num.append(Object.assign(el("b"), {textContent: "racha"}), Object.assign(el("small"), {textContent: "30 d"}));
+    const cab = el("div", "cab");
+    cab.append(el("span"), eje, num);
+    rs.append(cab);
+  }
+
+  for (const h of S.habits) {
+    const fila = el("div");
+    fila.style.setProperty("--c", h.c);
+
+    if (editando) {
+      const ed = el("span", "ed");
+      const selGoal = el("select");
+      selGoal.setAttribute("aria-label", `Días por semana de ${h.n}`);
+      selGoal.append(...[1, 2, 3, 4, 5, 6, 7].map(n =>
+        Object.assign(el("option"), {value: n, textContent: n + "/sem", selected: n === h.goal})));
+      selGoal.onchange = () => { h.goal = +selGoal.value; guardar(); };
+      ed.append(selGoal);
+      for (const [txt, lab, fn] of [
+        ["✎", "Renombrar", () => { const n = prompt("Nombre del hábito", h.n); if (n && n.trim()) { h.n = n.trim(); guardar(); } }],
+        ["✕", "Borrar", () => pideBorrar(fila, h)],
+      ]) {
+        const b = el("button", "acc");
+        b.textContent = txt;
+        b.setAttribute("aria-label", `${lab} ${h.n}`);
+        b.onclick = fn;
+        ed.append(b);
+      }
+      fila.append(nombre(h), ed);
+    } else {
+      const r = racha(h.id), pct = constancia(h.id);
+      const total = Object.values(S.log).filter(v => v.includes(h.id)).length;
+      const num = el("span", "num");
+      num.title = `${r} días seguidos · ${pct} % de los últimos 30 días · ${total} en total`;
+      num.append(numRacha("b", "", r), Object.assign(el("small"), {textContent: pct + "%"}));
+      fila.append(nombre(h), tiraDe(h, dias), num);
+    }
+    rs.append(fila);
+  }
+  c.append(rs);
+}
+
+// ---------- paleta + arrastre ----------
+function paleta() {
+  const c = $("#paleta");
+  c.replaceChildren();
+  if (!S.habits.length) return;
+  c.append(Object.assign(el("span", "eti"), {textContent: "Planificar"}));
+  for (const h of S.habits) {
+    const b = el("button", "ch");
+    b.style.setProperty("--c", h.c);
+    b.setAttribute("aria-pressed", armado === h.id);
+    b.setAttribute("aria-label", `${h.n}: arrástralo a un día, o tócalo y luego toca los días`);
+    b.append(el("i"), Object.assign(el("span"), {textContent: h.n}));
+    b.addEventListener("pointerdown", e => arrastrar(e, h, b));
+    c.append(b);
+  }
+}
+
+const diaBajo = (x, y) => document.elementFromPoint(x, y)?.closest(".dia:not(.hueco)");
+
+function arrastrar(e, h, chip) {
+  if (e.button > 0) return;
+  const x0 = e.clientX, y0 = e.clientY;
+  let fantasma = null, diana = null;
+
+  const mover = ev => {
+    // umbral de 8px: por debajo es un toque, no un arrastre
+    if (!fantasma && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 8) return;
+    if (!fantasma) {
+      fantasma = el("div", "fantasma");
+      fantasma.textContent = h.n;
+      document.body.append(fantasma);
+    }
+    fantasma.style.left = ev.clientX + "px";
+    fantasma.style.top = ev.clientY + "px";
+    const d = diaBajo(ev.clientX, ev.clientY);
+    if (d !== diana) { diana?.classList.remove("diana"); d?.classList.add("diana"); diana = d; }
+  };
+
+  const soltar = ev => {
+    removeEventListener("pointermove", mover);
+    removeEventListener("pointerup", soltar);
+    removeEventListener("pointercancel", soltar);
+    diana?.classList.remove("diana");
+    if (!fantasma) {                       // no se movió: es un toque, arma o desarma
+      armado = armado === h.id ? null : h.id;
+      render();
+      return;
+    }
+    fantasma.remove();
+    const d = diaBajo(ev.clientX, ev.clientY);
+    if (d) planear(d.dataset.d, h.id); else render();
+  };
+
+  addEventListener("pointermove", mover, {passive: true});
+  addEventListener("pointerup", soltar);
+  addEventListener("pointercancel", soltar);
+}
+
+// ---------- calendario ----------
+function calendario() {
+  const c = $("#c-mes");
+  c.replaceChildren();
+  const color = new Map(S.habits.map(h => [h.id, h.c]));
+  const y = mes.getFullYear(), m = mes.getMonth();
+  $("#mes-tit").textContent = `${cap(MES[m])} ${y}`;
+  c.classList.toggle("armado", !!armado);
+  for (const d of DOW) c.append(Object.assign(el("div", "dow"), {textContent: d}));
+
+  const hueco = (new Date(y, m, 1).getDay() + 6) % 7;
+  for (let i = 0; i < hueco; i++) c.append(el("div", "dia hueco"));
+
+  let total = 0;
+  for (let n = 1; n <= new Date(y, m + 1, 0).getDate(); n++) {
+    const dia = iso(new Date(y, m, n));
+    const hs = hechos(dia).filter(id => color.has(id));
+    const ps = planeados(dia).filter(id => color.has(id) && !hs.includes(id));
+    const tk = S.todos.filter(t => t.on === dia).length;
+    total += hs.length;
+    const b = el("button", "dia" + (dia === HOY ? " hoy" : ""));
+    b.dataset.d = dia;
+    // intensidad 0-4 según la parte de los hábitos hecha ese día (1 de 10 ya pinta; 7 de 10 es el máximo)
+    if (hs.length) b.dataset.n = Math.min(4, Math.ceil(hs.length / color.size * 5));
+    b.setAttribute("aria-pressed", dia === sel);
+    b.setAttribute("aria-label", `${n} de ${MES[m]}: ${hs.length} hechos, ${ps.length} planificados, ${tk} tareas`);
+    b.append(Object.assign(el("b"), {textContent: dd(n)}));
+    const ms = el("div", "ms");
+    for (const id of hs) {
+      const i = el("i");
+      i.style.setProperty("--c", color.get(id));
+      ms.append(i);
+    }
+    for (const id of ps) {
+      const i = el("i", "pdt");
+      i.style.setProperty("--c", color.get(id));
+      ms.append(i);
+    }
+    b.append(ms);
+    if (tk) b.append(Object.assign(el("span", "tk"), {textContent: "+" + tk}));
+    b.onclick = () => {
+      if (armado) { planear(dia, armado); return; }
+      sel = dia;
+      render();
+      if (innerWidth < 900) tab("habitos");
+    };
+    c.append(b);
+  }
+  const h = armado && S.habits.find(x => x.id === armado);
+  $("#mes-n").textContent = h ? `Planificando ${h.n}` : total + " marcas";
+}
+
+function render() {
+  const d = new Date();
+  if (armado && !S.habits.some(h => h.id === armado)) armado = null;
+  $("#hoy").textContent = `${cap(DIAS[(d.getDay() + 6) % 7])} ${d.getDate()} de ${MES[d.getMonth()]}`;
+  const hora = d.getHours();
+  const saludo = `${hora < 6 || hora >= 21 ? "Buenas noches" : hora < 14 ? "Buenos días" : "Buenas tardes"}, Yago`;
+  if ($("#saludo").textContent !== saludo) $("#saludo").textContent = saludo;   // no deshacer el split de la animación
+
+  const ids = new Set(S.habits.map(h => h.id));
+  const plan = planeados(HOY).filter(id => ids.has(id));
+  const quedan = plan.filter(id => !hecho(HOY, id)).length;
+  $("#resumen").textContent = !S.habits.length ? "Sin hábitos"
+    : !plan.length ? `${hechos(HOY).filter(id => ids.has(id)).length}/${S.habits.length} hoy`
+    : quedan ? `te ${quedan === 1 ? "queda" : "quedan"} ${quedan} de ${plan.length} ${plan.length === 1 ? "planificado" : "planificados"}`
+    : "todo lo planificado, hecho";
+
+  const mejor = S.habits.map(h => [h, racha(h.id)]).sort((a, b) => b[1] - a[1])[0];
+  const m = $("#mejor");
+  m.replaceChildren();
+  if (mejor && mejor[1] >= 2) {
+    m.style.setProperty("--c", mejor[0].c);
+    m.insertAdjacentHTML("beforeend", LLAMA);
+    m.append(Object.assign(el("b"), {textContent: mejor[0].n}), ` · ${mejor[1]} días seguidos`);
+  }
+  habitos();
+  rachas();
+  paleta();
+  calendario();
+}
+
+// ---------- pestañas en móvil ----------
+const PANELES = [["habitos", "Hábitos"], ["mes", "Mes"], ["rachas", "Rachas"]];
+function tab(id) {
+  calma.transicion(() => {
+    for (const p of document.querySelectorAll(".panel")) p.toggleAttribute("data-on", p.dataset.p === id);
+    for (const b of document.querySelectorAll(".tabs button")) b.setAttribute("aria-selected", b.dataset.t === id);
+  });
+}
+$(".tabs").append(...PANELES.map(([id, txt]) => {
+  const b = el("button");
+  b.dataset.t = id;
+  b.textContent = txt;
+  b.setAttribute("role", "tab");
+  b.onclick = () => tab(id);
+  return b;
+}));
+tab("habitos");
+
+// ---------- eventos ----------
+$("#f-habito").onsubmit = e => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  S.habits.push({id: uid(), n: f.get("n").trim(), c: f.get("c"), goal: +f.get("goal")});
+  e.target.reset();
+  guardar();
+};
+
+$("#hb-hoy").onclick = () => { sel = HOY; render(); };
+$("#rs-editar").onclick = () => { editando = !editando; rachas(); };
+$("#prev").onclick = () => { mes = new Date(mes.getFullYear(), mes.getMonth() - 1, 1); calendario(); };
+$("#next").onclick = () => { mes = new Date(mes.getFullYear(), mes.getMonth() + 1, 1); calendario(); };
+addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  if (armado) { armado = null; render(); }
+});
+
+$("select[name=goal]").append(...[7, 6, 5, 4, 3, 2, 1].map(n =>
+  Object.assign(el("option"), {value: n, textContent: n + "/sem"})));
+
+$("#f-clave").onsubmit = async e => {
+  e.preventDefault();
+  const inp = e.target.pass;
+  const r = await fetch("/api/login", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({pass: inp.value}),
+  }).catch(() => null);
+  if (r && r.ok) { inp.value = ""; await cargar(); }
+  else puerta(true, r && r.status === 401 ? "Contraseña incorrecta" : "No se pudo conectar");
+};
+
+cargar();
+</script>
+</body>
+</html>

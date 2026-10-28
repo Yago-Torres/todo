@@ -1,0 +1,1101 @@
+<!doctype html>
+<html lang="es">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="calma-datos" content="/api/state">
+<meta name="calma-entrada" content="espera">
+<meta name="theme-color" content="#F6F6F3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1A1E21" media="(prefers-color-scheme: dark)">
+<title>Entreno</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.json" crossorigin="use-credentials">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Todo">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="/calma.css?v=3006c142">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="/calma.js?v=3006c142"></script>
+<script src="/anime-4.5.0.min.js"></script>
+<script src="/monigotes.js?v=1"></script>
+<script src="/anima.js?v=3006c142"></script>
+<style>
+  /* Estilo Calma: tokens y componentes en /calma.css (fuente: ~/estilo). Aquí solo lo de entreno. */
+  body { padding: 16px; padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px)); }
+  .app { max-width: 1120px; margin: 0 auto; display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+  .col { display: grid; gap: 14px; align-content: start; min-width: 0; }
+  @media (min-width: 920px) { .app { grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); } }
+  .top { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 4px 2px 0; }
+  h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -.02em; }
+  .top nav { margin-left: auto; display: flex; gap: 6px; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .top nav a { text-decoration: none; }
+  #estado { font-size: 13px; color: var(--suave); }
+  .carta { padding: 16px; min-width: 0; }
+  .carta h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .carta h2 .der { margin-left: auto; font-weight: 400; }
+  .carta h2 a { margin-left: auto; font-size: 13px; font-weight: 500; color: var(--acento); text-decoration: none; }
+  .vacio { margin: 0; padding: 8px 2px; font-size: 14px; color: var(--suave); }
+  .eti-sup { font-size: 13px; color: var(--suave); }
+  .cifra { font-size: 40px; font-weight: 700; letter-spacing: -.03em; line-height: 1.1; margin: 2px 0; font-variant-numeric: tabular-nums; }
+  .cifra small { font-size: 16px; font-weight: 500; color: var(--suave); letter-spacing: 0; margin-left: 4px; }
+  .bajo { margin: 0 0 10px; font-size: 14px; color: var(--suave); }
+  select.c-campo { width: 100%; }
+
+  /* ---------- fichas de hoy ---------- */
+  .ficha { background: var(--carta-2); border-radius: 12px; padding: 12px; margin-bottom: 8px; }
+  .ficha.hecha { background: var(--acento-suave); }
+  .ficha .cab { display: flex; align-items: center; gap: 7px; }
+  .ficha .cab i { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: var(--c); }
+  .ficha .cab b { font-size: 13px; font-weight: 500; color: var(--suave); }
+  .ficha .cab .c-chip { margin-left: auto; }
+  .ficha .tit { font-size: 17px; font-weight: 600; letter-spacing: -.01em; margin-top: 4px; }
+  .ficha .sub { font-size: 13px; color: var(--suave); margin-top: 2px; }
+  .ficha .acc { display: flex; gap: 8px; margin-top: 10px; }
+  .ficha .acc > * { flex: 1; min-width: 0; min-height: 42px; }
+  .ficha details { margin-top: 8px; font-size: 14px; }
+  .ficha details summary { cursor: pointer; color: var(--suave); font-size: 13px; }
+  .ficha details li { margin: 6px 0; }
+  .ficha details small { display: block; color: var(--suave); }
+  .otra { margin-top: 4px; }
+
+  /* ---------- músculos ---------- */
+  .cuerpos { display: flex; justify-content: center; gap: 12px; }
+  .cuerpos figure { margin: 0; flex: 0 1 170px; text-align: center; }
+  .cuerpos figcaption { font-size: 12px; color: var(--tenue); }
+  .cuerpos svg { width: 100%; height: auto; display: block; }
+  /* el cuerpo en gris suave; cada músculo, del gris al color de acento según las series */
+  .cuerpos polygon { fill: color-mix(in oklab, var(--texto) 16%, var(--carta)); stroke: var(--carta); stroke-width: .5; stroke-linejoin: round; }
+  .cuerpos [data-m] { cursor: pointer; transition: fill .3s; }
+  .cuerpos [data-n="1"], .ley i[data-n="1"] { fill: color-mix(in oklab, var(--acento) 35%, var(--carta-2)); background: color-mix(in oklab, var(--acento) 35%, var(--carta-2)); }
+  .cuerpos [data-n="2"], .ley i[data-n="2"] { fill: color-mix(in oklab, var(--acento) 65%, var(--carta-2)); background: color-mix(in oklab, var(--acento) 65%, var(--carta-2)); }
+  .cuerpos [data-n="3"], .ley i[data-n="3"] { fill: var(--acento); background: var(--acento); }
+  .cuerpos [data-m].sel { stroke: var(--texto); stroke-width: .8; }
+  .pista { margin: 6px 0 0; text-align: center; font-size: 12px; color: var(--tenue); }
+  .pista b { color: var(--texto); font-weight: 600; }
+  .ley { display: flex; justify-content: center; align-items: center; gap: 4px; margin: 10px 0 4px; font-size: 11px; color: var(--tenue); }
+  .ley i { width: 12px; height: 10px; border-radius: 3px; background: color-mix(in oklab, var(--texto) 16%, var(--carta)); }
+  .ley span { margin: 0 6px 0 2px; }
+  .barras li { cursor: pointer; }
+  .atras { margin-top: 12px; }
+  .atras h3 { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--suave); letter-spacing: .04em; text-transform: uppercase; }
+  .atras p { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; font-size: 14px; }
+  .atras p span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .atras p small { color: var(--suave); }
+  .barras { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+  .barras li { display: grid; grid-template-columns: 8.5em minmax(0, 1fr) 3.4em; gap: 10px; align-items: center; font-size: 13px; border-radius: 6px; }
+  .barras li.sel { background: var(--carta-2); }
+  .barras .c-barra { height: 6px; }
+  .barras b { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* ---------- progreso ---------- */
+  .lienzo { position: relative; height: 220px; margin-top: 8px; }
+  .prs { list-style: none; margin: 12px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .prs li { background: var(--carta-2); border-radius: var(--r-s); padding: 10px; min-width: 0; }
+  .prs small { display: block; font-size: 12px; color: var(--suave); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .prs b { display: block; font-size: 16px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+  details.datos { margin-top: 8px; font-size: 13px; color: var(--suave); }
+  details.datos summary { cursor: pointer; width: max-content; }
+  details.datos table { width: 100%; border-collapse: collapse; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  details.datos th, details.datos td { text-align: right; padding: 4px 6px; border-bottom: 1px solid var(--linea); font-weight: 400; white-space: nowrap; }
+  details.datos th:first-child, details.datos td:first-child { text-align: left; }
+
+  /* ---------- historial ---------- */
+  .hist details { border-bottom: 1px solid var(--linea); padding: 10px 2px; }
+  .hist details:last-child { border-bottom: 0; }
+  .hist summary { cursor: pointer; display: grid; grid-template-columns: 3.6em minmax(0, 1fr); column-gap: 10px; align-items: baseline; list-style: none; }
+  .hist summary::-webkit-details-marker { display: none; }
+  .hist summary .d { font-size: 13px; font-weight: 600; color: var(--suave); grid-row: span 2; }
+  .hist summary .n { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hist summary .x { font-size: 13px; color: var(--suave); font-variant-numeric: tabular-nums; }
+  .hist ul { list-style: none; margin: 8px 0 0; padding: 0 0 0 4.3em; font-size: 14px; }
+  .hist li { margin: 4px 0; }
+  .hist li small { color: var(--suave); font-variant-numeric: tabular-nums; }
+  .hist .borra { margin: 8px 0 0 4.3em; }
+
+  /* ---------- carrera ---------- */
+  .ses { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .ses li { display: grid; grid-template-columns: 4.2em minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px; border-radius: var(--r-s); background: var(--carta-2); }
+  .ses .d { font-size: 13px; font-weight: 600; color: var(--suave); }
+  .ses .n { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ses li.hecho .n { color: var(--suave); text-decoration: line-through; text-decoration-color: var(--tenue); }
+  .ses li.hoy { box-shadow: inset 0 0 0 2px var(--acento); }
+  .auto { display: flex; align-items: baseline; gap: 10px; margin: 10px 0 0; padding-left: 10px; border-left: 3px solid var(--acento); font-size: 14px; }
+  .auto span { color: var(--suave); }
+
+  /* ---------- peso ---------- */
+  .peso { display: flex; align-items: baseline; gap: 6px 12px; flex-wrap: wrap; }
+  .peso em { font-size: 26px; font-weight: 650; font-style: normal; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .peso span { font-size: 13px; color: var(--suave); }
+  .chispa { display: flex; align-items: flex-end; gap: 3px; height: 34px; margin-top: 10px; }
+  .chispa i { flex: 1 1 0; background: var(--acento); opacity: .55; border-radius: 3px 3px 0 0; min-height: 2px; }
+  .chispa i:last-child { opacity: 1; }
+  .fila-form { display: flex; gap: 8px; margin-top: 12px; }
+  .fila-form .c-campo { flex: 1; min-width: 0; }
+
+  /* ---------- hojas a pantalla completa ---------- */
+  /* por encima del menú de abajo (150): entrenando no se navega */
+  .hoja { position: fixed; inset: 0; z-index: 160; background: var(--fondo); display: none; grid-template-rows: auto minmax(0, 1fr) auto; }
+  .hoja[data-on] { display: grid; }
+  .hoja > header { background: var(--carta); border-bottom: 1px solid var(--linea); padding: 14px 16px; padding-top: calc(14px + env(safe-area-inset-top, 0px)); display: flex; align-items: center; gap: 10px; }
+  .hoja > header b { flex: 1; min-width: 0; font-size: 18px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hoja > header .reloj { font-size: 15px; font-weight: 600; color: var(--suave); font-variant-numeric: tabular-nums; }
+  .hoja > header button { border: 1px solid var(--linea); background: var(--carta); border-radius: 999px; padding: 6px 14px; font-size: 14px; font-weight: 500; color: var(--texto); }
+  .hoja > .mid { overflow: auto; padding: 8px 16px 24px; min-height: 0; }
+  .hoja > footer { display: grid; gap: 10px; padding: 12px 16px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); background: var(--carta); border-top: 1px solid var(--linea); }
+  .hoja > footer .botones { display: flex; gap: 10px; }
+  .hoja > footer .botones button { flex: 1; min-height: 52px; border: 1px solid var(--linea); border-radius: 12px; background: var(--carta-2); font-size: 16px; font-weight: 600; color: var(--texto); }
+  .hoja > footer button.si { background: var(--acento); border-color: var(--acento); color: var(--acento-texto); }
+
+  /* modo entreno: un ejercicio, sus series en filas, y el descanso abajo */
+  .ej { padding: 14px 0; border-bottom: 1px solid var(--linea); }
+  .ej:last-child { border-bottom: 0; }
+  /* el monigote del ejercicio: del color del texto, sin fondo, moviéndose entre el inicio y el final */
+  .mono { display: block; flex: 0 0 90px; width: 90px; height: auto; color: var(--texto); }
+  .fila-ej { display: flex; gap: 12px; align-items: flex-start; }
+  .fila-ej .txt { flex: 1; min-width: 0; }
+  #hg-foto:empty { display: none; }
+  #hg-foto .mono { width: min(280px, 72vw); margin: 0 auto; }
+  .ej .cab { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .ej .cab b { font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
+  .ej .cab span { font-size: 13px; color: var(--suave); }
+  .ej .cab .c-chip { margin-left: auto; }
+  .ej .nota { font-size: 13px; color: var(--suave); line-height: 1.45; margin: 4px 0 8px; }
+  .ej .antes { font-size: 12px; color: var(--tenue); margin: 6px 0 0; font-variant-numeric: tabular-nums; }
+  .serie { display: grid; grid-template-columns: 1.6em minmax(0, 1fr) auto minmax(0, 1fr) auto 48px; gap: 8px; align-items: center; margin-top: 6px; }
+  .serie .i { font-size: 13px; font-weight: 600; color: var(--tenue); text-align: center; }
+  .serie span { font-size: 13px; color: var(--suave); }
+  /* 16px exactos: por debajo iOS hace zoom al enfocar */
+  .serie input { width: 100%; min-height: 44px; border: 1px solid var(--linea); border-radius: var(--r-s); background: var(--carta); padding: 0 10px; font-size: 16px; text-align: right; font-variant-numeric: tabular-nums; color: var(--texto); }
+  .serie input::placeholder { color: var(--tenue); }
+  .serie input:focus { outline: none; border-color: var(--acento); }
+  .serie .ok { width: 48px; height: 44px; border-radius: var(--r-s); border: 1px solid var(--linea); background: var(--carta); display: grid; place-items: center; color: var(--tenue); }
+  .serie .ok svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+  .serie .ok:disabled { opacity: .35; }
+  .serie.hecha input { background: var(--acento-suave); border-color: transparent; }
+  .serie.hecha .ok { background: var(--acento); border-color: var(--acento); color: var(--acento-texto); }
+  .ej .mas { margin-top: 8px; }
+  .descanso { display: none; align-items: center; gap: 10px; }
+  .descanso[data-on] { display: flex; }
+  .descanso .c-barra { flex: 1; }
+  .descanso b { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 3.2ch; }
+  .descanso small { font-size: 13px; color: var(--suave); }
+
+  /* ---------- rutina guiada ---------- */
+  .guia > .mid { display: flex; flex-direction: column; justify-content: center; text-align: center; gap: 14px; }
+  .guia .paso { margin: 0; font-size: 14px; color: var(--suave); }
+  .guia .ahora { margin: 0; font-size: clamp(1.8rem, 7.5vw, 3rem); font-weight: 700; line-height: 1.05; letter-spacing: -.02em; }
+  .guia .resto { margin: 0; font-size: clamp(3.5rem, 18vw, 6rem); font-weight: 700; line-height: 1; color: var(--acento); font-variant-numeric: tabular-nums; }
+  .guia .barra { height: 8px; border-radius: 99px; background: var(--carta-2); overflow: hidden; }
+  .guia .barra i { display: block; height: 100%; background: var(--acento); border-radius: inherit; }
+  .guia .como { margin: 0 auto; font-size: 16px; line-height: 1.5; max-width: 34ch; color: var(--suave); }
+  .guia .luego { margin: 0; font-size: 14px; color: var(--tenue); }
+
+  .puerta input { width: 100%; }
+  .puerta button { width: 100%; }
+</style>
+<body>
+
+<div class="puerta c-puerta" id="puerta">
+  <form id="f-clave">
+    <h2>Entreno</h2>
+    <p id="puerta-msg">Contraseña de todo</p>
+    <input class="c-campo" type="password" name="pass" required autocomplete="current-password" aria-label="Contraseña">
+    <button class="c-btn pri" type="submit">Entrar</button>
+  </form>
+</div>
+
+<div class="hoja" id="hoja-sesion" role="dialog" aria-label="Sesión">
+  <header><b id="hs-tit"></b><span class="reloj" id="hs-reloj"></span><button id="hs-cerrar">Cerrar</button></header>
+  <div class="mid" id="hs-lista"></div>
+  <footer>
+    <div class="descanso" id="descanso" aria-live="off">
+      <small>Descanso</small><b id="ds-n"></b><div class="c-barra" id="ds-barra"><i></i></div>
+      <button class="c-btn mini" id="ds-menos" aria-label="15 segundos menos">−15</button>
+      <button class="c-btn mini" id="ds-mas" aria-label="15 segundos más">+15</button>
+      <button class="c-btn mini" id="ds-fin">Saltar</button>
+    </div>
+    <div class="botones"><button class="si" id="hs-fin">Terminar sesión</button></div>
+  </footer>
+</div>
+
+<div class="hoja guia" id="hoja-guia" role="dialog" aria-label="Rutina guiada">
+  <header><b id="hg-tit"></b><button id="hg-salir">Salir</button></header>
+  <div class="mid">
+    <p class="paso" id="hg-paso"></p>
+    <div id="hg-foto"></div>
+    <p class="ahora" id="hg-ahora"></p>
+    <p class="resto" id="hg-resto" aria-live="off"></p>
+    <div class="barra"><i id="hg-barra"></i></div>
+    <p class="como" id="hg-como"></p>
+    <p class="luego" id="hg-luego"></p>
+  </div>
+  <footer><div class="botones"><button id="hg-pausa">Pausa</button><button id="hg-salta">Saltar</button></div></footer>
+</div>
+
+<div class="app">
+  <header class="top">
+    <h1>Entreno</h1>
+    <span id="estado">Cargando…</span>
+    <nav><a class="c-btn mini" href="/">Hoy</a><a class="c-btn mini" href="/habitos.html">Hábitos</a><a class="c-btn mini" href="/pendientes.html">Pendientes</a><a class="c-btn mini" href="/sueno.html">Sueño</a><a class="c-btn mini" href="/comida.html">Comida</a><a class="c-btn mini" href="/gastos.html">Gastos</a></nav>
+  </header>
+
+  <div class="col">
+    <section class="carta c-carta" aria-labelledby="t-hoy">
+      <h2 id="t-hoy">Hoy <span class="der c-eti" id="hoy-fecha"></span></h2>
+      <div id="hoy"></div>
+      <select class="c-campo otra" id="otra" aria-label="Entrenar otra rutina"></select>
+    </section>
+
+    <section class="carta c-carta" aria-labelledby="t-mus">
+      <h2 id="t-mus">Músculos <span class="der c-eti">series en los últimos 7 días</span></h2>
+      <div class="cuerpos" id="cuerpos"></div>
+      <p class="pista" id="pista"></p>
+      <div class="ley" id="ley" aria-hidden="true"><i></i><span>0</span><i data-n="1"></i><span>1–3</span><i data-n="2"></i><span>4–9</span><i data-n="3"></i><span>10+</span></div>
+      <ul class="barras" id="barras"></ul>
+    </section>
+
+    <section class="carta c-carta" aria-labelledby="t-am">
+      <h2 id="t-am">Cada mañana</h2>
+      <div id="am"></div>
+    </section>
+
+    <section class="carta c-carta" aria-labelledby="t-peso">
+      <h2 id="t-peso">Peso</h2>
+      <div id="peso"></div>
+      <form class="fila-form" id="f-peso">
+        <input class="c-campo" type="text" inputmode="decimal" name="kg" placeholder="peso de hoy" aria-label="Peso de hoy en kilos">
+        <button class="c-btn pri" type="submit">Guardar</button>
+      </form>
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="carta c-carta" aria-labelledby="t-prog">
+      <h2 id="t-prog">Progreso</h2>
+      <select class="c-campo" id="ej-sel" aria-label="Ejercicio"></select>
+      <div id="prog"></div>
+    </section>
+
+    <section class="carta c-carta" aria-labelledby="t-hist">
+      <h2 id="t-hist">Historial <span class="der c-eti" id="hist-n"></span></h2>
+      <div class="hist" id="hist"></div>
+    </section>
+
+    <section class="carta c-carta" aria-labelledby="t-car">
+      <h2 id="t-car">Carrera esta semana <a href="/carrera.html">Plan y gráficas →</a></h2>
+      <ul class="ses" id="carrera"></ul>
+      <div id="auto"></div>
+    </section>
+
+    <section class="carta c-carta" aria-labelledby="t-av">
+      <h2 id="t-av">Avisos</h2>
+      <div id="avisos"></div>
+    </section>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const el = (t, cls, txt) => { const e = document.createElement(t); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+const DIAS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+const fecha = s => new Date(s + "T12:00:00");
+const corta = s => `${fecha(s).getDate()} ${MESES[fecha(s).getMonth()]}`;
+const mas = (s, n) => { const d = fecha(s); d.setDate(d.getDate() + n); return d.toLocaleDateString("sv"); };
+const HOY = new Date().toLocaleDateString("sv");
+const uid = () => Math.random().toString(36).slice(2, 10);
+const num = n => String(+n.toFixed(2)).replace(".", ",");   // 72,5 como se escribe aquí
+const mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+const CHECK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12.5l4 4 8-9"/></svg>';
+
+let S = null;
+const hechos = d => S.log[d] || [];
+const hecho = (d, h) => hechos(d).includes(h);
+const rutina = id => S.rutinas.find(r => r.id === id);
+const habito = id => S.habits.find(h => h.id === id);
+
+function marca(h, on = !hecho(HOY, h)) {
+  S.log[HOY] = on ? [...new Set([...hechos(HOY), h])] : hechos(HOY).filter(x => x !== h);
+  if (!S.log[HOY].length) delete S.log[HOY];
+}
+
+// ---------- cargar y guardar (el estado entero, como Hábitos) ----------
+function puerta(mostrar, msg) {
+  $("#puerta").toggleAttribute("data-on", mostrar);
+  $("#puerta-msg").textContent = msg || "Contraseña de todo";
+  $("#puerta-msg").classList.toggle("mal", !!msg);
+  if (mostrar) $("#puerta input").focus();
+}
+
+const normaliza = s => ({habits: [], log: {}, plan: {}, rutinas: [], sesion: {}, peso: {}, actividad: {}, gym: {}, ...s});
+
+async function cargar() {
+  try {
+    const r = await fetch("/api/state");
+    if (r.status === 401) { $("#estado").textContent = ""; return puerta(true); }
+    if (!r.ok) throw new Error(r.status);
+    S = normaliza(await r.json());
+    version = r.headers.get("X-Version") || "";
+    puerta(false);
+    $("#estado").textContent = "";
+    await estadoAvisos();
+    pinta();
+    anima.entrada();
+    reanuda();
+  } catch (e) {
+    $("#estado").textContent = "Sin conexión";
+  }
+}
+
+let pend, sinGuardar = false, version = "";
+function guardar(repinta = true) {
+  sinGuardar = true;
+  if (repinta) pinta();
+  $("#estado").textContent = "Guardando…";
+  clearTimeout(pend);
+  pend = setTimeout(async () => {
+    sinGuardar = false;   // ya sale hacia el servidor
+    try {
+      const r = await fetch("/api/state", {method: "PUT", headers: {"Content-Type": "application/json", "X-Version": version}, body: JSON.stringify(S)});
+      if (r.status === 401) { $("#estado").textContent = "Sesión caducada"; return puerta(true); }
+      if (r.status === 409) { await refresca(true); $("#estado").textContent = "Había cambios de otro sitio: repite lo último"; return; }
+      if (!r.ok) throw new Error(r.status);
+      version = r.headers.get("X-Version") || "";
+      $("#estado").textContent = "Guardado";
+    } catch (e) {
+      $("#estado").textContent = "Sin guardar";
+    }
+  }, 500);
+}
+
+// al volver a la app (o tras un 409) se trae lo último: una pestaña abierta desde ayer no guarda su copia vieja.
+// Con una sesión o la rutina abiertas no: sus objetos apuntan al estado de ahora (salvo el 409, que manda)
+async function refresca(siempre) {
+  if (!siempre && (A || g)) return;
+  const r = await fetch("/api/state").catch(() => null);
+  if (!r || !r.ok || r.headers.get("X-Version") === version) return;
+  S = normaliza(await r.json());
+  version = r.headers.get("X-Version") || "";
+  if (A) { const s = (S.gym[HOY] || []).find(x => x.id === A.s.id); s ? (A.s = s, pintaSesion()) : cierraSesion(); }
+  if (g) g.r = rutina(g.r.id) || g.r;
+  pinta();
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && !sinGuardar) refresca(); });
+
+// ---------- series, récords y sugerencias ----------
+// todas las sesiones con series, viejas primero: [{dia, s}]
+const sesiones = () => Object.keys(S.gym).sort().flatMap(d => S.gym[d].map(s => ({dia: d, s})))
+  .filter(x => x.s.ej.some(e => e.series.length));
+const e1rm = (kg, r) => kg * (1 + r / 30);   // Epley: la fuerza de cada serie en una sola cifra
+const mejor = series => series.reduce((a, x) => (e1rm(...x) > e1rm(...a) ? x : a));
+
+// la última vez que se hizo este ejercicio, sin contar la sesión de ahora
+function ultima(ej, menos) {
+  const l = sesiones().filter(x => x.s !== menos);
+  for (let i = l.length - 1; i >= 0; i--) {
+    const e = l[i].s.ej.find(e => e.ej === ej && e.series.length);
+    if (e) return e.series;
+  }
+  return null;
+}
+
+const rango = txt => { const m = String(txt).match(/(\d+)\s*[-–]\s*(\d+)/) || String(txt).match(/^\s*(\d+)\s*$/); return m ? [+m[1], +(m[2] || m[1])] : null; };
+
+// doble progresión: si la última vez todas las series llegaron al tope del rango con el mismo peso, toca subir
+function sugerencia(b, menos) {
+  const u = ultima(b.ej, menos), r = rango(b.repes);
+  if (!u) return {kg: b.kg, sube: false, u};
+  const top = Math.max(...u.map(x => x[0]));
+  const sube = !!r && top > 0 && u.length >= b.series && u.every(x => x[0] >= top && x[1] >= r[1]);
+  return {kg: sube ? top + (top < 20 ? 1 : 2.5) : top, sube, u};
+}
+
+// ---------- músculos ----------
+const MUSCULOS = [["pecho", "Pecho"], ["hombro", "Hombros"], ["espalda", "Espalda"], ["trapecio", "Trapecio"], ["biceps", "Bíceps"],
+  ["triceps", "Tríceps"], ["antebrazo", "Antebrazo"], ["core", "Abdomen"], ["lumbar", "Lumbar"], ["gluteo", "Glúteo"],
+  ["cuadriceps", "Cuádriceps"], ["femoral", "Femoral"], ["gemelo", "Gemelos"]];
+// la primera regla que encaja manda; 1 = músculo principal, .5 = ayuda
+const REGLAS = [
+  [/triceps|frances|press cerrado/, {triceps: 1}],
+  [/fondos/, {pecho: 1, triceps: 1, hombro: .5}],
+  [/face pull/, {hombro: 1, trapecio: 1}],
+  [/press militar|press hombro|arnold/, {hombro: 1, triceps: .5}],
+  [/laterales|pajaro|posterior/, {hombro: 1}],
+  [/press banca|press inclinado|press pecho|flies|aperturas|cruce/, {pecho: 1, triceps: .5, hombro: .5}],
+  [/curl femoral|femoral/, {femoral: 1}],
+  [/curl|preacher|biceps|martillo/, {biceps: 1, antebrazo: .5}],
+  [/dominada|pulldown|jalon|pull al pecho|pullover/, {espalda: 1, biceps: .5}],
+  [/remo/, {espalda: 1, trapecio: .5, biceps: .5}],
+  [/encogimiento/, {trapecio: 1}],
+  [/rumano|buenos dias/, {femoral: 1, gluteo: 1, lumbar: .5}],
+  [/peso muerto/, {gluteo: 1, femoral: 1, lumbar: 1, espalda: .5}],
+  [/extension de cuadriceps|extension de pierna/, {cuadriceps: 1}],
+  [/prensa|sentadilla|squat|hack|zancada|lunge|bulgara/, {cuadriceps: 1, gluteo: 1}],
+  [/gemelo|talon/, {gemelo: 1}],
+  [/hip thrust|puente|gluteo|abductor/, {gluteo: 1}],
+  [/core|plancha|abdominal|crunch|rueda/, {core: 1}],
+];
+const plano = t => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+const musculos = ej => (REGLAS.find(([re]) => re.test(plano(ej))) || [0, {}])[1];
+
+function porMusculo() {
+  const n = Object.fromEntries(MUSCULOS.map(([m]) => [m, 0]));
+  const desde = mas(HOY, -6);
+  for (const {dia, s} of sesiones()) {
+    if (dia < desde) continue;
+    for (const e of s.ej) for (const [m, f] of Object.entries(musculos(e.ej))) n[m] += f * e.series.length;
+  }
+  return n;
+}
+
+// el mapa de músculos de las apps de gimnasio: delante y detrás, cada músculo un polígono que se colorea.
+// Dibujo de react-body-highlighter (MIT, © 2020 GV79), con sus músculos traducidos a los de aquí; "" = cuerpo sin músculo.
+const CUERPO = {"delante":[["pecho","51.8 41.6 51 55.1 58 58 67.8 55.5 70.6 47.3 62 41.6"],["pecho","29.8 46.5 31.4 55.5 40.8 58 48.2 55.1 47.8 42 37.6 42"],["core","68.6 63.3 67.3 57.1 58.8 59.6 60 64.1 60.4 83.3 65.7 78.8 66.5 69.8"],["core","33.9 78.4 33.1 71.8 31 63.3 32.2 57.1 40.8 59.2 39.2 63.3 39.2 83.7"],["core","56.3 59.2 58 64.1 58.4 78 58.4 92.7 56.3 98.4 55.1 104.1 51.4 107.8 51 84.5 50.6 67.3 51 57.1"],["core","43.7 58.8 48.6 57.1 49 67.3 48.6 84.5 48.2 107.3 44.5 103.7 40.8 91.4 40.8 78.4 41.2 64.5"],["biceps","16.7 68.2 18 71.4 22.9 66.1 29 53.9 27.8 49.4 20.4 55.9"],["biceps","71.4 49.4 70.2 54.7 76.3 66.1 81.6 71.8 82.9 69 78.8 55.5"],["triceps","69.4 55.5 69.4 61.6 75.9 72.7 77.6 70.2 75.5 67.3"],["triceps","22.4 69.4 29.8 55.5 29.8 60.8 22.9 73.1"],["","55.5 23.7 50.6 33.5 50.6 39.2 61.6 40 70.6 44.9 69.4 36.7 63.3 35.1 58.4 30.6"],["","29 44.9 30.2 37.1 36.3 35.1 41.2 30.2 44.5 24.5 49 33.9 48.6 39.2 38 39.6"],["hombro","78.4 53.1 79.6 47.8 79.2 41.2 75.9 38 71 36.3 72.2 42.9 71.4 47.3"],["hombro","28.2 47.3 21.2 53.1 20 47.8 20.4 40.8 24.5 37.1 28.6 37.1 26.9 43.3"],["","42.4 2.9 40 11.8 42 19.6 46.1 23.3 49.8 25.3 54.7 22.4 57.6 19.2 59.2 10.2 57.1 2.4 49.8 0"],["","52.7 110.2 54.3 124.9 60 110.2 62 100 64.9 94.3 60 92.7 56.7 104.5"],["","47.8 110.6 44.9 125.3 42 115.9 40.4 113.1 39.6 107.3 38 102.4 34.7 93.9 39.6 92.2 41.6 99.2 43.7 105.3"],["cuadriceps","34.7 98.8 37.1 108.2 37.1 127.8 34.3 137.1 31 132.7 29.4 120 28.2 111.4 29.4 100.8 32.2 94.7"],["cuadriceps","63.3 105.7 64.5 100 66.9 94.7 70.2 101.2 71 111.8 68.2 133.1 65.3 137.6 62.4 128.6 62 111.4"],["cuadriceps","38.8 129.4 38.4 112.2 41.2 118.4 44.5 129.4 42.9 135.1 40 146.1 36.3 146.5 35.5 140"],["cuadriceps","59.6 145.7 55.5 129 60.8 113.9 61.2 130.2 64.1 139.6 62.9 146.5"],["cuadriceps","32.7 138.4 26.5 145.7 25.7 136.7 25.7 127.3 26.9 114.3 29.4 133.5"],["cuadriceps","71.8 113.1 73.9 124.1 73.9 140.4 72.7 145.7 66.5 138.4 70.2 133.5"],["","33.9 140 34.7 143.3 35.5 147.3 36.3 151 35.1 156.7 29.8 156.7 27.3 152.7 27.3 147.3 30.2 144.1"],["","65.7 140 72.2 147.8 72.2 152.2 69.8 157.1 64.9 156.7 62.9 151"],["gemelo","71.4 160.4 73.5 153.5 76.7 161.2 79.6 167.8 78.4 187.8 79.6 195.5 74.7 195.5"],["gemelo","24.9 194.7 27.8 164.9 28.2 160.4 26.1 154.3 24.9 157.6 22.4 161.6 20.8 167.8 22 188.2 20.8 195.5"],["gemelo","72.7 195.1 69.8 159.2 65.3 158.4 64.1 162.4 64.1 165.3 65.7 177.1"],["gemelo","35.5 158.4 35.9 162.4 35.9 166.9 35.1 172.2 35.1 176.7 32.2 182 30.6 187.3 26.9 194.7 27.3 187.8 28.2 180.4 28.6 175.5 29 169.8 29.8 164.1 30.2 158.8"],["antebrazo","6.1 88.6 10.2 75.1 14.7 70.2 16.3 74.3 19.2 73.5 4.5 97.6 0 100"],["antebrazo","84.5 69.8 83.3 73.5 80 73.1 95.1 98.4 100 100.4 93.5 89.4 89.8 76.3"],["antebrazo","77.6 72.2 77.6 77.6 80.4 84.1 85.3 89.8 92.2 101.2 94.7 99.6"],["antebrazo","6.9 101.2 13.5 90.6 18.8 84.1 21.6 77.1 21.2 71.8 4.9 98.8"]],"detras":[["","50.6 0 46 0.9 40.9 5.5 40.4 12.8 45.1 20 55.7 20 59.1 13.6 59.6 4.7 55.7 1.3"],["trapecio","44.7 21.7 47.7 21.7 47.2 38.3 47.7 64.7 38.3 53.2 35.3 40.9 31.1 36.6 39.1 33.2 43.8 27.2"],["trapecio","52.3 21.7 55.7 21.7 56.6 27.2 60.9 32.8 68.9 36.6 64.7 40.4 61.7 53.2 52.3 64.7 53.2 38.3"],["hombro","29.4 37 23 39.1 17.4 44.3 18.3 53.6 24.3 49.4 27.2 46.4"],["hombro","71.1 37 78.3 39.6 82.6 44.7 81.7 53.6 74.9 48.9 72.3 45.1"],["espalda","31.1 38.7 28.1 48.9 28.5 55.3 34 75.3 47.2 71.1 47.2 66.4 36.6 54 33.6 41.3"],["espalda","68.9 38.7 71.9 49.4 71.5 56.2 66 75.3 52.8 71.1 52.8 66.4 63.4 54.5 66.4 41.7"],["triceps","26.8 49.8 17.9 55.7 14.5 72.3 16.6 81.7 21.7 63.8 26.8 55.7"],["triceps","73.6 50.2 82.1 55.7 86 73.2 83.4 82.1 77.9 63 73.2 55.7"],["triceps","26.8 58.3 26.8 68.5 23 75.3 19.1 77.4 22.6 65.5"],["triceps","72.8 58.3 77 64.7 80.4 77.4 76.6 75.3 72.8 68.9"],["lumbar","47.7 72.8 34.5 77 35.3 83.4 49.4 102.1 46.8 83"],["lumbar","52.3 72.8 65.5 77 64.7 83.4 50.6 102.1 53.2 83.8"],["antebrazo","86.4 75.7 91.1 83.4 93.2 94 100 106.4 96.2 104.3 88.1 89.4 84.3 83.8"],["antebrazo","13.6 75.7 8.9 83.8 6.8 93.6 0 106.4 3.8 104.3 12.3 88.5 15.7 83"],["antebrazo","81.3 79.6 77.4 77.9 79.1 84.7 91.1 103.8 93.2 108.9 94.5 104.7"],["antebrazo","18.7 79.6 22.1 77.9 20.9 84.3 9.4 103 6.8 108.5 5.1 104.7"],["gluteo","44.7 99.6 30.2 108.5 29.8 118.7 31.5 126 47.2 121.3 49.4 114.9"],["gluteo","55.3 99.1 51.1 114.5 52.3 120.9 68.1 126 69.8 119.1 69.4 108.5"],["","48.1 123 44.7 123 41.3 125.5 45.1 144.3 48.5 135.7 48.9 129.4"],["","51.9 122.6 55.7 123.4 59.1 126 54.9 144.3 51.9 136.2 51.1 129.4"],["femoral","28.9 122.1 31.1 129.4 36.6 126 35.3 135.3 34.5 150.2 29.4 158.3 28.9 146.8 27.7 141.3 27.2 131.5"],["femoral","71.5 121.7 69.4 128.9 63.8 126 65.5 136.6 66.4 150.2 71.1 158.3 71.5 147.7 72.8 142.1 73.6 131.9"],["femoral","38.7 125.5 44.3 146 40.4 166.8 36.2 152.8 37 135.3"],["femoral","61.7 125.5 63.4 136.2 64.3 153.2 60 166.8 56.2 146.4"],["","34.5 153.2 31.1 159.1 33.6 166.4 37.4 162.6"],["","66.4 153.6 63 163 66.8 166.4 69.4 159.1"],["gemelo","29.4 160.4 28.5 167.2 24.7 179.6 23.8 192.8 25.5 197 28.5 193.2 29.8 180 31.9 171.1 31.9 166.8"],["gemelo","37.4 165.1 35.3 167.7 33.2 171.9 31.1 180.4 30.2 191.9 34 200 38.7 190.6 39.1 168.9"],["gemelo","63 165.1 61.3 168.5 61.7 190.6 66.4 199.6 70.6 191.9 68.9 179.6 66.8 170.2"],["gemelo","70.6 160.4 72.3 168.5 75.7 179.1 76.6 192.8 74.5 196.6 72.3 193.6 70.6 179.6 68.1 168.1"],["gemelo","28.5 195.7 30.2 195.7 33.6 201.7 30.6 220 28.5 213.6 26.8 198.3"],["gemelo","69.8 195.7 71.9 195.7 73.6 198.3 71.9 213.2 70.2 219.6 67.2 202.1"]]};
+const nivel = n => (n <= 0 ? 0 : n < 4 ? 1 : n < 10 ? 2 : 3);
+let musSel = null;
+
+function pintaMusculos() {
+  const n = porMusculo(), nombre = Object.fromEntries(MUSCULOS);
+  const caja = $("#cuerpos");
+  if (!caja.children.length) {
+    caja.innerHTML = Object.entries(CUERPO).map(([vista, piezas]) =>
+      `<figure><svg viewBox="0 0 100 200" role="img" aria-label="Músculos, ${vista}">${
+        piezas.map(([m, p]) => `<polygon points="${p}"${m ? ` data-m="${m}"` : ""}/>`).join("")
+      }</svg><figcaption>${vista}</figcaption></figure>`).join("");
+    caja.onclick = e => { const m = e.target.closest("[data-m]")?.dataset.m || null; musSel = m === musSel ? null : m; pintaMusculos(); };
+  }
+  for (const p of caja.querySelectorAll("[data-m]")) {
+    const m = p.dataset.m;
+    p.dataset.n = nivel(n[m]);
+    p.classList.toggle("sel", m === musSel);
+  }
+  $("#pista").replaceChildren(...(musSel ? [el("b", null, nombre[musSel]), ` · ${num(n[musSel])} series en 7 días`]
+                                         : ["Toca un músculo para ver sus series"]));
+  // la misma información en barras: se lee sin colores y sin tocar el dibujo
+  const max = Math.max(10, ...Object.values(n));
+  $("#barras").replaceChildren(...MUSCULOS.slice().sort((a, b) => n[b[0]] - n[a[0]]).map(([m, t]) => {
+    const li = el("li", m === musSel ? "sel" : ""), b = el("div", "c-barra");
+    b.append(el("i"));
+    b.style.setProperty("--p", (n[m] / max * 100) + "%");
+    li.append(el("span", null, t), b, el("b", null, num(n[m])));
+    li.onclick = () => { musSel = m === musSel ? null : m; pintaMusculos(); };
+    return li;
+  }));
+}
+
+// ---------- hoy ----------
+function ficha(h, r) {
+  const f = el("div", "ficha" + (hecho(HOY, h.id) ? " hecha" : ""));
+  f.style.setProperty("--c", h.c);
+  const cab = el("div", "cab");
+  cab.append(el("i"), el("b", null, h.n));
+  f.append(cab);
+  if (!r) {
+    // planificado sin rutina: que elija una de las que marcan este hábito
+    const sel = el("select", "c-campo");
+    sel.setAttribute("aria-label", `Elegir rutina para ${h.n}`);
+    sel.append(el("option", null, "— elegir rutina —"));
+    sel.firstChild.value = "";
+    for (const x of S.rutinas.filter(x => !x.hab || x.hab === h.id)) sel.append(Object.assign(el("option", null, x.n), {value: x.id}));
+    sel.onchange = () => { if (sel.value) { S.sesion[HOY] = {...(S.sesion[HOY] || {}), [h.id]: sel.value}; guardar(); } };
+    const acc = el("div", "acc");
+    acc.append(sel);
+    f.append(el("div", "sub", "Sin rutina asignada"), acc);
+    return f;
+  }
+  const viva = r.tipo === "pesas" && (S.gym[HOY] || []).find(s => s.rutina === r.id && !s.fin);
+  const hecha = r.tipo === "pesas" && (S.gym[HOY] || []).find(s => s.rutina === r.id && s.fin);
+  if (viva) cab.append(el("span", "c-chip ojo", "a medias"));
+  f.append(el("div", "tit", r.n));
+  const n = r.bloques.length;
+  f.append(el("div", "sub", r.tipo === "movilidad" ? `${n} pasos · ${Math.round(r.bloques.reduce((a, b) => a + b.seg, 0) / 60)} min`
+    : hecha ? resumen(hecha) : `${n} ejercicio${n === 1 ? "" : "s"}`));
+  const acc = el("div", "acc");
+  if (r.tipo === "pesas" || r.tipo === "movilidad") {
+    const b = el("button", "c-btn" + (hecho(HOY, h.id) ? "" : " pri"), r.tipo === "movilidad" ? "Empezar" : viva ? "Seguir" : hecha ? "Otra vez" : "Empezar");
+    b.onclick = () => (r.tipo === "movilidad" ? empiezaGuia(r) : empieza(r));
+    acc.append(b);
+  } else {
+    // carrera y escalada: aquí solo se ve qué toca; se apuntan solas con el atajo o el bot
+    const d = el("details"), ul = el("ul");
+    d.append(el("summary", null, "Ver la sesión"));
+    for (const b of r.bloques) { const li = el("li", null, b.ej); if (b.nota) li.append(el("small", null, b.nota)); ul.append(li); }
+    d.append(ul);
+    f.append(d);
+  }
+  if (h.id) {
+    const ok = el("button", "c-btn", hecho(HOY, h.id) ? "Desmarcar" : "Hecho");
+    ok.onclick = () => { calma.vibra(); marca(h.id); guardar(); };
+    acc.append(ok);
+  }
+  f.append(acc);
+  return f;
+}
+
+function resumen(s) {
+  const n = s.ej.reduce((a, e) => a + e.series.length, 0);
+  const kg = s.ej.reduce((a, e) => a + e.series.reduce((b, [k, r]) => b + k * r, 0), 0);
+  return [s.min && `${s.min} min`, `${n} series`, kg && `${Math.round(kg).toLocaleString("es")} kg movidos`].filter(Boolean).join(" · ");
+}
+
+function pintaHoy() {
+  const d = fecha(HOY);
+  $("#hoy-fecha").textContent = `${DIAS[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]}`;
+  const asignadas = S.sesion[HOY] || {};
+  const ids = [...new Set([...Object.keys(asignadas), ...(S.plan[HOY] || [])])]
+    .filter(id => habito(id) && (asignadas[id] || S.rutinas.some(r => r.hab === id)));   // solo lo que es entrenar
+  const c = $("#hoy");
+  c.replaceChildren(...ids.map(id => ficha(habito(id), rutina(asignadas[id]))));
+  if (!ids.length) c.append(el("p", "vacio", "Hoy no toca entrenar. Si vas igual, elige abajo la rutina."));
+  const atras = atrasados();
+  if (atras.length) {
+    const caja = el("div", "atras");
+    caja.append(el("h3", null, "Se te pasó"));
+    for (const [d, h] of atras) {
+      const p = el("p"), txt = el("span", null, rutina((S.sesion[d] || {})[h])?.n || habito(h).n + " ");
+      txt.append(el("small", null, ` · ${DIAS[fecha(d).getDay()]} ${fecha(d).getDate()}`));
+      const b = el("button", "c-btn mini", "Hacer hoy");
+      b.onclick = () => aHoy(d, h);
+      p.append(txt, b);
+      caja.append(p);
+    }
+    c.append(caja);
+  }
+  const o = $("#otra");
+  o.replaceChildren(Object.assign(el("option", null, "Entrenar otra rutina…"), {value: ""}),
+    ...S.rutinas.filter(r => r.tipo === "pesas").map(r => Object.assign(el("option", null, r.n), {value: r.id})));
+}
+// lo que tocaba en los últimos 6 días y no se hizo (lo más reciente de cada hábito), si hoy no toca ya lo mismo
+function atrasados() {
+  const entrena = new Set(S.rutinas.filter(r => r.tipo !== "movilidad" && r.hab).map(r => r.hab));
+  const ultimo = new Map();
+  for (let i = 6; i >= 1; i--) {
+    const d = mas(HOY, -i);
+    for (const h of new Set([...(S.plan[d] || []), ...Object.keys(S.sesion[d] || {})]))
+      if (entrena.has(h) && habito(h) && !hecho(d, h)) ultimo.set(h, d);
+    // hecho más tarde (otro día de la semana): ya no está pendiente
+    for (const h of hechos(d)) if (ultimo.get(h) < d) ultimo.delete(h);
+  }
+  return [...ultimo].filter(([h]) => !hecho(HOY, h) && !(S.plan[HOY] || []).includes(h) && !(S.sesion[HOY] || {})[h])
+    .map(([h, d]) => [d, h]);
+}
+
+// mover el día entero a hoy: el plan y la rutina. El plan de carrera se recalcula con el día nuevo
+function aHoy(d, h) {
+  S.plan[d] = (S.plan[d] || []).filter(x => x !== h);
+  if (!S.plan[d].length) delete S.plan[d];
+  S.plan[HOY] = [...new Set([...(S.plan[HOY] || []), h])];
+  const r = (S.sesion[d] || {})[h];
+  if (r) {
+    delete S.sesion[d][h];
+    if (!Object.keys(S.sesion[d]).length) delete S.sesion[d];
+    S.sesion[HOY] = {...(S.sesion[HOY] || {}), [h]: r};
+  }
+  calma.vibra();
+  guardar();
+}
+
+$("#otra").onchange =e => { const r = rutina(e.target.value); e.target.value = ""; if (r) empieza(r); };
+
+// ---------- monigotes de cada ejercicio (/monigotes.js) ----------
+const foto = ej => window.monigote?.(ej.replace(/ · 2ª vuelta$/, "")) || null;
+
+// ---------- modo entreno ----------
+let A = null;   // {s: la sesión, r: la rutina, extra: {ej: filas de más}}
+let reloj = null, desc = null;   // desc = {fin, total} del descanso en marcha
+
+function empieza(r) {
+  let s = (S.gym[HOY] || []).find(x => x.rutina === r.id && !x.fin);
+  if (!s) {
+    s = {id: uid(), rutina: r.id, n: r.n, t0: Date.now(), t1: 0, min: 0, fin: false, ej: []};
+    (S.gym[HOY] ||= []).push(s);
+    guardar();
+  }
+  abre(s);
+}
+
+function abre(s) {
+  A = {s, r: rutina(s.rutina), extra: {}};
+  despierta(true);
+  recuerda({sesion: s.id});
+  $("#hs-tit").textContent = s.n;
+  pintaSesion();
+  $("#hoja-sesion").toggleAttribute("data-on", true);
+  clearInterval(reloj);
+  reloj = setInterval(tic, 1000);
+  tic();
+}
+
+const ejDe = (s, ej) => s.ej.find(e => e.ej === ej) || (s.ej.push({ej, series: []}), s.ej.at(-1));
+
+function pintaSesion() {
+  const c = $("#hs-lista");
+  const y = c.scrollTop;
+  c.replaceChildren(...A.r.bloques.map(b => {
+    const e = A.s.ej.find(e => e.ej === b.ej) || {ej: b.ej, series: []};
+    const sg = sugerencia(b, A.s), r = rango(b.repes), seg = !!b.seg && !b.repes;
+    const caja = el("div", "ej"), cab = el("div", "cab");
+    cab.append(el("b", null, b.ej), el("span", null, `${b.series}×${b.repes || (seg ? b.seg + " s" : "–")}`));
+    if (sg.sube) cab.append(el("span", "c-chip ok", `↑ sube a ${num(sg.kg)} kg`));
+    const txt = el("div", "txt"), f = foto(b.ej);
+    txt.append(cab);
+    if (b.nota) txt.append(el("p", "nota", b.nota));
+    if (f) { const fila = el("div", "fila-ej"); fila.append(txt, f); caja.append(fila); } else caja.append(txt);
+    const filas = Math.max(b.series, e.series.length) + (A.extra[b.ej] || 0);
+    for (let i = 0; i < filas; i++) caja.append(fila(b, e, i, sg, r, seg));
+    const m = el("button", "c-btn mini mas", "+ serie");
+    m.onclick = () => { A.extra[b.ej] = (A.extra[b.ej] || 0) + 1; pintaSesion(); };
+    caja.append(m);
+    if (sg.u) caja.append(el("p", "antes", "La última vez: " + sg.u.map(([k, n]) => (k ? `${num(k)}×${n}` : `${n}`)).join(" · ")));
+    return caja;
+  }));
+  c.scrollTop = y;
+}
+
+function fila(b, e, i, sg, r, seg) {
+  const hecha = e.series[i], f = el("div", "serie" + (hecha ? " hecha" : ""));
+  const kg = Object.assign(el("input"), {type: "text", inputMode: "decimal", value: hecha ? num(hecha[0]) : sg.kg ? num(sg.kg) : "", placeholder: "0"});
+  const n = Object.assign(el("input"), {type: "text", inputMode: "numeric", value: hecha ? hecha[1] : "",
+    placeholder: String(sg.u?.[i]?.[1] ?? (seg ? b.seg : r ? r[0] : ""))});
+  kg.setAttribute("aria-label", `Kilos, serie ${i + 1} de ${b.ej}`);
+  n.setAttribute("aria-label", `${seg ? "Segundos" : "Repeticiones"}, serie ${i + 1} de ${b.ej}`);
+  const ok = el("button", "ok");
+  ok.innerHTML = CHECK;
+  ok.setAttribute("aria-label", hecha ? `Deshacer serie ${i + 1}` : `Serie ${i + 1} hecha`);
+  // en orden: la siguiente por hacer, o deshacer la última hecha
+  ok.disabled = !(i === e.series.length || i === e.series.length - 1);
+  const lee = () => [Math.min(500, Math.max(0, parseFloat(kg.value.replace(",", ".")) || 0)), Math.min(600, parseInt(n.value || n.placeholder) || 0)];
+  ok.onclick = () => {
+    const ej = ejDe(A.s, b.ej);
+    if (i === ej.series.length) {
+      const v = lee();
+      if (!v[1]) return n.focus();
+      ej.series.push(v);
+      A.s.t1 = Date.now();
+      calma.vibra();
+      descansa(seg ? 60 : 90);
+    } else ej.series.pop();
+    guardar(false);
+    pintaSesion();
+  };
+  // corregir una serie ya hecha
+  if (hecha) kg.onchange = n.onchange = () => { ejDe(A.s, b.ej).series[i] = lee(); guardar(false); };
+  f.append(el("span", "i", i + 1), kg, el("span", null, "kg"), n, el("span", null, seg ? "s" : "rep"), ok);
+  return f;
+}
+
+function descansa(seg) {
+  desc = {fin: Date.now() + seg * 1000, total: seg};
+  $("#descanso").toggleAttribute("data-on", true);
+  tic();
+}
+$("#ds-menos").onclick = () => { if (desc) { desc.fin -= 15000; desc.total = Math.max(15, desc.total - 15); tic(); } };
+$("#ds-mas").onclick = () => { if (desc) { desc.fin += 15000; desc.total += 15; tic(); } };
+$("#ds-fin").onclick = () => { desc = null; $("#descanso").removeAttribute("data-on"); };
+
+function tic() {
+  if (!A) return;
+  $("#hs-reloj").textContent = mmss((Date.now() - A.s.t0) / 1000);
+  if (!desc) return;
+  // con la hora y no contando tics: con la pantalla bloqueada los intervalos se paran
+  const q = Math.ceil((desc.fin - Date.now()) / 1000);
+  if (q <= 0) {
+    desc = null;
+    $("#descanso").removeAttribute("data-on");
+    pip(880); setTimeout(() => pip(1175), 180);
+    return;
+  }
+  if (q <= 3) pip(520);
+  $("#ds-n").textContent = mmss(q);
+  $("#ds-barra").style.setProperty("--p", (100 - q / desc.total * 100) + "%");
+}
+
+function cierraSesion() {
+  despierta(false);
+  recuerda(null);
+  clearInterval(reloj);
+  desc = null;
+  $("#descanso").removeAttribute("data-on");
+  $("#hoja-sesion").removeAttribute("data-on");
+  A = null;
+  pinta();
+}
+$("#hs-cerrar").onclick = cierraSesion;   // la sesión sigue abierta: «Seguir» la retoma
+
+$("#hs-fin").onclick = () => {
+  const {s, r} = A;
+  s.ej = s.ej.filter(e => e.series.length);
+  if (!s.ej.length) {
+    S.gym[HOY] = S.gym[HOY].filter(x => x !== s);   // sin ninguna serie no hubo sesión
+    if (!S.gym[HOY].length) delete S.gym[HOY];
+  } else {
+    s.fin = true;
+    // los minutos hasta la última serie (y un poco), no hasta que te acordaste de darle a terminar
+    s.min = Math.min(600, Math.round((Math.min(Date.now(), (s.t1 || Date.now()) + 5 * 60000) - s.t0) / 60000));
+    // la plantilla aprende: el peso de hoy es el punto de partida de la próxima
+    for (const e of s.ej) { const b = r.bloques.find(b => b.ej === e.ej); if (b) b.kg = Math.max(...e.series.map(x => x[0])); }
+    if (r.hab) marca(r.hab, true);
+    calma.vibra();
+    calma.fiesta("entreno");
+  }
+  cierraSesion();
+  guardar();
+};
+
+// ---------- progreso ----------
+function pintaProgreso() {
+  const hist = {};   // ejercicio -> [{dia, mejor, series}]
+  for (const {dia, s} of sesiones()) for (const e of s.ej) if (e.series.length) (hist[e.ej] ||= []).push({dia, m: mejor(e.series), series: e.series});
+  const sel = $("#ej-sel"), antes = sel.value;
+  // primero lo que más se repite y, a igualdad, lo más pesado (el press banca antes que el core)
+  const kgMax = n => Math.max(...hist[n].map(x => x.m[0]));
+  const nombres = Object.keys(hist).sort((a, b) => hist[b].length - hist[a].length || kgMax(b) - kgMax(a));
+  sel.hidden = !nombres.length;
+  sel.replaceChildren(...nombres.map(n => Object.assign(el("option", null, `${n} · ${hist[n].length} ${hist[n].length === 1 ? "sesión" : "sesiones"}`), {value: n})));
+  if (nombres.includes(antes)) sel.value = antes;
+  const caja = $("#prog");
+  if (!nombres.length) {
+    caja.replaceChildren(el("p", "vacio", "Cuando apuntes series en una sesión, aquí verás cómo sube cada ejercicio: tu fuerza estimada, récords y la sugerencia de cuándo subir peso."));
+    return;
+  }
+  const h = hist[sel.value], conPeso = h.some(x => x.m[0] > 0);
+  // sin kilos (dominadas, fondos) se sigue las repeticiones; con kilos, la fuerza estimada
+  const valor = x => (conPeso ? e1rm(...x.m) : x.m[1]);
+  const top = h.reduce((a, x) => (valor(x) > valor(a) ? x : a));
+  const pesado = h.reduce((a, x) => (x.m[0] > a.m[0] ? x : a));
+  const vol = h.at(-1).series.reduce((a, [k, r]) => a + k * r, 0);
+  const cifra = el("div", "cifra");
+  cifra.append(num(Math.round(valor(h.at(-1)) * 2) / 2), el("small", null, conPeso ? "kg de 1RM estimado" : "repeticiones"));
+  const prs = el("ul", "prs");
+  for (const [t, v] of [["Récord", conPeso ? `${num(Math.round(e1rm(...top.m) * 2) / 2)} kg` : `${top.m[1]} rep`],
+                        ["Más peso", conPeso ? `${num(pesado.m[0])}×${pesado.m[1]}` : "—"],
+                        [vol ? `Última · ${Math.round(vol).toLocaleString("es")} kg` : "Última", corta(h.at(-1).dia)]]) {
+    const li = el("li");
+    li.append(el("small", null, t), el("b", null, v));
+    prs.append(li);
+  }
+  const lienzo = el("div", "lienzo"), cv = el("canvas");
+  cv.setAttribute("role", "img");
+  cv.setAttribute("aria-label", `${conPeso ? "1RM estimado" : "Repeticiones"} de ${sel.value} por sesión`);
+  lienzo.append(cv);
+  const datos = el("details", "datos");
+  datos.append(el("summary", null, "Ver los datos"));
+  const t = el("table"), cab = el("tr");
+  ["Día", "Mejor serie", conPeso ? "1RM est." : "Rep", "Series"].forEach(x => cab.append(el("th", null, x)));
+  t.append(cab);
+  for (const x of h.slice().reverse()) {
+    const tr = el("tr");
+    [corta(x.dia), conPeso ? `${num(x.m[0])}×${x.m[1]}` : x.m[1], conPeso ? num(Math.round(e1rm(...x.m) * 2) / 2) : x.m[1], x.series.length]
+      .forEach(v => tr.append(el("td", null, v)));
+    t.append(tr);
+  }
+  datos.append(t);
+  caja.replaceChildren(el("div", "eti-sup", "Ahora"), cifra, prs, lienzo, datos);
+  grafica(cv, h, valor, conPeso);
+}
+$("#ej-sel").onchange = pintaProgreso;
+
+let graf = null;
+function grafica(cv, h, valor, conPeso) {
+  if (!window.Chart) return;
+  const css = getComputedStyle(document.documentElement), v = n => css.getPropertyValue(n).trim();
+  const t = {texto: v("--texto"), tenue: v("--tenue"), linea: v("--linea"), acento: v("--acento"), carta: v("--carta"), fuente: v("--fuente")};
+  graf?.destroy();
+  graf = new Chart(cv, {type: "line", data: {labels: h.map(x => corta(x.dia)), datasets: [{
+    data: h.map(x => Math.round(valor(x) * 10) / 10), borderColor: t.acento, backgroundColor: t.acento, borderWidth: 2,
+    pointRadius: h.length > 20 ? 0 : 4, pointHoverRadius: 6, pointBorderColor: t.carta, pointBorderWidth: 2, tension: .25}]},
+    options: {responsive: true, maintainAspectRatio: false, interaction: {mode: "index", intersect: false}, animation: anima.graficas(300),
+      plugins: {legend: {display: false}, tooltip: {backgroundColor: t.texto, titleColor: t.carta, bodyColor: t.carta, padding: 10, cornerRadius: 8,
+        displayColors: false, titleFont: {family: t.fuente, weight: "600"}, bodyFont: {family: t.fuente},
+        callbacks: {label: c => { const x = h[c.dataIndex]; return conPeso ? [`${num(x.m[0])} kg × ${x.m[1]}`, `1RM est. ${num(c.raw)} kg`] : `${x.m[1]} repeticiones`; }}}},
+      scales: {x: {grid: {display: false}, border: {color: t.linea}, ticks: {color: t.tenue, font: {family: t.fuente, size: 11}, maxRotation: 0, autoSkipPadding: 14}},
+               y: {grid: {color: t.linea}, border: {display: false}, ticks: {color: t.tenue, font: {family: t.fuente, size: 11}, maxTicksLimit: 5}}}}});
+}
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (S) { pintaProgreso(); pintaMusculos(); } });
+
+// ---------- historial ----------
+function pintaHistorial() {
+  const l = sesiones().filter(x => x.s.fin || x.dia < HOY).reverse();
+  $("#hist-n").textContent = l.length ? `${l.length} ${l.length === 1 ? "sesión" : "sesiones"}` : "";
+  const c = $("#hist");
+  if (!l.length) return c.replaceChildren(el("p", "vacio", "Aún no hay sesiones apuntadas."));
+  c.replaceChildren(...l.slice(0, 15).map(({dia, s}) => {
+    const d = el("details"), sm = el("summary");
+    sm.append(el("span", "d", `${DIAS[fecha(dia).getDay()]} ${fecha(dia).getDate()}`), el("span", "n", s.n), el("span", "x", resumen(s)));
+    const ul = el("ul");
+    for (const e of s.ej) {
+      const li = el("li", null, e.ej + " ");
+      li.append(el("small", null, e.series.map(([k, n]) => (k ? `${num(k)}×${n}` : n)).join(" · ")));
+      ul.append(li);
+    }
+    // borrar pide dos toques, sin ventanas de confirmar
+    const b = el("button", "c-btn mini peligro borra", "Borrar sesión");
+    b.onclick = () => {
+      if (!b.dataset.seguro) { b.dataset.seguro = 1; b.textContent = "Toca otra vez para borrar"; return; }
+      S.gym[dia] = S.gym[dia].filter(x => x !== s);
+      if (!S.gym[dia].length) delete S.gym[dia];
+      guardar();
+    };
+    d.append(sm, ul, b);
+    return d;
+  }));
+}
+
+// ---------- carrera ----------
+function pintaCarrera() {
+  const lunes = mas(HOY, -((fecha(HOY).getDay() + 6) % 7));
+  const filas = [];
+  for (let i = 0; i < 7; i++) {
+    const d = mas(lunes, i);
+    for (const [h, rid] of Object.entries(S.sesion[d] || {})) {
+      const r = rutina(rid);
+      if (r?.tipo !== "carrera") continue;
+      const li = el("li", [hecho(d, h) && "hecho", d === HOY && "hoy"].filter(Boolean).join(" "));
+      li.append(el("span", "d", `${DIAS[fecha(d).getDay()]} ${fecha(d).getDate()}`), el("span", "n", r.n),
+                el("span", hecho(d, h) ? "c-chip ok" : "c-eti", hecho(d, h) ? "Hecho" : d < HOY ? "Pendiente" : ""));
+      filas.push(li);
+    }
+  }
+  $("#carrera").replaceChildren(...(filas.length ? filas : [el("p", "vacio", "Sin carreras esta semana.")]));
+  // lo último que mandó el atajo o el bot
+  const dia = Object.keys(S.actividad).sort().at(-1), a = dia && S.actividad[dia].at(-1);
+  const auto = $("#auto");
+  auto.replaceChildren();
+  if (a) {
+    const p = el("p", "auto");
+    p.append(el("b", null, a.n || a.t), el("span", null, [corta(dia), a.km && `${num(a.km)} km`, a.min && `${a.min} min`, a.ritmo].filter(Boolean).join(" · ")));
+    auto.append(p);
+  }
+}
+
+// ---------- cada mañana: la rutina guiada ----------
+function pintaManana() {
+  const r = S.rutinas.find(r => r.tipo === "movilidad");
+  $("#am").replaceChildren(r ? ficha(habito(r.hab) || {id: "", n: "Movilidad", c: "var(--acento)"}, r) : el("p", "vacio", "Sin rutina de movilidad."));
+}
+
+let g = null, ac = null;
+// un pitido corto: estirando o entre series no estás mirando la pantalla
+function pip(hz) {
+  try {
+    ac ||= new (window.AudioContext || window.webkitAudioContext)();
+    const o = ac.createOscillator(), v = ac.createGain();
+    o.frequency.value = hz;
+    o.connect(v); v.connect(ac.destination);
+    v.gain.setValueAtTime(.12, ac.currentTime);
+    v.gain.exponentialRampToValueAtTime(.001, ac.currentTime + .18);
+    o.start(); o.stop(ac.currentTime + .18);
+  } catch (e) { /* sin audio se sigue igual */ }
+}
+// La pantalla encendida mientras dura la rutina o la sesión: con el iPhone bloqueado, iOS congela la web app
+// y a veces la recarga entera desde la portada. Wake Lock existe en la app instalada desde iOS 18.4.
+let wake = null;
+async function despierta(on) {
+  try {
+    if (!on) { await wake?.release(); wake = null; return; }
+    if (!wake && "wakeLock" in navigator) {
+      wake = await navigator.wakeLock.request("screen");
+      wake.addEventListener("release", () => (wake = null));
+    }
+  } catch (e) { /* sin permiso o sin soporte: se sigue igual */ }
+}
+// iOS suelta el bloqueo al salir de la app: al volver se pide otra vez
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && (g || A)) despierta(true); });
+
+// Por si aun así se recarga: lo que está en marcha se guarda aquí, y calma.js vuelve a esta página desde la portada
+const MARCHA = "entreno-en-marcha";
+function recuerda(estado, minutos = 180) {
+  try {
+    if (estado) localStorage.setItem(MARCHA, JSON.stringify({...estado, dia: HOY, hasta: Date.now() + minutos * 60e3, url: "/entreno.html"}));
+    else localStorage.removeItem(MARCHA);
+  } catch (e) { /* sin almacenamiento, sin reanudar */ }
+}
+
+// con la hora de fin de cada paso, no contando tics: si la pantalla se apaga, al volver va por donde toca
+function empiezaGuia(r, previo) {
+  if (!r.bloques.length) return;
+  clearInterval(g?.t);
+  g = {r, i: 0, fin: Date.now() + (r.bloques[0].seg || 30) * 1000, pausa: false, queda: 0, ...previo, t: setInterval(ticGuia, 500)};
+  $("#hg-tit").textContent = r.n;
+  $("#hg-pausa").textContent = g.pausa ? "Seguir" : "Pausa";
+  $("#hoja-guia").toggleAttribute("data-on", true);
+  despierta(true);
+  if (!previo) pip(660);
+  guardaGuia();
+  ticGuia();
+}
+// caduca a los 20 min del último paso: una rutina abandonada a medias no se da por hecha horas después
+const guardaGuia = () => recuerda({guia: g.r.id, i: g.i, fin: g.fin, pausa: g.pausa, queda: g.queda}, 20);
+function ticGuia() {
+  if (!g) return;
+  if (!g.pausa) {
+    let saltados = 0;
+    while (g && Date.now() >= g.fin) { pasoGuia(1, g.fin); saltados++; }
+    if (!g) return;
+    if (saltados) pip(880);
+    g.queda = Math.max(1, Math.ceil((g.fin - Date.now()) / 1000));
+    if (g.queda <= 3 && g.queda !== g.pitado) { g.pitado = g.queda; pip(520); }
+  }
+  pintaGuia();
+}
+function pasoGuia(n, desde = Date.now()) {
+  g.i += n;
+  if (g.i >= g.r.bloques.length) return acabaGuia();
+  g.fin = desde + (g.r.bloques[g.i].seg || 30) * 1000;
+  g.queda = g.r.bloques[g.i].seg || 30;
+  guardaGuia();
+  pintaGuia();
+}
+function pintaGuia() {
+  const b = g.r.bloques[g.i], total = b.seg || 30;
+  $("#hg-paso").textContent = `Paso ${g.i + 1} de ${g.r.bloques.length}`;
+  $("#hg-ahora").textContent = b.ej;
+  if (g.conFoto !== g.i) { g.conFoto = g.i; const f = foto(b.ej); $("#hg-foto").replaceChildren(...(f ? [f] : [])); }
+  $("#hg-resto").textContent = g.queda;
+  $("#hg-barra").style.width = Math.round((1 - g.queda / total) * 100) + "%";
+  $("#hg-como").textContent = b.nota || "";
+  const sig = g.r.bloques[g.i + 1];
+  $("#hg-luego").textContent = sig ? "Luego: " + sig.ej : "Último";
+}
+function acabaGuia() {
+  const h = g.r.hab;
+  pip(1040);
+  paraGuia();
+  if (h && !hecho(HOY, h)) { marca(h, true); guardar(); }
+}
+function paraGuia() {
+  clearInterval(g?.t);
+  g = null;
+  recuerda(null);
+  despierta(false);
+  $("#hoja-guia").removeAttribute("data-on");
+}
+$("#hg-salir").onclick = paraGuia;
+$("#hg-salta").onclick = () => g && pasoGuia(1);
+$("#hg-pausa").onclick = () => {
+  if (!g) return;
+  g.pausa = !g.pausa;
+  if (g.pausa) g.queda = Math.max(1, Math.ceil((g.fin - Date.now()) / 1000));
+  else g.fin = Date.now() + g.queda * 1000;
+  $("#hg-pausa").textContent = g.pausa ? "Seguir" : "Pausa";
+  guardaGuia();
+};
+
+// al cargar: si había una rutina o una sesión abierta hoy, se reabre donde iba
+function reanuda() {
+  let m = null;
+  try { m = JSON.parse(localStorage.getItem(MARCHA)); } catch (e) {}
+  if (!m || m.dia !== HOY || m.hasta < Date.now()) return recuerda(null);
+  const r = m.guia && rutina(m.guia);
+  if (r) return empiezaGuia(r, {i: m.i, fin: m.fin, pausa: m.pausa, queda: m.queda});
+  const s = m.sesion && (S.gym[HOY] || []).find(x => x.id === m.sesion && !x.fin);
+  if (s && rutina(s.rutina)) abre(s);
+  else recuerda(null);
+}
+
+// ---------- peso ----------
+function pintaPeso() {
+  const dias = Object.keys(S.peso).sort(), c = $("#peso");
+  if (!dias.length) return c.replaceChildren(el("p", "vacio", "Sin registros. Apúntalo abajo."));
+  const ult = dias.at(-1);
+  // media de 7 pesajes: el peso diario rebota con el agua y la comida, la media no
+  const sem = dias.slice(-7).map(d => S.peso[d]), media = sem.reduce((a, b) => a + b, 0) / sem.length;
+  const p = el("div", "peso");
+  p.append(el("em", null, num(S.peso[ult])), el("span", null, "kg · " + corta(ult)), el("em", null, num(Math.round(media * 10) / 10)), el("span", null, "media 7"));
+  c.replaceChildren(p);
+  const ultimos = dias.slice(-30).map(d => S.peso[d]);
+  if (ultimos.length > 2) {
+    const min = Math.min(...ultimos), max = Math.max(...ultimos), rango = max - min || 1, ch = el("div", "chispa");
+    ch.setAttribute("role", "img");
+    ch.setAttribute("aria-label", `Tendencia de ${ultimos.length} pesajes, de ${num(min)} a ${num(max)} kg`);
+    for (const v of ultimos) { const i = el("i"); i.style.height = (12 + ((v - min) / rango) * 88) + "%"; ch.append(i); }
+    c.append(ch);
+  }
+}
+$("#f-peso").onsubmit = e => {
+  e.preventDefault();
+  const kg = Math.round(parseFloat(e.target.kg.value.replace(",", ".")) * 10) / 10;
+  if (!(kg >= 20 && kg <= 400)) return e.target.kg.focus();   // el servidor lo rechazaría igualmente
+  S.peso[HOY] = kg;
+  e.target.reset();
+  calma.vibra();
+  guardar();
+};
+
+// ---------- avisos push ----------
+let avisos = "no";   // no | ok | denegado | imposible
+const bytesDeB64 = s => {
+  const limpio = s.replace(/-/g, "+").replace(/_/g, "/");
+  const bin = atob(limpio + "=".repeat((4 - limpio.length % 4) % 4));
+  return Uint8Array.from(bin, c => c.charCodeAt(0));
+};
+async function estadoAvisos() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return (avisos = "imposible");
+  if (Notification.permission === "denied") return (avisos = "denegado");
+  const reg = await navigator.serviceWorker.getRegistration();
+  const sub = reg && await reg.pushManager.getSubscription();
+  return (avisos = sub && Notification.permission === "granted" ? "ok" : "no");
+}
+async function activaAvisos() {
+  try {
+    // el permiso TIENE que pedirse desde un gesto del usuario, por eso cuelga del botón
+    if (await Notification.requestPermission() !== "granted") { await estadoAvisos(); return pintaAvisos(); }
+    const reg = await navigator.serviceWorker.register("/sw.js");
+    await navigator.serviceWorker.ready;
+    const r = await fetch("/api/push/clave");
+    if (r.status === 401) return puerta(true);
+    const {clave} = await r.json();
+    if (!clave) throw new Error("el servidor no tiene clave VAPID");
+    const sub = await reg.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: bytesDeB64(clave)});
+    const alta = await fetch("/api/push/sub", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(sub)});
+    if (!alta.ok) throw new Error("alta rechazada: " + alta.status);
+    avisos = "ok";
+  } catch (e) {
+    avisos = "no";
+    $("#estado").textContent = "Avisos: error";
+  }
+  pintaAvisos();
+}
+function pintaAvisos() {
+  const textos = {ok: "Activados · 06:45 rutina · 17:15 antes de entrenar · 22:00 repaso",
+    denegado: "Permiso denegado. Actívalos en Ajustes del iPhone → Notificaciones → Todo.",
+    imposible: "Este navegador no puede. En iPhone hay que abrir la app desde la pantalla de inicio, no desde Safari."};
+  if (textos[avisos]) return $("#avisos").replaceChildren(el("p", "vacio", textos[avisos]));
+  const b = el("button", "c-btn", "Activar avisos");
+  b.onclick = activaAvisos;
+  $("#avisos").replaceChildren(b);
+}
+
+function pinta() {
+  pintaHoy();
+  pintaMusculos();
+  pintaManana();
+  pintaPeso();
+  pintaProgreso();
+  pintaHistorial();
+  pintaCarrera();
+  pintaAvisos();
+}
+
+addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  if (g) return paraGuia();
+  if (A) cierraSesion();
+});
+
+$("#f-clave").onsubmit = async e => {
+  e.preventDefault();
+  const inp = e.target.pass;
+  const r = await fetch("/api/login", {method: "POST", headers: {"Content-Type": "application/json"},
+                                       body: JSON.stringify({pass: inp.value})}).catch(() => null);
+  if (r && r.ok) { inp.value = ""; await cargar(); }
+  else puerta(true, r && r.status === 401 ? "Contraseña incorrecta" : "No se pudo conectar");
+};
+cargar();
+</script>
+</body>
+</html>

@@ -1,0 +1,649 @@
+<!doctype html>
+<html lang="es">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="calma-datos" content="/api/hoy">
+<meta name="calma-entrada" content="espera">
+<meta name="theme-color" content="#F4F5F0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#171A16" media="(prefers-color-scheme: dark)">
+<title>Hoy</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.json" crossorigin="use-credentials">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Hoy">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="/calma.css?v=3006c142">
+<script src="/calma.js?v=3006c142"></script>
+<script src="/anime-4.5.0.min.js"></script>
+<script src="/anima.js?v=3006c142"></script>
+<script src="/hoja.js?v=3006c142"></script>
+<style>
+  /* Estilo Calma: tokens y componentes en /calma.css (fuente: ~/estilo). Aquí solo lo de la portada.
+     Bento: lo del día en grande (anillos), cifras pequeñas alrededor, y el resto en piezas de 2 o 1. */
+  body { padding: 16px; padding-bottom: 40px; }
+  .app { max-width: 1120px; margin: 0 auto; display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  @media (min-width: 920px) { .app { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  .app > * { min-width: 0; }
+  .s2 { grid-column: span 2; }
+  .m2 { grid-column: span 2; }
+  @media (min-width: 920px) {
+    .m2 { grid-column: span 1; }
+    .grande { grid-row: span 2; }
+    .s3 { grid-column: span 3; }
+  }
+  .top { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; padding: 4px 2px 0; }
+  /* el saludo engorda con el día: peso de 300 (nada hecho) a 800 (día completo) */
+  h1 { margin: 0; font-size: 28px; font-weight: 300; letter-spacing: -.02em; transition: font-weight .6s; }
+  #fecha { font-size: 14px; color: var(--suave); }
+  #fecha b { color: var(--texto); font-weight: 500; }
+  .top nav { margin-left: auto; }
+
+  .carta { padding: 16px; min-width: 0; }
+  .carta h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .carta h2 a { margin-left: auto; font-size: 13px; font-weight: 500; color: var(--suave); text-decoration: none; }
+  .carta h2 a:hover { color: var(--texto); }
+  .carta h2 .c-chip { font-size: 12px; padding: 1px 8px; }
+  .vacio { margin: 0; padding: 4px 2px; font-size: 14px; color: var(--suave); }
+  .error { margin: 0; font-size: 13px; color: var(--peligro); }
+  .cifra { font-size: 40px; font-weight: 700; letter-spacing: -.03em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .bajo { margin: 2px 0 0; font-size: 14px; color: var(--suave); }
+  .c-barra { margin: 10px 0 4px; }
+
+  /* anillos del día: hábitos, pasos y sueño */
+  .anillos { display: grid; align-content: center; gap: 16px; }
+  .anillos .dentro { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; justify-content: center; }
+  .anillos svg { width: min(190px, 46vw); aspect-ratio: 1; flex: none; }
+  .anillos .fondo { opacity: .16; }
+  .anillos ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; min-width: 150px; }
+  .anillos li { display: grid; grid-template-columns: 12px auto; column-gap: 10px; align-items: center; }
+  .anillos li i { width: 12px; height: 12px; border-radius: 50%; background: var(--c); grid-row: span 2; }
+  .anillos li small { font-size: 13px; color: var(--suave); }
+  .anillos li b { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+  .anillos li b span { font-size: 13px; font-weight: 500; color: var(--suave); }
+
+  /* cifras pequeñas con su línea de 7 días */
+  .pieza { text-decoration: none; display: grid; align-content: start; gap: 2px; color: inherit; }
+  .pieza .cifra { font-size: 30px; }
+  .spark { width: 100%; height: 28px; margin-top: 8px; overflow: visible; }
+  .spark polyline { fill: none; stroke: var(--acento); stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
+  .spark circle { fill: var(--acento); }
+
+  /* hábitos: como en index.html, el círculo se rellena con el color del hábito */
+  .fila { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: none; border: 0;
+          border-radius: var(--r-s); padding: 8px 6px; min-height: 46px; position: relative; z-index: 1; }
+  .fila:hover { background: var(--carta-2); }
+  .fila .bx { width: 24px; height: 24px; flex: 0 0 24px; display: grid; place-items: center; border-radius: 50%;
+              border: 2px solid color-mix(in oklab, var(--c) 40%, var(--linea)); }
+  .fila[aria-pressed="true"] .bx { background: var(--c); border-color: var(--c); color: #fff; }
+  .fila svg.ck { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+  .fila .nom { flex: 1; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fila[aria-pressed="true"] .nom { color: var(--suave); text-decoration: line-through; text-decoration-color: var(--tenue); }
+  .fila .plan { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--acento-suave); color: var(--acento); }
+  .fila .rn { display: inline-flex; align-items: center; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .fila .rn.cero { color: var(--tenue); font-weight: 500; }
+  .llama { width: 13px; height: 13px; fill: var(--c); margin-right: 3px; transform-origin: 50% 90%; animation: llama 1.8s ease-in-out infinite; }
+  @keyframes llama { 0%, 100% { transform: rotate(-4deg) scale(1); } 50% { transform: rotate(3deg) scale(1.06, 1.16); } }
+  /* racha en juego (desde las 20:00, 2 días o más sin marcar hoy): el número y el círculo laten en ámbar */
+  .fila.peligro .rn { color: var(--aviso); animation: late-racha 1.3s ease-in-out infinite; }
+  .fila.peligro .llama { fill: var(--aviso); }
+  .fila.peligro .bx { border-color: var(--aviso); animation: aura 1.3s ease-in-out infinite; }
+  @keyframes late-racha { 50% { transform: scale(1.2); } }
+  @keyframes aura { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--aviso) 22%, transparent); } }
+  /* los tres anillos cerrados: brillan, y al cerrarse dan una vuelta */
+  .anillos.cerrados svg { filter: drop-shadow(0 0 14px color-mix(in srgb, var(--acento) 45%, transparent)); }
+  .anillos.celebra svg { animation: vuelta 1.3s cubic-bezier(.3, 1.2, .4, 1); }
+  @keyframes vuelta { 40% { transform: rotate(200deg) scale(1.08); } 100% { transform: rotate(360deg) scale(1); } }
+  @media (prefers-reduced-motion: reduce) { .fila.peligro .rn, .fila.peligro .bx, .anillos.celebra svg { animation: none; } }
+  details.resto summary { cursor: pointer; font-size: 13px; color: var(--suave); padding: 6px; width: max-content; position: relative; z-index: 1; }
+
+  /* tareas en pila, como la Cartera: cerradas se ven los bordes; al tocar se abren en abanico */
+  .pila { position: relative; z-index: 1; transition: height .5s cubic-bezier(.3, 1.2, .4, 1); }
+  .pila.cerrada { cursor: pointer; }
+  .tarea { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 14px; color: #fff; background: var(--c);
+           box-shadow: 0 -3px 12px rgba(0, 0, 0, .12); min-height: 58px; }
+  .pila .tarea { position: absolute; left: 0; right: 0; transition: top .5s cubic-bezier(.3, 1.2, .4, 1), transform .5s; }
+  .pila.cerrada .tarea .bx { visibility: hidden; }
+  .tarea .bx { flex: 0 0 26px; height: 26px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .8); background: none; }
+  .tarea .bx[disabled] { border-style: dashed; cursor: default; }
+  .tarea .bx.ok { display: grid; place-items: center; padding: 0; background: #fff; color: var(--c); }
+  .tarea .bx svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+  .tarea .t { flex: 1; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tarea .cuando { flex: none; font-size: 12px; font-weight: 600; opacity: .9; white-space: nowrap; }
+  .tarea .cuando.mal { background: rgba(0, 0, 0, .25); padding: 2px 8px; border-radius: 999px; opacity: 1; }
+  .pila-pista { margin: 8px 0 0; font-size: 12px; color: var(--suave); }
+  .pila-pista .recoger { border: 0; background: none; padding: 0; font: inherit; font-weight: 600; color: var(--acento); }
+  .pila:not(.cerrada) .tarea { cursor: pointer; }
+  /* «+» para apuntar desde la portada */
+  .mas-tarea { width: 30px; height: 30px; flex: none; display: grid; place-items: center; border-radius: 50%; border: 0;
+               background: var(--acento); color: var(--acento-texto); box-shadow: 0 4px 12px color-mix(in srgb, var(--acento) 35%, transparent); }
+  .mas-tarea svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
+  .carta h2 .mas-tarea + a, .carta h2 a + .mas-tarea { margin-left: 0; }
+
+  .menu { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .menu li { display: flex; gap: 10px; align-items: baseline; }
+  .menu i { font-style: normal; font-size: 12px; color: var(--tenue); width: 3.2em; flex: none; }
+  .menu span { flex: 1; min-width: 0; font-weight: 500; }
+  .menu u { text-decoration: none; font-size: 12px; color: var(--suave); white-space: nowrap; }
+  .sesion { margin-top: 12px; padding: 12px; border-radius: var(--r-s); background: var(--carta-2); }
+  .sesion small { display: block; font-size: 12px; color: var(--suave); }
+  .sesion b { font-weight: 600; }
+  .sesion.hoy { background: var(--acento-suave); }
+
+  /* tarjeta que se inclina: la mejor racha */
+  .escena3d { perspective: 700px; }
+  .racha { height: 100%; min-height: 150px; border-radius: var(--r); padding: 16px; color: #fff; display: grid; align-content: space-between;
+           background: linear-gradient(135deg, #46601A, #6F8C2C 45%, #3E5B4A); position: relative; overflow: hidden;
+           transition: transform .2s ease-out; --mx: 50%; --my: 30%; touch-action: pan-y; text-decoration: none; }
+  .racha::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(circle at var(--mx) var(--my), rgba(255, 255, 255, .35), transparent 55%); }
+  .racha small { font-size: 13px; opacity: .85; }
+  .racha b { font-size: 34px; font-weight: 800; letter-spacing: -.03em; line-height: 1; }
+
+  /* el año en puntos */
+  .anio { display: grid; grid-template-columns: repeat(53, minmax(0, 1fr)); grid-template-rows: repeat(7, auto); grid-auto-flow: column; gap: 2px; }
+  .anio i { aspect-ratio: 1; border-radius: 2px; background: var(--carta-2); }
+  .anio i[data-n="1"] { background: color-mix(in srgb, var(--acento) 35%, var(--carta-2)); }
+  .anio i[data-n="2"] { background: color-mix(in srgb, var(--acento) 68%, var(--carta-2)); }
+  .anio i[data-n="3"] { background: var(--acento); }
+  .anio i.futuro { background: none; box-shadow: inset 0 0 0 1px var(--linea); }
+  .anio i.hoy { outline: 2px solid var(--texto); outline-offset: 0; animation: late 1.6s ease-in-out infinite; }
+  @keyframes late { 50% { transform: scale(1.45); } }
+  .anio-pie { display: flex; justify-content: space-between; gap: 10px; margin-top: 8px; font-size: 12px; color: var(--suave); }
+
+  .puerta input, .puerta button { width: 100%; }
+  @media (prefers-reduced-motion: reduce) { .llama, .anio i.hoy { animation: none; } .pila, .pila .tarea, .racha, h1 { transition: none; } }
+</style>
+<body>
+
+<div class="puerta c-puerta" id="puerta">
+  <form id="f-clave">
+    <h2>Hoy</h2>
+    <p id="puerta-msg">Contraseña de todo</p>
+    <input class="c-campo" type="password" name="pass" required autocomplete="current-password" aria-label="Contraseña">
+    <button class="c-btn pri" type="submit">Entrar</button>
+  </form>
+</div>
+
+<div class="c-toast" id="toast" role="status"><b id="toast-txt"></b><button id="toast-btn">Deshacer</button></div>
+
+<div class="app">
+  <header class="top">
+    <h1 id="saludo">Hoy</h1>
+    <span id="fecha"></span>
+    <nav><a class="c-btn mini" href="/habitos.html">Hábitos</a><a class="c-btn mini" href="/pendientes.html">Pendientes</a><a class="c-btn mini" href="/entreno.html">Entreno</a><a class="c-btn mini" href="/sueno.html">Sueño</a><a class="c-btn mini" href="/comida.html">Comida</a><a class="c-btn mini" href="/gastos.html">Gastos</a></nav>
+  </header>
+
+  <section class="carta c-carta c-foco s2 grande anillos" aria-label="Tu día">
+    <div class="dentro">
+      <svg viewBox="0 0 120 120" role="img" id="anillos-svg" aria-label="Anillos del día">
+        <g fill="none" stroke-width="11" stroke-linecap="round" transform="rotate(-90 60 60)">
+          <circle class="fondo" cx="60" cy="60" r="50" stroke="var(--serie-3)"/><circle id="a-hab" cx="60" cy="60" r="50" stroke="var(--serie-3)" pathLength="100" stroke-dasharray="0 100"/>
+          <circle class="fondo" cx="60" cy="60" r="36" stroke="var(--serie-2)"/><circle id="a-pas" cx="60" cy="60" r="36" stroke="var(--serie-2)" pathLength="100" stroke-dasharray="0 100"/>
+          <circle class="fondo" cx="60" cy="60" r="22" stroke="var(--serie-1)"/><circle id="a-sue" cx="60" cy="60" r="22" stroke="var(--serie-1)" pathLength="100" stroke-dasharray="0 100"/>
+        </g>
+      </svg>
+      <ul>
+        <li style="--c: var(--serie-3)"><i></i><small>Hábitos de hoy</small><b id="l-hab">—</b></li>
+        <li style="--c: var(--serie-2)"><i></i><small>Pasos ayer</small><b id="l-pas">—</b></li>
+        <li style="--c: var(--serie-1)"><i></i><small>Dormido anoche</small><b id="l-sue">—</b></li>
+      </ul>
+    </div>
+  </section>
+
+  <a class="carta c-carta c-foco pieza" href="/sueno.html"><span class="c-eti">Dormido anoche</span><span class="cifra" id="sueno">—</span><span class="bajo" id="sueno-sub"></span><svg class="spark" id="sp-sueno" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true"></svg></a>
+  <a class="carta c-carta c-foco pieza" href="/sueno.html"><span class="c-eti">Pasos ayer</span><span class="cifra" id="pasos">—</span><span class="bajo" id="pasos-sub"></span><svg class="spark" id="sp-pasos" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true"></svg></a>
+  <a class="carta c-carta c-foco pieza" href="/entreno.html"><span class="c-eti">Peso</span><span class="cifra" id="peso">—</span><span class="bajo" id="peso-sub"></span><svg class="spark" id="sp-peso" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true"></svg></a>
+  <a class="carta c-carta c-foco pieza" href="/pendientes.html"><span class="c-eti">Leer luego</span><span class="cifra" id="leer">—</span><span class="bajo">guardados</span></a>
+
+  <section class="carta c-carta c-foco s2" aria-labelledby="t-hab">
+    <h2 id="t-hab">Hábitos <span class="c-chip" id="n-hab"></span><a href="/habitos.html">Abrir</a></h2>
+    <div class="c-barra" id="b-hab"><i></i></div>
+    <div id="habitos"></div>
+  </section>
+
+  <section class="carta c-carta c-foco s2" aria-labelledby="t-tar">
+    <h2 id="t-tar">Para hoy <span class="c-chip" id="n-tar"></span><a href="/pendientes.html">Pendientes</a><button class="mas-tarea" id="b-nueva" type="button" aria-label="Apuntar una tarea"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></h2>
+    <div id="tareas"></div>
+  </section>
+
+  <section class="carta c-carta c-foco s2" aria-labelledby="t-car">
+    <h2 id="t-car">Carrera <a href="/carrera.html">Plan</a></h2>
+    <div id="carrera"></div>
+  </section>
+
+  <section class="carta c-carta c-foco m2" aria-labelledby="t-com">
+    <h2 id="t-com">Comida <a href="/comida.html">Abrir</a></h2>
+    <div id="comida"></div>
+  </section>
+
+  <section class="carta c-carta c-foco m2" aria-labelledby="t-gas">
+    <h2 id="t-gas">Gastos <a href="/gastos.html">Abrir</a></h2>
+    <div id="gastos"></div>
+  </section>
+
+  <div class="escena3d m2"><a class="racha" id="racha" href="/habitos.html"><small id="racha-q">Mejor racha</small><b id="racha-n">—</b><small id="racha-h"></small></a></div>
+
+  <section class="carta c-carta c-foco s2 s3" aria-labelledby="t-anio">
+    <h2 id="t-anio">Tu año <span class="c-chip" id="n-anio"></span></h2>
+    <div class="anio" id="anio" role="img"></div>
+    <div class="anio-pie"><span>ene</span><span>Cada punto es un día: más intenso, más hábitos hechos</span><span>dic</span></div>
+  </section>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const el = (t, cls, txt) => { const e = document.createElement(t); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+const fecha = s => new Date(s + "T12:00:00");
+const mmss = s => `${Math.floor(Math.round(s) / 60)}:${String(Math.round(s) % 60).padStart(2, "0")}`;
+const eur = n => n.toLocaleString("es-ES", {minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: "always"}) + " €";
+const dia = s => { const d = fecha(s); return `${DIAS[d.getDay()]} ${d.getDate()}`; };
+const hm = m => `${Math.floor(Math.round(m) / 60)} h ${String(Math.round(m) % 60).padStart(2, "0")}`;
+const miles = n => Math.round(n).toLocaleString("es-ES", {useGrouping: "always"});
+const CHECK = '<svg class="ck" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12.5l4 4 8-9"/></svg>';
+const LLAMA = '<svg class="llama" viewBox="0 0 16 16" aria-hidden="true"><path d="M8.7 1c.4 2.4 4.3 4.1 4.3 8.2A5 5 0 0 1 8 14.5a5 5 0 0 1-5-5c0-2.1 1.1-3.4 2.2-4.4.1 1.4.8 2.4 1.8 2.8C6.6 5.3 7.2 2.8 8.7 1z"/></svg>';
+const OBJ = {pasos: 10000, sueno: 480};   // los anillos se cierran aquí
+let H = null;
+
+function puerta(mostrar, msg) {
+  $("#puerta").toggleAttribute("data-on", mostrar);
+  $("#puerta-msg").textContent = msg || "Contraseña de todo";
+  $("#puerta-msg").classList.toggle("mal", !!msg);
+  if (mostrar) $("#puerta input").focus();
+}
+
+async function api(url, op = {}) {
+  const r = await fetch(url, {headers: {"Content-Type": "application/json"}, ...op});
+  if (r.status === 401) { puerta(true); throw new Error("401"); }
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.status);
+  return r.json();
+}
+
+let reloj;
+function toast(txt, fn) {
+  $("#toast-txt").textContent = txt;
+  $("#toast-btn").hidden = !fn;
+  $("#toast-btn").onclick = async () => { $("#toast").removeAttribute("data-on"); await fn(); };
+  $("#toast").removeAttribute("data-on");
+  void $("#toast").offsetWidth;   // para que la isla vuelva a estirarse si ya estaba abierta
+  $("#toast").toggleAttribute("data-on", true);
+  clearTimeout(reloj);
+  reloj = setTimeout(() => $("#toast").removeAttribute("data-on"), 5000);
+}
+
+// una tarjeta cuya app no responde dice por qué, en vez de tumbar la página
+const fallo = (caja, x) => x && x.error ? (caja.replaceChildren(el("p", "error", `No responde: ${x.error}`)), true) : false;
+
+// ---------- anillos y saludo ----------
+function anillo(id, p) { $(id).setAttribute("stroke-dasharray", `${Math.max(0, Math.min(100, p * 100))} 100`); }
+function dia_() {
+  const hs = H.habitos, hechos = hs.filter(h => h.hecho).length, p = hs.length ? hechos / hs.length : 0;
+  $("#saludo").style.fontWeight = Math.round(300 + 500 * p);   // el saludo engorda con el día
+  anillo("#a-hab", p);
+  $("#l-hab").replaceChildren(String(hechos), el("span", null, ` / ${hs.length}`));
+  const pa = H.salud.pasos.ultimo, su = H.salud.sueno.ultimo;
+  anillo("#a-pas", (pa || 0) / OBJ.pasos);
+  anillo("#a-sue", (su || 0) / OBJ.sueno);
+  $("#l-pas").replaceChildren(pa ? miles(pa) : "—", el("span", null, ` / ${miles(OBJ.pasos)}`));
+  $("#l-sue").replaceChildren(su ? hm(su) : "—", el("span", null, " / 8 h"));
+  $("#anillos-svg").setAttribute("aria-label", `Hábitos ${hechos} de ${hs.length}; pasos ayer ${pa ? miles(pa) : "sin dato"}; dormido ${su ? hm(su) : "sin dato"}`);
+  // los tres cerrados a la vez: una vuelta, brillo, onda en el fondo y confeti (este, una vez al día)
+  const caja = $(".anillos"), cerrados = !!hs.length && p >= 1 && (pa || 0) >= OBJ.pasos && (su || 0) >= OBJ.sueno;
+  if (cerrados && !caja.classList.contains("cerrados")) {
+    caja.classList.add("celebra");
+    setTimeout(() => caja.classList.remove("celebra"), 1400);
+    const r = $("#anillos-svg").getBoundingClientRect();
+    calma.onda(r.left + r.width / 2, r.top + r.height / 2);
+    calma.fiesta("anillos");
+  }
+  caja.classList.toggle("cerrados", cerrados);
+}
+
+// ---------- hábitos ----------
+function habitos() {
+  const hs = H.habitos, hechos = hs.filter(h => h.hecho).length;
+  $("#n-hab").textContent = `${hechos}/${hs.length}`;
+  $("#b-hab").style.setProperty("--p", (hs.length ? hechos / hs.length * 100 : 0) + "%");
+  const fila = h => {
+    const b = el("button", "fila");
+    b.style.setProperty("--c", h.c);
+    b.dataset.h = h.id;
+    b.setAttribute("aria-pressed", h.hecho);
+    b.setAttribute("aria-label", `${h.n}, ${h.hecho ? "hecho" : "sin hacer"}`);
+    const rn = el("span", "rn" + (h.racha ? "" : " cero"));
+    // racha en juego: desde las 20:00, una racha de 2 días o más que sigue sin marcar late
+    const enJuego = !h.hecho && h.racha >= 2 && new Date().getHours() >= 20;
+    if (enJuego) {
+      b.classList.add("peligro");
+      b.setAttribute("aria-label", `${h.n}, sin hacer: tu racha de ${h.racha} días está en juego`);
+    }
+    if (h.racha >= 3 || enJuego) rn.insertAdjacentHTML("beforeend", LLAMA);
+    rn.append(String(h.racha));
+    b.append(Object.assign(el("span", "bx"), {innerHTML: h.hecho ? CHECK : ""}), el("span", "nom", h.n));
+    if (h.plan) b.append(el("span", "plan", "plan"));
+    b.append(rn);
+    b.onclick = () => marca(h);
+    return b;
+  };
+  // lo de hoy a la vista; el resto, plegado
+  const hoy = hs.filter(h => h.plan || h.hecho), resto = hs.filter(h => !h.plan && !h.hecho);
+  const caja = $("#habitos");
+  caja.replaceChildren(...(hoy.length ? hoy : hs).map(fila));
+  if (hoy.length && resto.length) {
+    const d = el("details", "resto"), s = el("summary", null, `${resto.length} más sin planificar`);
+    d.append(s, ...resto.map(fila));
+    caja.append(d);
+  }
+  if (!hs.length) caja.replaceChildren(el("p", "vacio", "Sin hábitos todavía."));
+}
+
+async function marca(h) {
+  h.hecho = !h.hecho;
+  habitos();
+  dia_();
+  const b = $(`.fila[data-h="${h.id}"]`);
+  if (h.hecho && anima.mov) {
+    anima.salta(b.querySelector(".bx"));
+    anime.animate(anime.svg.createDrawable(b.querySelector("path")), {draw: ["0 0", "0 1"], duration: 260, delay: 40, ease: "outQuad"});
+  }
+  try {
+    // el estado entero, como hace index.html: leer, cambiar el día de hoy y guardar
+    const s = await api("/api/state");
+    const l = s.log[H.hoy] || [];
+    s.log[H.hoy] = h.hecho ? [...new Set([...l, h.id])] : l.filter(x => x !== h.id);
+    await api("/api/state", {method: "PUT", body: JSON.stringify(s)});
+    if (H.habitos.every(x => x.hecho)) calma.fiesta("todo-dia");
+  } catch (e) {
+    if (e.message !== "401") toast(`No se ha guardado: ${e.message}`);
+    cargar();
+  }
+}
+
+// ---------- tareas en pila: tocar una la abre para cambiarla; «+» apunta otra ----------
+const PILA = {alto: 58, asoma: 14, hueco: 8};
+let pilaAbierta = false;   // que siga abierta al repintar tras editar
+function tareas() {
+  const caja = $("#tareas");
+  if (fallo(caja, H.tareas)) return;
+  $("#n-tar").textContent = H.tareas.length;
+  if (!H.tareas.length) return caja.replaceChildren(el("p", "vacio", "Nada que venza hoy. Toca + para apuntar algo."));
+  const colores = ["var(--serie-1)", "var(--serie-3)", "var(--serie-2)", "var(--serie-7)", "var(--serie-5)"];
+  const pila = el("div", "pila");
+  const tarjetas = H.tareas.map((t, i) => {
+    const f = el("div", "tarea"), bx = el("button", "bx");
+    f.style.setProperty("--c", colores[i % colores.length]);
+    f.dataset.i = i;
+    bx.disabled = t.fija;
+    bx.setAttribute("aria-label", t.fija ? "Del vault del curro: se marca allí" : `Marcar hecha: ${t.t}`);
+    bx.onclick = async e => {
+      e.stopPropagation();
+      bx.disabled = true;
+      bx.classList.add("ok"); bx.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 12.5l4 4 8-9"/></svg>';
+      const fin = anima.mov ? f.animate([{transform: "translateX(0)", opacity: 1}, {transform: "translateX(110%)", opacity: 0}],
+                                        {duration: 420, delay: 180, easing: "ease-in", fill: "forwards"}).finished : Promise.resolve();
+      try {
+        const r = await api("/api/tarea/hecha", {method: "POST", body: JSON.stringify({id: t.id, hecha: true})});
+        toast(`Hecha: ${t.t}`, async () => { await api("/api/tarea/hecha", {method: "POST", body: JSON.stringify({id: r.id, hecha: false})}); cargar(); });
+      } catch (e) { toast(`No se ha podido: ${e.message}`); }
+      await fin;
+      cargar();
+    };
+    const vencida = t.due < H.hoy;
+    f.append(bx, el("div", "t", t.t), el("span", "cuando" + (vencida ? " mal" : ""), vencida ? dia(t.due) : (t.hora || "hoy")));
+    return f;
+  });
+  pila.append(...tarjetas);
+  const sola = tarjetas.length === 1;
+  const pista = el("p", "pila-pista");
+  const coloca = abierta => {
+    pilaAbierta = abierta && !sola;
+    pila.classList.toggle("cerrada", !abierta);
+    const n = tarjetas.length;
+    tarjetas.forEach((f, i) => {
+      // cerrada: asoman los bordes de las de detrás y la primera queda delante
+      f.style.top = (abierta ? i * (PILA.alto + PILA.hueco) : i * PILA.asoma) + "px";
+      f.style.zIndex = abierta ? 1 : n - i;
+      f.style.transform = abierta ? "" : `scale(${1 - i * .04})`;
+    });
+    pila.style.height = (abierta ? n * (PILA.alto + PILA.hueco) - PILA.hueco : PILA.alto + (n - 1) * PILA.asoma) + "px";
+    pila.setAttribute("aria-expanded", abierta);
+    pista.replaceChildren(abierta ? "Toca una tarea para cambiarla; el círculo la marca como hecha." : "Toca la pila para abrirla.");
+    if (abierta && !sola) {
+      const recoger = el("button", "recoger", "Recoger");
+      recoger.type = "button";
+      recoger.onclick = () => coloca(false);
+      pista.append(" ", recoger);
+    }
+  };
+  // cerrada, un toque la abre; abierta, un toque en una tarea la edita
+  pila.addEventListener("click", e => {
+    if (e.target.closest(".bx")) return;
+    const f = e.target.closest(".tarea");
+    if (pila.classList.contains("cerrada")) return coloca(true);
+    if (f && !H.tareas[f.dataset.i].fija) editar(H.tareas[f.dataset.i]);
+  });
+  pila.addEventListener("keydown", e => {
+    if ((e.key === "Enter" || e.key === " ") && e.target === pila && pila.classList.contains("cerrada")) { e.preventDefault(); coloca(true); }
+  });
+  pila.tabIndex = 0;
+  pila.setAttribute("aria-label", `${tarjetas.length} ${sola ? "tarea" : "tareas"} para hoy`);
+  coloca(sola || pilaAbierta);
+  caja.replaceChildren(pila, pista);
+}
+
+const post = (url, cuerpo) => api(url, {method: "POST", body: JSON.stringify(cuerpo)});
+function editar(t) {
+  hoja.abre({titulo: "Cambiar tarea", texto: t.t, due: t.due, hora: t.hora, alGuardar: async x => {
+    if (!x.t.trim()) { toast("La tarea no puede quedar vacía"); return false; }
+    try {
+      const n = await post("/api/tarea/edita", {id: t.id, t: x.t, due: x.due, hora: x.hora});
+      toast(`Cambiada: ${n.t} · ${hoja.etiqueta(n.due, n.hora)}`);
+      cargar();
+    } catch (e) {
+      if (e.message !== "401") toast(`No se ha cambiado: ${e.message}`);
+      return false;
+    }
+  }, alBorrar: async () => {
+    try {
+      const b = await post("/api/tarea/borra", {id: t.id});
+      toast(`Borrada: ${t.t}`, async () => { await post("/api/tarea/restaura", b); cargar(); });
+      cargar();
+    } catch (e) {
+      if (e.message !== "401") toast(`No se ha borrado: ${e.message}`);
+      return false;
+    }
+  }});
+}
+$("#b-nueva").onclick = () => hoja.abre({titulo: "Nueva tarea", texto: "", due: H.hoy, hora: "", alGuardar: async x => {
+  if (!x.t.trim()) { toast("Escribe qué tienes que hacer"); return false; }
+  try {
+    const n = await post("/api/tarea", {t: x.t, due: x.due, hora: x.hora});
+    toast(`Apuntado · ${hoja.etiqueta(n.due, n.hora)}: ${n.t}`);
+    cargar();
+  } catch (e) {
+    if (e.message !== "401") toast(`No se ha apuntado: ${e.message}`);
+    return false;
+  }
+}});
+
+// ---------- carrera ----------
+function carrera() {
+  const c = H.carrera, caja = $("#carrera");
+  if (fallo(caja, c)) return;
+  const cifra = el("div", "cifra"), bajo = el("p", "bajo");
+  bajo.textContent = `5k estimado · objetivo ${mmss(c.objetivo)} · ` +
+    (c.semana ? `semana ${c.semana} de ${c.n_semanas}, ${c.fase.toLowerCase()}` : "el plan aún no ha empezado");
+  caja.replaceChildren(cifra, bajo);
+  calma.cuenta(cifra, c.estimacion, mmss, 800);
+  const s = el("div", "sesion");
+  if (c.hoy_hecho) {
+    s.classList.add("hoy");
+    s.append(el("small", null, "Hoy"), el("b", null, "Ya has corrido. Bien."));
+  } else if (c.proxima) {
+    const hoy = c.proxima.dia === H.hoy;
+    s.classList.toggle("hoy", hoy);
+    s.append(el("small", null, hoy ? "Hoy toca" : `Próxima: ${dia(c.proxima.dia)}`), el("b", null, c.proxima.n));
+  } else {
+    s.append(el("small", null, "Próxima"), el("b", null, "Nada en el calendario estas dos semanas"));
+  }
+  caja.append(s);
+}
+
+// ---------- comida ----------
+function comida() {
+  const c = H.comida, caja = $("#comida");
+  if (fallo(caja, c)) return;
+  const ul = el("ul", "menu");
+  for (const m of c.menu) {
+    const li = el("li");
+    li.append(el("i", null, m.franja.slice(0, 3)), el("span", null, m.n), el("u", null, `${m.kcal} kcal`));
+    ul.append(li);
+  }
+  caja.replaceChildren(c.menu.length ? ul : el("p", "vacio", "No hay menú para hoy: genéralo en comida o con /menu."));
+  caja.append(el("p", "bajo", !c.total ? "Sin lista de la compra."
+    : c.falta ? `Falta comprar ${c.falta} de ${c.total}, unos ${eur(c.coste)}.` : "Compra hecha: todo tachado."));
+}
+
+// ---------- gastos ----------
+function gastos() {
+  const g = H.gastos, caja = $("#gastos");
+  if (fallo(caja, g)) return;
+  const cifra = el("div", "cifra"), bajo = el("p", "bajo");
+  cifra.style.fontSize = "30px";
+  caja.replaceChildren(cifra);
+  calma.cuenta(cifra, g.total, eur, 700);
+  if (g.presu) {
+    const b = el("div", "c-barra" + (g.total > g.presu ? " pasada" : ""));
+    b.append(el("i"));
+    b.style.setProperty("--p", Math.min(100, g.total / g.presu * 100) + "%");
+    caja.append(b);
+    bajo.textContent = `de ${eur(g.presu)}` + (g.al_dia != null ? ` · ${eur(Math.max(0, g.al_dia))} al día, ${g.quedan} días` : "");
+  } else {
+    bajo.textContent = "este ciclo, sin presupuesto";
+  }
+  if (g.ayer) bajo.textContent += ` · ayer ${eur(g.ayer)}`;
+  caja.append(bajo);
+}
+
+// ---------- cifras pequeñas con su línea de 7 días ----------
+function linea(id, serie) {
+  const svg = $(id), xs = (serie || []).map((v, i) => [i, v]).filter(([, v]) => v != null);
+  if (xs.length < 2) return svg.replaceChildren();
+  const vs = xs.map(([, v]) => v), lo = Math.min(...vs), hi = Math.max(...vs), n = serie.length - 1;
+  const p = ([i, v]) => [i / n * 100, hi === lo ? 14 : 24 - (v - lo) / (hi - lo) * 20];
+  const pts = xs.map(p), [ux, uy] = pts.at(-1);
+  svg.innerHTML = `<polyline points="${pts.map(q => q.join(",")).join(" ")}"/><circle cx="${ux}" cy="${uy}" r="2.6"/>`;
+}
+function piezas() {
+  const pe = H.peso;
+  if (pe) {
+    calma.cuenta($("#peso"), pe.kg, n => n.toFixed(1), 700);
+    $("#peso-sub").textContent = pe.media ? `media 7 días ${pe.media.toFixed(1)}` : "kg";
+    linea("#sp-peso", pe.serie);
+  } else {
+    $("#peso-sub").textContent = "sin pesarte esta semana";
+  }
+  $("#leer").textContent = typeof H.leer === "number" ? H.leer : "—";
+  for (const [k, fmt] of [["sueno", hm], ["pasos", miles]]) {
+    const x = H.salud[k];
+    if (x.ultimo) calma.cuenta($("#" + k), x.ultimo, fmt, 700);
+    else $("#" + k).textContent = "—";
+    $(`#${k}-sub`).textContent = x.media ? `media 7 días ${fmt(x.media)}` : "sin datos de Salud";
+    linea("#sp-" + k, x.serie);
+  }
+}
+
+// ---------- la mejor racha, en una tarjeta que se inclina ----------
+function racha() {
+  const mejor = [...H.habitos].sort((a, b) => b.racha - a.racha)[0];
+  if (!mejor || !mejor.racha) {
+    $("#racha-q").textContent = "Mejor racha";
+    $("#racha-n").textContent = "0 días";
+    $("#racha-h").textContent = "Marca un hábito hoy y empieza una";
+    return;
+  }
+  $("#racha-q").textContent = "Mejor racha ahora";
+  $("#racha-n").textContent = `${mejor.racha} ${mejor.racha === 1 ? "día" : "días"}`;
+  $("#racha-h").textContent = mejor.n;
+}
+(() => {
+  const c = $("#racha"), escena = c.parentElement;
+  const mueve = e => {
+    if (!anima.mov) return;
+    const r = c.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+    c.style.transform = `rotateY(${(x - .5) * 20}deg) rotateX(${(.5 - y) * 20}deg)`;
+    c.style.setProperty("--mx", x * 100 + "%"); c.style.setProperty("--my", y * 100 + "%");
+  };
+  escena.addEventListener("pointermove", mueve);
+  escena.addEventListener("pointerdown", mueve);
+  escena.addEventListener("pointerleave", () => c.style.transform = "");
+  escena.addEventListener("pointerup", () => setTimeout(() => c.style.transform = "", 250));
+})();
+
+// ---------- el año en puntos ----------
+function anio() {
+  const caja = $("#anio"), ini = new Date(+H.hoy.slice(0, 4), 0, 1, 12);
+  const huecos = (ini.getDay() + 6) % 7;   // la primera columna empieza en lunes
+  const dias = new Date(+H.hoy.slice(0, 4), 11, 31, 12).getTime() / 864e5 - ini.getTime() / 864e5 + 1;
+  const puntos = [];
+  for (let k = 0; k < huecos; k++) puntos.push(Object.assign(el("i"), {style: "visibility: hidden"}));
+  for (let k = 0; k < Math.round(dias); k++) {
+    const i = el("i"), d = new Date(ini.getTime() + k * 864e5);
+    if (k < H.anio.length - 1) { i.dataset.n = H.anio[k]; i.title = `${d.getDate()} ${MESES[d.getMonth()]}`; }
+    else if (k === H.anio.length - 1) { i.className = "hoy"; i.dataset.n = H.anio[k]; i.title = "Hoy"; }
+    else i.className = "futuro";
+    puntos.push(i);
+  }
+  caja.replaceChildren(...puntos);
+  const completos = H.anio.filter(n => n === 3).length;
+  $("#n-anio").textContent = `${completos} días completos`;
+  caja.setAttribute("aria-label", `Año ${H.hoy.slice(0, 4)}: ${completos} días con casi todos los hábitos hechos de ${H.anio.length} días que van`);
+}
+
+function pinta() {
+  const d = new Date(), hora = d.getHours();
+  const saludo = `${hora < 6 || hora >= 21 ? "Buenas noches" : hora < 14 ? "Buenos días" : "Buenas tardes"}, Yago`;
+  if ($("#saludo").textContent !== saludo) $("#saludo").textContent = saludo;
+  $("#fecha").replaceChildren(el("b", null, `${DIAS[d.getDay()][0].toUpperCase() + DIAS[d.getDay()].slice(1)} ${d.getDate()} de ${MESES[d.getMonth()]}`));
+  habitos(); tareas(); carrera(); comida(); gastos(); piezas(); racha(); anio();
+}
+
+async function cargar() {
+  try {
+    const primera = !H;
+    H = await api("/api/hoy");
+    puerta(false);
+    primera ? pinta() : calma.transicion(pinta);
+    if (primera) {   // la entrada común a todas las páginas; aquí además las barras y los anillos
+      anima.entrada();
+      anima.llena(".c-barra", 250);
+      setTimeout(dia_, anima.mov ? 200 : 0);   // los anillos parten de vacío y se cierran con la transición
+    } else dia_();
+  } catch (e) {
+    if (e.message !== "401") toast(`Sin conexión: ${e.message}`);
+  }
+}
+
+$("#f-clave").onsubmit = async e => {
+  e.preventDefault();
+  const inp = e.target.pass;
+  const r = await fetch("/api/login", {method: "POST", headers: {"Content-Type": "application/json"},
+                                       body: JSON.stringify({pass: inp.value})}).catch(() => null);
+  if (r && r.ok) { inp.value = ""; await cargar(); }
+  else puerta(true, r && r.status === 401 ? "Contraseña incorrecta" : "No se pudo conectar");
+};
+addEventListener("visibilitychange", () => document.visibilityState === "visible" && H && cargar());
+cargar();
+</script>
+<style>
+  /* los anillos se cierran con una transición (los dibuja dia_()) */
+  @media (prefers-reduced-motion: no-preference) { .anillos circle:not(.fondo) { transition: stroke-dasharray 1.1s cubic-bezier(.3, .8, .3, 1); } }
+</style>
+</body>
+</html>

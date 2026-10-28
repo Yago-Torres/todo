@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="es">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="calma-datos" content="/api/sueno">
+<meta name="calma-entrada" content="espera">
+<meta name="theme-color" content="#F4F5F0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#171A16" media="(prefers-color-scheme: dark)">
+<title>Sueño</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.json" crossorigin="use-credentials">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Sueño">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="/calma.css?v=3006c142">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="/calma.js?v=3006c142"></script>
+<script src="/anime-4.5.0.min.js"></script>
+<script src="/anima.js?v=3006c142"></script>
+<style>
+  /* Estilo Calma: tokens y componentes en /calma.css (fuente: ~/estilo). Aquí solo lo del sueño. */
+  /* fases: paleta validada (validate_palette.js) en el orden en que se apilan: profundo, básico, REM, despierto */
+  :root { --f-deep: #2a78d6; --f-core: #1baf7a; --f-rem: #eda100; --f-awake: #e34948; }
+  @media (prefers-color-scheme: dark) { :root { --f-deep: #3987e5; --f-core: #199e70; --f-rem: #c98500; --f-awake: #e85580; } }
+  body { padding: 16px; padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px)); }
+  .app { max-width: 1120px; margin: 0 auto; display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+  .col { display: grid; gap: 14px; align-content: start; min-width: 0; }
+  @media (min-width: 920px) { .app { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); } }
+  .top { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 4px 2px 0; }
+  h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -.02em; }
+  .top nav { margin-left: auto; display: flex; gap: 6px; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .top nav a { text-decoration: none; }
+  #estado { font-size: 13px; color: var(--suave); }
+  .carta { padding: 16px; min-width: 0; }
+  .carta h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .carta h2 .der { margin-left: auto; font-weight: 400; }
+  .vacio { margin: 0; padding: 8px 2px; font-size: 14px; color: var(--suave); }
+
+  .eti-sup { font-size: 13px; color: var(--suave); }
+  .nota { display: flex; align-items: baseline; gap: 10px; }
+  .cifra { font-size: 46px; font-weight: 700; letter-spacing: -.03em; line-height: 1.1; margin: 2px 0; font-variant-numeric: tabular-nums; }
+  .bajo { margin: 0; font-size: 14px; color: var(--suave); }
+  .tres { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+  .tres div { background: var(--carta-2); border-radius: var(--r-s); padding: 10px; min-width: 0; }
+  .tres small { display: block; font-size: 12px; color: var(--suave); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tres b { font-size: 17px; font-weight: 650; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .tres b span { font-size: 13px; font-weight: 400; color: var(--suave); }
+
+  .lienzo { position: relative; height: 240px; }
+  .lienzo.bajo-h { height: 200px; }
+  .leyenda { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: -4px 0 10px; font-size: 13px; color: var(--suave); }
+  .leyenda span { display: inline-flex; align-items: center; gap: 6px; }
+  .leyenda s { display: inline-block; width: 12px; height: 10px; border-radius: 3px; background: var(--c); text-decoration: none; }
+  details.datos { margin-top: 8px; font-size: 13px; color: var(--suave); }
+  details.datos summary { cursor: pointer; width: max-content; }
+  details.datos .scroll { max-height: 240px; overflow: auto; }
+  details.datos table { width: 100%; border-collapse: collapse; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  details.datos th, details.datos td { text-align: right; padding: 4px 6px; border-bottom: 1px solid var(--linea); font-weight: 400; white-space: nowrap; }
+  details.datos th:first-child, details.datos td:first-child { text-align: left; }
+  details.como p { font-size: 14px; color: var(--suave); margin: 8px 0 0; }
+  details.como summary { cursor: pointer; font-weight: 600; }
+  .puerta input, .puerta button { width: 100%; }
+</style>
+<body>
+
+<div class="puerta c-puerta" id="puerta">
+  <form id="f-clave">
+    <h2>Sueño</h2>
+    <p id="puerta-msg">Contraseña de todo</p>
+    <input class="c-campo" type="password" name="pass" required autocomplete="current-password" aria-label="Contraseña">
+    <button class="c-btn pri" type="submit">Entrar</button>
+  </form>
+</div>
+
+<div class="app">
+  <header class="top">
+    <h1>Sueño</h1>
+    <span id="estado">Cargando…</span>
+    <nav><a class="c-btn mini" href="/">Hoy</a><a class="c-btn mini" href="/habitos.html">Hábitos</a><a class="c-btn mini" href="/pendientes.html">Pendientes</a><a class="c-btn mini" href="/entreno.html">Entreno</a><a class="c-btn mini" href="/comida.html">Comida</a><a class="c-btn mini" href="/gastos.html">Gastos</a></nav>
+  </header>
+
+  <div class="col">
+    <section class="carta c-carta" aria-labelledby="t-anoche">
+      <div class="eti-sup" id="t-anoche">Anoche</div>
+      <div class="nota"><div class="cifra" id="nota">—</div><span id="nivel"></span></div>
+      <p class="bajo" id="resumen"></p>
+      <div class="tres" id="partes" hidden>
+        <div><small>Duración</small><b id="p-dur">—</b></div>
+        <div><small>Hora de acostarte</small><b id="p-hora">—</b></div>
+        <div><small>Interrupciones</small><b id="p-int">—</b></div>
+      </div>
+    </section>
+
+    <section class="carta c-carta" aria-labelledby="t-noche">
+      <h2 id="t-noche">La noche <span class="der c-eti" id="noche-dia"></span></h2>
+      <div id="noche-cuerpo">
+        <div class="leyenda" id="ley-noche"></div>
+        <div class="lienzo bajo-h"><canvas id="g-noche" role="img" aria-label="Fases de la última noche, hora a hora"></canvas></div>
+        <details class="datos"><summary>Ver los datos</summary><div class="scroll" id="t-noche-d"></div></details>
+      </div>
+    </section>
+
+    <section class="carta c-carta">
+      <details class="como">
+        <summary>Cómo se calcula</summary>
+        <p>Cada mañana el atajo de Salud manda lo que el COROS apuntó anoche, tramo a tramo. Lo despierto antes de dormirte y después de levantarte no cuenta.</p>
+        <p><b>La puntuación</b> sigue la receta de Salud, sobre 100: <b>duración</b> hasta 50 (8 h dormido son 50), <b>hora de acostarte</b> hasta 30 (30 si es a la media hora de tu media de las dos últimas semanas, 0 si te desvías dos horas) e <b>interrupciones</b> hasta 20 (se pierden con los minutos despierto en mitad de la noche). No es la de Salud ni la del COROS, que no se pueden leer: es la nuestra, calibrada para que salga parecida.</p>
+      </details>
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="carta c-carta" aria-labelledby="t-fases">
+      <h2 id="t-fases">Fases por noche <span class="der c-eti">últimas 2 semanas</span></h2>
+      <div class="leyenda" id="ley-fases"></div>
+      <div class="lienzo"><canvas id="g-fases" role="img" aria-label="Minutos de cada fase del sueño por noche"></canvas></div>
+      <details class="datos"><summary>Ver los datos</summary><div class="scroll" id="t-fases-d"></div></details>
+    </section>
+
+    <section class="carta c-carta" aria-labelledby="t-nota">
+      <h2 id="t-nota">Puntuación <span class="der c-eti">último mes</span></h2>
+      <div class="lienzo bajo-h"><canvas id="g-nota" role="img" aria-label="Puntuación del sueño por noche"></canvas></div>
+    </section>
+
+    <section class="carta c-carta" aria-labelledby="t-pasos">
+      <h2 id="t-pasos">Pasos <span class="der c-eti" id="pasos-media"></span></h2>
+      <div class="lienzo bajo-h"><canvas id="g-pasos" role="img" aria-label="Pasos por día"></canvas></div>
+      <details class="datos"><summary>Ver los datos</summary><div class="scroll" id="t-pasos-d"></div></details>
+    </section>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const el = (t, cls, txt) => { const e = document.createElement(t); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+const DIAS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+const fecha = s => new Date(s + "T12:00:00");
+const corta = s => `${DIAS[fecha(s).getDay()]} ${fecha(s).getDate()}`;
+const larga = s => `${fecha(s).getDate()} ${MESES[fecha(s).getMonth()]}`;
+const hm = m => m == null ? "—" : `${Math.floor(m / 60)} h ${String(Math.round(m) % 60).padStart(2, "0")}`;
+const reloj = ms => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+const miles = n => n == null ? "—" : Math.round(n).toLocaleString("es-ES", {useGrouping: "always"});
+// de arriba abajo en la noche; se apilan al revés (profundo abajo)
+const FASES = [["awake", "Despierto"], ["rem", "REM"], ["core", "Básico"], ["deep", "Profundo"]];
+const nivel = n => n >= 96 ? "Muy alta" : n >= 80 ? "Alta" : n >= 70 ? "Aceptable" : n >= 40 ? "Baja" : "Muy baja";
+let R = null;
+
+function puerta(mostrar, msg) {
+  $("#puerta").toggleAttribute("data-on", mostrar);
+  $("#puerta-msg").textContent = msg || "Contraseña de todo";
+  $("#puerta-msg").classList.toggle("mal", !!msg);
+  if (mostrar) $("#puerta input").focus();
+}
+
+async function cargar() {
+  try {
+    const r = await fetch("/api/sueno");
+    if (r.status === 401) { $("#estado").textContent = ""; return puerta(true); }
+    if (!r.ok) throw new Error(r.status);
+    R = await r.json();
+    puerta(false);
+    $("#estado").textContent = "";
+    pinta();
+    anima.entrada();
+  } catch (e) {
+    $("#estado").textContent = "Sin conexión";
+  }
+}
+
+function pinta() {
+  const a = R.anoche, ult = [...R.noches].reverse().find(n => n.sueno);
+  if (a) {
+    calma.cuenta($("#nota"), a.nota.total, n => String(Math.round(n)), 700);
+    $("#nivel").replaceChildren(el("span", "c-chip " + (a.nota.total >= 80 ? "ok" : a.nota.total < 70 ? "mal" : ""), nivel(a.nota.total)));
+    $("#resumen").textContent = `${hm(a.sueno)} dormido · de ${a.acostarse} a ${a.levantarse}` + (a.dia !== R.noches.at(-1).dia ? ` · ${larga(a.dia)}` : "");
+    const parte = (id, v, de) => { $(id).replaceChildren(String(v), el("span", null, ` / ${de}`)); };
+    parte("#p-dur", a.nota.duracion, 50); parte("#p-hora", a.nota.hora, 30); parte("#p-int", a.nota.interrupciones, 20);
+    $("#partes").hidden = false;
+  } else {
+    $("#nota").textContent = ult ? hm(ult.sueno) : "—";
+    $("#resumen").textContent = ult ? "dormido. Para la puntuación y las fases, el atajo tiene que mandar los tramos de la noche."
+                                    : "Sin datos todavía: llegan cada mañana con el atajo de Salud.";
+  }
+  graficas();
+}
+
+// ---------- gráficas (Chart.js; sin la librería la página funciona igual) ----------
+const graf = {};
+function tokens() {
+  const s = getComputedStyle(document.documentElement), v = n => s.getPropertyValue(n).trim();
+  return {texto: v("--texto"), suave: v("--suave"), tenue: v("--tenue"), linea: v("--linea"), acento: v("--acento"),
+          carta: v("--carta"), fuente: v("--fuente"), fase: Object.fromEntries(FASES.map(([k]) => [k, v(`--f-${k}`)]))};
+}
+function base(t, yfmt) {
+  return {
+    responsive: true, maintainAspectRatio: false,
+    interaction: {mode: "index", intersect: false},
+    animation: anima.graficas(250),
+    plugins: {
+      legend: {display: false},
+      tooltip: {backgroundColor: t.texto, titleColor: t.carta, bodyColor: t.carta, padding: 10, cornerRadius: 8,
+                displayColors: false, titleFont: {family: t.fuente, weight: "600"}, bodyFont: {family: t.fuente}},
+    },
+    scales: {
+      x: {grid: {display: false}, border: {color: t.linea},
+          ticks: {color: t.tenue, font: {family: t.fuente, size: 11}, maxRotation: 0, autoSkipPadding: 14}},
+      y: {grid: {color: t.linea}, border: {display: false},
+          ticks: {color: t.tenue, font: {family: t.fuente, size: 11}, maxTicksLimit: 5, callback: yfmt}},
+    },
+  };
+}
+function dibuja(id, config) { graf[id]?.destroy(); graf[id] = new Chart(document.getElementById(id), config); }
+function leyenda(sel, items) {
+  $(sel).replaceChildren(...items.map(([txt, c]) => {
+    const s = el("span"), m = el("s");
+    m.style.setProperty("--c", c);
+    s.append(m, document.createTextNode(txt));
+    return s;
+  }));
+}
+function tabla(sel, cab, filas) {
+  const t = el("table"), h = el("tr");
+  cab.forEach(x => h.append(el("th", null, x)));
+  t.append(h);
+  filas.forEach(f => { const tr = el("tr"); f.forEach(x => tr.append(el("td", null, x))); t.append(tr); });
+  $(sel).replaceChildren(t);
+}
+
+function graficas() {
+  if (!window.Chart || !R) return;
+  const t = tokens(), nombre = Object.fromEntries(FASES);
+
+  // 1. la noche: cada tramo, en la fila de su fase
+  const a = R.anoche;
+  if (!a) {
+    $("#noche-cuerpo").replaceChildren(el("p", "vacio", "Cuando el atajo mande los tramos de la noche (fase, hora y minutos) verás aquí la noche hora a hora."));
+  } else {
+    $("#noche-dia").textContent = larga(a.dia);
+    const tramos = a.tramos.map(([e, ini, m]) => { const x0 = new Date(ini).getTime(); return {e, x0, x1: x0 + m * 6e4, m}; });
+    const on = base(t, null);
+    on.indexAxis = "y";
+    on.interaction = {mode: "nearest", intersect: true};
+    // en horas en punto, que es como se lee un reloj
+    on.scales.x = {type: "linear", min: Math.floor(tramos[0].x0 / 36e5) * 36e5, max: Math.ceil(tramos.at(-1).x1 / 36e5) * 36e5, grid: {color: t.linea}, border: {display: false},
+                   ticks: {color: t.tenue, font: {family: t.fuente, size: 11}, stepSize: 36e5, maxRotation: 0,
+                           callback: (v, i) => innerWidth < 600 && i % 2 ? "" : reloj(v)}};   // en el móvil, cada 2 h
+    on.scales.y = {grid: {display: false}, border: {color: t.linea}, ticks: {color: t.suave, font: {family: t.fuente, size: 12}}};
+    on.plugins.tooltip.callbacks = {title: () => null, label: c => `${c.dataset.label}: ${reloj(c.raw.x[0])}–${reloj(c.raw.x[1])} · ${Math.round(c.raw.m)} min`};
+    dibuja("g-noche", {type: "bar", options: on, data: {labels: FASES.map(f => f[1]), datasets: FASES.map(([k, n]) => ({
+      label: n, data: tramos.filter(x => x.e === k).map(x => ({x: [x.x0, x.x1], y: n, m: x.m})),
+      backgroundColor: t.fase[k], borderRadius: 3, borderSkipped: false, barPercentage: .8, categoryPercentage: 1, grouped: false}))}});
+    leyenda("#ley-noche", FASES.map(([k, n]) => [n, t.fase[k]]));
+    tabla("#t-noche-d", ["Desde", "Hasta", "Fase", "Min"], tramos.map(x => [reloj(x.x0), reloj(x.x1), nombre[x.e], Math.round(x.m)]));
+  }
+
+  // 2. fases por noche, apiladas (profundo abajo); las noches sin tramos quedan vacías
+  const N = R.noches.slice(-14);
+  const of = base(t, v => v / 60 + " h");
+  of.scales.x.stacked = of.scales.y.stacked = true;
+  of.scales.y.ticks.stepSize = 120;
+  of.plugins.tooltip.callbacks = {
+    title: c => { const n = N[c[0].dataIndex]; return `${larga(n.dia)}` + (n.nota ? ` · puntuación ${n.nota.total}` : ""); },
+    label: c => c.raw == null ? null : `${c.dataset.label}: ${hm(c.raw)}`,
+    footer: c => { const n = N[c[0].dataIndex]; return n.sueno ? `Dormido: ${hm(n.sueno)}` + (n.acostarse ? ` (${n.acostarse}–${n.levantarse})` : "") : ""; },
+  };
+  dibuja("g-fases", {type: "bar", options: of, data: {labels: N.map(n => corta(n.dia)), datasets: [...FASES].reverse().map(([k, n]) => ({
+    label: n, data: N.map(x => x.fases ? x.fases[k] : null), backgroundColor: t.fase[k],
+    borderColor: t.carta, borderWidth: {top: 2}, borderSkipped: false, barPercentage: .7}))}});
+  leyenda("#ley-fases", [...FASES].reverse().map(([k, n]) => [n, t.fase[k]]));
+  tabla("#t-fases-d", ["Noche", "Dormido", "Profundo", "Básico", "REM", "Despierto", "Nota"], N.slice().reverse().filter(n => n.sueno).map(n =>
+    [larga(n.dia), hm(n.sueno), ...["deep", "core", "rem", "awake"].map(k => n.fases ? hm(n.fases[k]) : "—"), n.nota ? n.nota.total : "—"]));
+
+  // 3. puntuación del último mes
+  const on2 = base(t, v => v);
+  Object.assign(on2.scales.y, {min: 0, max: 100});
+  on2.scales.y.ticks.stepSize = 25;
+  on2.plugins.tooltip.callbacks = {title: c => larga(R.noches[c[0].dataIndex].dia),
+    label: c => { const x = R.noches[c.dataIndex].nota; return x ? [`Puntuación ${x.total} · ${nivel(x.total).toLowerCase()}`,
+      `Duración ${x.duracion}/50 · hora ${x.hora}/30 · interrupciones ${x.interrupciones}/20`] : null; }};
+  dibuja("g-nota", {type: "line", options: on2, data: {labels: R.noches.map(n => corta(n.dia)), datasets: [{label: "Puntuación",
+    data: R.noches.map(n => n.nota ? n.nota.total : null), borderColor: t.acento, backgroundColor: t.acento, borderWidth: 2,
+    pointRadius: 4, pointHoverRadius: 6, pointBorderColor: t.carta, pointBorderWidth: 2, spanGaps: true}]}});
+
+  // 4. pasos por día
+  const P = R.noches.slice(-14), con = P.filter(n => n.pasos);
+  $("#pasos-media").textContent = con.length ? `media ${miles(con.reduce((s, n) => s + n.pasos, 0) / con.length)}` : "";
+  const op = base(t, v => v >= 1000 ? v / 1000 + " k" : v);
+  op.scales.y.beginAtZero = true;
+  op.plugins.tooltip.callbacks = {title: c => larga(P[c[0].dataIndex].dia), label: c => c.raw == null ? null : `${miles(c.raw)} pasos`};
+  dibuja("g-pasos", {type: "bar", options: op, data: {labels: P.map(n => corta(n.dia)), datasets: [{label: "Pasos",
+    data: P.map(n => n.pasos), backgroundColor: t.acento, borderRadius: 4, borderSkipped: "start", barPercentage: .7}]}});
+  tabla("#t-pasos-d", ["Día", "Pasos"], P.slice().reverse().filter(n => n.pasos).map(n => [larga(n.dia), miles(n.pasos)]));
+}
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", graficas);
+
+$("#f-clave").onsubmit = async e => {
+  e.preventDefault();
+  const inp = e.target.pass;
+  const r = await fetch("/api/login", {method: "POST", headers: {"Content-Type": "application/json"},
+                                       body: JSON.stringify({pass: inp.value})}).catch(() => null);
+  if (r && r.ok) { inp.value = ""; await cargar(); }
+  else puerta(true, r && r.status === 401 ? "Contraseña incorrecta" : "No se pudo conectar");
+};
+cargar();
+</script>
+</body>
+</html>

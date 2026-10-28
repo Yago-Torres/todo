@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="es">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="calma-datos" content="/api/bandeja">
+<meta name="calma-entrada" content="espera">
+<meta name="theme-color" content="#F4F5F0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#171A16" media="(prefers-color-scheme: dark)">
+<title>Pendientes</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.json" crossorigin="use-credentials">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Pendientes">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="/calma.css?v=3006c142">
+<script src="/calma.js?v=3006c142"></script>
+<script src="/anime-4.5.0.min.js"></script>
+<script src="/anima.js?v=3006c142"></script>
+<script src="/hoja.js?v=3006c142"></script>
+<style>
+  /* Estilo Calma: tokens y componentes en /calma.css (fuente: ~/estilo). Aquí solo lo de pendientes. */
+  body { padding: 16px; padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px)); }
+  .app { max-width: 1120px; margin: 0 auto; display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+  .col { display: grid; gap: 14px; align-content: start; min-width: 0; }
+  @media (min-width: 920px) { .app { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); } }
+  .top { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 4px 2px 0; }
+  h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -.02em; }
+  .top nav { margin-left: auto; display: flex; gap: 6px; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .top nav a { text-decoration: none; }
+  #estado { font-size: 13px; color: var(--suave); }
+  .carta { padding: 16px; min-width: 0; }
+  .carta h2 { margin: 0 0 10px; font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .carta h2 .c-chip { font-size: 12px; padding: 1px 8px; }
+  .vacio { margin: 0; padding: 6px 2px; font-size: 14px; color: var(--suave); }
+  a { color: inherit; }
+
+  /* apuntar: el texto y una píldora con el cuándo, que abre la hoja. Por defecto, hoy */
+  form.nueva { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr) auto; }
+  form.nueva .c-campo { grid-column: 1 / -1; }
+  form.nueva .pista { grid-column: 1 / -1; margin: 2px 2px 0; font-size: 13px; color: var(--suave); }
+  .cuando-btn { justify-self: start; display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 16px 0 12px;
+                border-radius: 999px; border: 1px solid var(--linea); background: var(--carta-2); font-weight: 500; }
+  .cuando-btn svg, .h-cab svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .cuando-btn:hover { border-color: var(--acento); }
+
+  .tarea .t[role="button"] { cursor: pointer; }
+
+  .grupo { margin: 14px 4px 4px; font-size: 13px; font-weight: 600; color: var(--suave); display: flex; gap: 6px; }
+  .grupo:first-of-type { margin-top: 0; }
+  .grupo.mal { color: var(--peligro); }
+  .tarea { display: flex; align-items: flex-start; gap: 10px; padding: 8px 4px; border-radius: var(--r-s); }
+  .tarea:hover { background: var(--carta-2); }
+  .tarea .bx { flex: 0 0 26px; height: 26px; border-radius: 50%; border: 2px solid var(--linea); background: none; margin-top: -1px; }
+  .tarea .bx:hover { border-color: var(--acento); }
+  .tarea .bx[disabled] { border-style: dashed; cursor: default; }
+  .tarea .bx.ok { display: grid; place-items: center; padding: 0; background: var(--acento); border: 2px solid var(--acento); color: var(--acento-texto); }
+  .tarea .bx svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+  .tarea .t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .tarea .t small { display: block; font-size: 12px; color: var(--suave); }
+  .tarea .t small a { text-decoration: none; }
+  .tarea .cuando { flex: none; font-size: 12px; font-weight: 600; color: var(--suave); white-space: nowrap; padding-top: 2px; font-variant-numeric: tabular-nums; }
+  .tarea .cuando.mal { color: var(--peligro); }
+  .tarea .cuando.hoy { color: var(--acento); }
+  details.mas { margin-top: 10px; border-top: 1px solid var(--linea); padding-top: 8px; }
+  details.mas summary { cursor: pointer; font-size: 14px; font-weight: 500; padding: 6px 4px; list-style-position: inside; }
+  details.mas summary small { color: var(--suave); font-weight: 400; }
+  details.mas .nota { margin: 8px 4px 0; font-size: 12px; font-weight: 600; color: var(--suave); }
+  details.mas .nota a { text-decoration: none; }
+
+  .item { padding: 12px 4px; border-bottom: 1px solid var(--linea); }
+  .item:last-child { border-bottom: 0; }
+  .item .tit { font-weight: 600; text-decoration: none; display: block; overflow-wrap: anywhere; }
+  .item .meta { font-size: 12px; color: var(--suave); margin: 2px 0 4px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .item p { margin: 0; font-size: 14px; color: var(--suave); line-height: 1.45; }
+  .item .acc { display: flex; gap: 6px; margin-top: 8px; }
+  .item .acc a { text-decoration: none; }
+  .lista-simple a { display: flex; gap: 10px; align-items: baseline; padding: 8px 4px; text-decoration: none; border-radius: var(--r-s); }
+  .lista-simple a:hover { background: var(--carta-2); }
+  .lista-simple a span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lista-simple a small { flex: none; font-size: 12px; color: var(--suave); }
+  .puerta input, .puerta button { width: 100%; }
+  @media (prefers-reduced-motion: no-preference) { .tarea.fuera { opacity: 0; transform: translateX(12px); transition: opacity .2s, transform .2s; } }
+</style>
+<body>
+
+<div class="puerta c-puerta" id="puerta">
+  <form id="f-clave">
+    <h2>Pendientes</h2>
+    <p id="puerta-msg">Contraseña de todo</p>
+    <input class="c-campo" type="password" name="pass" required autocomplete="current-password" aria-label="Contraseña">
+    <button class="c-btn pri" type="submit">Entrar</button>
+  </form>
+</div>
+
+<div class="c-toast" id="toast" role="status"><b id="toast-txt"></b><button id="toast-btn">Deshacer</button></div>
+
+
+
+<div class="app">
+  <header class="top">
+    <h1>Pendientes</h1>
+    <span id="estado">Cargando…</span>
+    <nav><a class="c-btn mini" href="/">Hoy</a><a class="c-btn mini" href="/habitos.html">Hábitos</a><a class="c-btn mini" href="/entreno.html">Entreno</a><a class="c-btn mini" href="/sueno.html">Sueño</a><a class="c-btn mini" href="/comida.html">Comida</a><a class="c-btn mini" href="/gastos.html">Gastos</a></nav>
+  </header>
+
+  <div class="col">
+    <section class="carta c-carta" aria-labelledby="t-nueva">
+      <h2 id="t-nueva">Apuntar</h2>
+      <form class="nueva" id="f-nueva">
+        <input class="c-campo" name="t" maxlength="200" required placeholder="Llamar al dentista" aria-label="Qué tienes que hacer">
+        <button class="cuando-btn" type="button" id="b-cuando" aria-haspopup="dialog">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span id="b-cuando-txt">Hoy</span>
+        </button>
+        <button class="c-btn pri" type="submit">Añadir</button>
+        <p class="pista">Toca una tarea para cambiarla. Con hora, te aviso por Telegram. También vale decírselo al bot: «recuérdame llamar al dentista el jueves a las 10».</p>
+      </form>
+    </section>
+
+    <section class="carta c-carta" aria-labelledby="t-tareas">
+      <h2 id="t-tareas">Tareas <span class="c-chip" id="n-tareas"></span></h2>
+      <div id="tareas"></div>
+      <div id="tareas-mas"></div>
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="carta c-carta" aria-labelledby="t-leer">
+      <h2 id="t-leer">Leer luego <span class="c-chip" id="n-leer"></span></h2>
+      <div id="leer"></div>
+    </section>
+
+    <section class="carta c-carta" aria-labelledby="t-revisar" id="c-revisar">
+      <h2 id="t-revisar">Para revisar <span class="c-chip ojo" id="n-revisar"></span></h2>
+      <div class="lista-simple" id="revisar"></div>
+    </section>
+
+    <section class="carta c-carta" aria-labelledby="t-notas">
+      <h2 id="t-notas">Lo último en tu vault</h2>
+      <div id="notas"></div>
+    </section>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const el = (t, cls, txt) => { const e = document.createElement(t); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+const DIAS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+const fecha = s => new Date(s.slice(0, 10) + "T12:00:00");
+const HOY = new Date().toLocaleDateString("sv");
+const mas = (s, n) => { const d = fecha(s); d.setDate(d.getDate() + n); return d.toLocaleDateString("sv"); };
+const entre = (a, b) => Math.round((fecha(b) - fecha(a)) / 864e5);
+const corta = s => `${fecha(s).getDate()} ${MESES[fecha(s).getMonth()]}`;
+const cuando = s => { const n = entre(HOY, s); return n === 0 ? "hoy" : n === 1 ? "mañana" : n === -1 ? "ayer" : n > 1 && n < 7 ? `${DIAS[fecha(s).getDay()]} ${fecha(s).getDate()}` : corta(s); };
+const hace = s => { const n = entre(s, HOY); return n <= 0 ? "hoy" : n === 1 ? "ayer" : `hace ${n} días`; };
+let B = null;
+let recien = null;   // id de la tarea que se acaba de apuntar, para que dé un brinco al aparecer
+
+function puerta(mostrar, msg) {
+  $("#puerta").toggleAttribute("data-on", mostrar);
+  $("#puerta-msg").textContent = msg || "Contraseña de todo";
+  $("#puerta-msg").classList.toggle("mal", !!msg);
+  if (mostrar) $("#puerta input").focus();
+}
+
+async function api(url, cuerpo) {
+  const r = await fetch(url, cuerpo === undefined ? {} : {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(cuerpo)});
+  if (r.status === 401) { puerta(true); throw new Error("401"); }
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.status);
+  return r.json();
+}
+
+async function cargar() {
+  try {
+    const habia = !!B;
+    B = await api("/api/bandeja");
+    puerta(false);
+    $("#estado").textContent = "";
+    if (habia) return calma.transicion(pinta);
+    pinta();
+    anima.entrada();
+  } catch (e) {
+    if (e.message !== "401") $("#estado").textContent = "Sin conexión";
+  }
+}
+
+let deshacer = null, reloj;
+function toast(txt, fn) {
+  deshacer = fn;
+  $("#toast-txt").textContent = txt;
+  $("#toast-btn").hidden = !fn;
+  $("#toast").toggleAttribute("data-on", true);
+  clearTimeout(reloj);
+  reloj = setTimeout(() => $("#toast").removeAttribute("data-on"), 5000);
+}
+$("#toast-btn").onclick = async () => { $("#toast").removeAttribute("data-on"); if (deshacer) await deshacer(); };
+
+function fila(t, conNota = true) {
+  const f = el("div", "tarea");
+  f.dataset.id = t.id;
+  const bx = el("button", "bx");
+  bx.setAttribute("aria-label", t.fija ? "Del vault del curro: se marca allí" : `Marcar hecha: ${t.t}`);
+  bx.disabled = t.fija;
+  bx.onclick = async () => {
+    bx.disabled = true;
+    // la animación corre a la vez que la llamada; se repinta cuando acaban las dos
+    const fin = anima.mov ? anima.hecha(f, bx) : (f.classList.add("fuera"), new Promise(ok => setTimeout(ok, 220)));
+    try {
+      const r = await api("/api/tarea/hecha", {id: t.id, hecha: true});
+      toast(`Hecha: ${t.t}`, async () => { await api("/api/tarea/hecha", {id: r.id, hecha: false}); cargar(); });
+      // la última de hoy (o vencida) que quedaba: día al día
+      if (t.due && t.due <= HOY && !B.tareas.some(x => x.id !== t.id && x.due && x.due <= HOY)) calma.fiesta("pendientes-al-dia");
+    } catch (e) {
+      toast(`No se ha podido: ${e.message}`);
+    }
+    await fin;
+    cargar();   // también si ha fallado: repintar devuelve la fila a su sitio
+  };
+  const txt = el("div", "t", t.t);
+  if (!t.fija) {   // tocar la tarea la abre para cambiar texto, día u hora
+    txt.setAttribute("role", "button");
+    txt.tabIndex = 0;
+    txt.setAttribute("aria-label", `Cambiar: ${t.t}`);
+    const abre = e => { if (!e.target.closest("a")) editar(t); };
+    txt.onclick = abre;
+    txt.onkeydown = e => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), abre(e));
+  }
+  if (conNota && t.grupo !== "Pendientes") {
+    const s = el("small"), a = el("a", null, t.nota);
+    a.href = t.abrir;
+    s.append(a);
+    txt.append(s);
+  }
+  f.append(bx, txt);
+  if (t.due) {
+    const n = entre(HOY, t.due);
+    f.append(el("span", `cuando ${n < 0 ? "mal" : n === 0 ? "hoy" : ""}`, cuando(t.due) + (t.hora ? ` ${t.hora}` : "")));
+  }
+  return f;
+}
+
+function pinta() {
+  // con fecha (de donde sean) y sueltas sin fecha arriba; lo de proyectos y curro, plegado
+  const T = B.tareas, sem = mas(HOY, 7);
+  const sueltas = t => !["Proyectos", "Curro"].includes(t.grupo);
+  const grupos = [
+    ["Vencidas", T.filter(t => t.due && t.due < HOY), "mal"],
+    ["Hoy", T.filter(t => t.due === HOY)],
+    ["Esta semana", T.filter(t => t.due > HOY && t.due <= sem)],
+    ["Más adelante", T.filter(t => t.due > sem)],
+    ["Sin fecha", T.filter(t => !t.due && sueltas(t))],
+  ].filter(g => g[1].length);
+  $("#n-tareas").textContent = T.filter(t => t.due || sueltas(t)).length;
+  $("#tareas").replaceChildren(...(grupos.length ? grupos.flatMap(([n, ts, c]) => [el("div", `grupo ${c || ""}`, `${n} · ${ts.length}`), ...ts.map(fila)])
+    : [el("p", "vacio", "Nada pendiente con fecha. Apunta algo arriba o díselo al bot.")]));
+
+  const plegados = ["Proyectos", "Curro"].map(g => {
+    const ts = T.filter(t => t.grupo === g && !t.due);
+    if (!ts.length) return null;
+    const d = el("details", "mas"), s = el("summary", null, g === "Curro" ? "Del curro " : "De tus proyectos ");
+    s.append(el("small", null, `· ${ts.length}`));
+    d.append(s);
+    const porNota = {};
+    ts.forEach(t => (porNota[t.nota] ||= []).push(t));
+    for (const [nota, xs] of Object.entries(porNota)) {
+      const h = el("div", "nota"), a = el("a", null, nota);
+      a.href = xs[0].abrir;
+      h.append(a);
+      d.append(h, ...xs.map(t => fila(t, false)));
+    }
+    return d;
+  }).filter(Boolean);
+  $("#tareas-mas").replaceChildren(...plegados);
+
+  // leer luego
+  $("#n-leer").textContent = B.leer.length;
+  $("#leer").replaceChildren(...(B.leer.length ? B.leer.map(l => {
+    const d = el("div", "item"), a = el("a", "tit", l.titulo);
+    a.href = l.url; a.target = "_blank"; a.rel = "noopener";
+    const meta = el("div", "meta");
+    if (l.minutos) meta.append(el("span", null, `${l.minutos} min`), el("span", null, "·"));
+    meta.append(el("span", null, `guardado ${hace(l.guardado)}`));
+    if (l.review && l.review <= HOY) meta.append(el("span", "c-chip ojo", "toca hoy"));
+    const acc = el("div", "acc"), leido = el("button", "c-btn mini", "Leído"), nota = el("a", "c-btn mini", "Nota");
+    nota.href = l.abrir;
+    leido.onclick = async () => {
+      leido.disabled = true;
+      try { await api("/api/leido", {ruta: l.ruta}); toast(`Leído: ${l.titulo}`); await anima.hecha(d); cargar(); }
+      catch (e) { leido.disabled = false; toast(`No se ha podido: ${e.message}`); }
+    };
+    acc.append(leido, nota);
+    d.append(a, meta);
+    if (l.resumen) d.append(el("p", null, l.resumen));
+    d.append(acc);
+    return d;
+  }) : [el("p", "vacio", "Mándale un enlace al bot de todo y aparece aquí, resumido.")]));
+
+  // para revisar (sin repetir lo de leer luego, que ya está arriba)
+  const rev = B.revisar.filter(r => !r.ruta.startsWith("Recursos/Leer luego/"));
+  $("#c-revisar").hidden = !rev.length;
+  $("#n-revisar").textContent = rev.length;
+  $("#revisar").replaceChildren(...rev.map(r => {
+    const a = el("a");
+    a.href = r.abrir;
+    a.append(el("span", null, r.titulo), el("small", null, `desde ${corta(r.review)}`));
+    return a;
+  }));
+
+  // notas recientes
+  $("#notas").replaceChildren(...(B.notas.length ? B.notas.map(n => {
+    const d = el("div", "item"), a = el("a", "tit", n.titulo);
+    a.href = n.abrir;
+    const meta = el("div", "meta");
+    if (n.tipo) meta.append(el("span", "c-chip", n.tipo));
+    meta.append(el("span", null, hace(n.cambio)));
+    d.append(a, meta);
+    if (n.extracto) d.append(el("p", null, n.extracto.length > 170 ? n.extracto.slice(0, 170) + "…" : n.extracto));
+    return d;
+  }) : [el("p", "vacio", "Nada nuevo en las dos últimas semanas.")]));
+
+  if (recien) { anima.nueva($(`.tarea[data-id="${recien}"]`)); recien = null; }
+}
+
+// editar una tarea ya apuntada
+function editar(t) {
+  hoja.abre({titulo: "Cambiar tarea", texto: t.t, due: t.due, hora: t.hora, alGuardar: async x => {
+    if (!x.t.trim()) { toast("La tarea no puede quedar vacía"); return false; }
+    try {
+      const n = await api("/api/tarea/edita", {id: t.id, t: x.t, due: x.due, hora: x.hora});
+      recien = n.id;
+      toast(`Cambiada: ${n.t}${n.due ? ` · ${hoja.etiqueta(n.due, n.hora)}` : ""}`);
+      cargar();
+    } catch (e) {
+      if (e.message !== "401") toast(`No se ha cambiado: ${e.message}`);
+      return false;
+    }
+  }, alBorrar: async () => {
+    try {
+      const b = await api("/api/tarea/borra", {id: t.id});
+      toast(`Borrada: ${t.t}`, async () => { await api("/api/tarea/restaura", b); cargar(); });
+      cargar();
+    } catch (e) {
+      if (e.message !== "401") toast(`No se ha borrado: ${e.message}`);
+      return false;
+    }
+  }});
+}
+
+// apuntar: por defecto hoy, sin hora
+const NUEVA = {due: HOY, hora: ""};
+const pintaCuando = () => { $("#b-cuando-txt").textContent = hoja.etiqueta(NUEVA.due, NUEVA.hora); };
+$("#b-cuando").onclick = () => hoja.abre({titulo: "Cuándo", due: NUEVA.due, hora: NUEVA.hora,
+  alGuardar: x => { Object.assign(NUEVA, {due: x.due, hora: x.hora}); pintaCuando(); }});
+pintaCuando();
+
+$("#f-nueva").onsubmit = async e => {
+  e.preventDefault();
+  const f = e.target, btn = f.querySelector("button[type=submit]");
+  btn.disabled = true;
+  try {
+    const t = await api("/api/tarea", {t: f.t.value, due: NUEVA.due, hora: NUEVA.due ? NUEVA.hora : ""});
+    f.reset();
+    Object.assign(NUEVA, {due: HOY, hora: ""});
+    pintaCuando();
+    recien = t.id;
+    toast(`Apuntado${t.due ? ` para ${cuando(t.due)}${t.hora ? " a las " + t.hora : ""}` : ""}: ${t.t}`);
+    cargar();
+  } catch (err) {
+    if (err.message !== "401") toast(`No se ha apuntado: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+$("#f-clave").onsubmit = async e => {
+  e.preventDefault();
+  const inp = e.target.pass;
+  const r = await fetch("/api/login", {method: "POST", headers: {"Content-Type": "application/json"},
+                                       body: JSON.stringify({pass: inp.value})}).catch(() => null);
+  if (r && r.ok) { inp.value = ""; await cargar(); }
+  else puerta(true, r && r.status === 401 ? "Contraseña incorrecta" : "No se pudo conectar");
+};
+addEventListener("visibilitychange", () => document.visibilityState === "visible" && B && cargar());
+cargar();
+</script>
+</body>
+</html>
