@@ -7,23 +7,24 @@
 <meta name="calma-entrada" content="espera">
 <meta name="theme-color" content="#F4F5F0" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#171A16" media="(prefers-color-scheme: dark)">
-<title>Sueño</title>
+<title>Salud</title>
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="manifest" href="/manifest.json" crossorigin="use-credentials">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Sueño">
+<meta name="apple-mobile-web-app-title" content="Salud">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<link rel="stylesheet" href="/calma.css?v=3006c142">
+<link rel="stylesheet" href="/calma.css?v=f91b7347">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="/calma.js?v=3006c142"></script>
+<script src="/calma.js?v=f91b7347"></script>
+<script src="/mascota.js?v=2"></script>
 <script src="/anime-4.5.0.min.js"></script>
-<script src="/anima.js?v=3006c142"></script>
+<script src="/anima.js?v=f91b7347"></script>
 <style>
-  /* Estilo Calma: tokens y componentes en /calma.css (fuente: ~/estilo). Aquí solo lo del sueño. */
+  /* Estilo Calma: tokens y componentes en /calma.css (fuente: ~/estilo). Aquí solo lo de salud: sueño, pasos, peso y composición. */
   /* fases: paleta validada (validate_palette.js) en el orden en que se apilan: profundo, básico, REM, despierto */
   :root { --f-deep: #2a78d6; --f-core: #1baf7a; --f-rem: #eda100; --f-awake: #e34948; }
   @media (prefers-color-scheme: dark) { :root { --f-deep: #3987e5; --f-core: #199e70; --f-rem: #c98500; --f-awake: #e85580; } }
@@ -52,6 +53,8 @@
   .tres b span { font-size: 13px; font-weight: 400; color: var(--suave); }
 
   .lienzo { position: relative; height: 240px; }
+  .tres b small { display: block; font-size: 12px; font-weight: 500; }
+  .sube { color: var(--peligro); } .baja { color: var(--acento); }
   .lienzo.bajo-h { height: 200px; }
   .leyenda { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: -4px 0 10px; font-size: 13px; color: var(--suave); }
   .leyenda span { display: inline-flex; align-items: center; gap: 6px; }
@@ -70,7 +73,7 @@
 
 <div class="puerta c-puerta" id="puerta">
   <form id="f-clave">
-    <h2>Sueño</h2>
+    <h2>Salud</h2>
     <p id="puerta-msg">Contraseña de todo</p>
     <input class="c-campo" type="password" name="pass" required autocomplete="current-password" aria-label="Contraseña">
     <button class="c-btn pri" type="submit">Entrar</button>
@@ -79,9 +82,9 @@
 
 <div class="app">
   <header class="top">
-    <h1>Sueño</h1>
+    <h1>Salud</h1>
     <span id="estado">Cargando…</span>
-    <nav><a class="c-btn mini" href="/">Hoy</a><a class="c-btn mini" href="/habitos.html">Hábitos</a><a class="c-btn mini" href="/pendientes.html">Pendientes</a><a class="c-btn mini" href="/entreno.html">Entreno</a><a class="c-btn mini" href="/comida.html">Comida</a><a class="c-btn mini" href="/gastos.html">Gastos</a></nav>
+    <nav><a class="c-btn mini" href="/">Hoy</a><a class="c-btn mini" href="/habitos.html">Hábitos</a><a class="c-btn mini" href="/pendientes.html">Pendientes</a><a class="c-btn mini" href="/entreno.html">Entreno</a><a class="c-btn mini" href="/salud.html">Salud</a><a class="c-btn mini" href="/comida.html">Comida</a><a class="c-btn mini" href="/gastos.html">Gastos</a></nav>
   </header>
 
   <div class="col">
@@ -105,16 +108,7 @@
       </div>
     </section>
 
-    <section class="carta c-carta">
-      <details class="como">
-        <summary>Cómo se calcula</summary>
-        <p>Cada mañana el atajo de Salud manda lo que el COROS apuntó anoche, tramo a tramo. Lo despierto antes de dormirte y después de levantarte no cuenta.</p>
-        <p><b>La puntuación</b> sigue la receta de Salud, sobre 100: <b>duración</b> hasta 50 (8 h dormido son 50), <b>hora de acostarte</b> hasta 30 (30 si es a la media hora de tu media de las dos últimas semanas, 0 si te desvías dos horas) e <b>interrupciones</b> hasta 20 (se pierden con los minutos despierto en mitad de la noche). No es la de Salud ni la del COROS, que no se pueden leer: es la nuestra, calibrada para que salga parecida.</p>
-      </details>
-    </section>
-  </div>
 
-  <div class="col">
     <section class="carta c-carta" aria-labelledby="t-fases">
       <h2 id="t-fases">Fases por noche <span class="der c-eti">últimas 2 semanas</span></h2>
       <div class="leyenda" id="ley-fases"></div>
@@ -125,6 +119,30 @@
     <section class="carta c-carta" aria-labelledby="t-nota">
       <h2 id="t-nota">Puntuación <span class="der c-eti">último mes</span></h2>
       <div class="lienzo bajo-h"><canvas id="g-nota" role="img" aria-label="Puntuación del sueño por noche"></canvas></div>
+    </section>
+
+    <section class="carta c-carta">
+      <details class="como">
+        <summary>Cómo se calcula</summary>
+        <p>Cada mañana el atajo de Salud manda lo que el COROS apuntó anoche, tramo a tramo. Lo despierto antes de dormirte y después de levantarte no cuenta.</p>
+        <p><b>La puntuación</b> sigue la receta de Salud, sobre 100: <b>duración</b> hasta 50 (8 h dormido son 50), <b>hora de acostarte</b> hasta 30 (30 si es a la media hora de tu media de las dos últimas semanas, 0 si te desvías dos horas) e <b>interrupciones</b> hasta 20 (se pierden con los minutos despierto en mitad de la noche). No es la de Salud ni la del COROS, que no se pueden leer: es la nuestra, calibrada para que salga parecida.</p>
+      </details>
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="carta c-carta" aria-labelledby="t-peso">
+      <div class="eti-sup" id="t-peso">Peso</div>
+      <div class="cifra" id="peso">—</div>
+      <p class="bajo" id="peso-sub"></p>
+      <div class="lienzo bajo-h" id="peso-lienzo"><canvas id="g-peso" role="img" aria-label="Peso por día y su media de 7 días"></canvas></div>
+      <div class="leyenda" id="ley-peso" style="margin: 10px 0 0"></div>
+      <details class="datos"><summary>Ver los datos</summary><div class="scroll" id="t-peso-d"></div></details>
+    </section>
+
+    <section class="carta c-carta" aria-labelledby="t-comp">
+      <h2 id="t-comp">Composición <span class="der c-eti" id="comp-dia"></span></h2>
+      <div id="comp-cuerpo"></div>
     </section>
 
     <section class="carta c-carta" aria-labelledby="t-pasos">
@@ -187,7 +205,69 @@ function pinta() {
     $("#resumen").textContent = ult ? "dormido. Para la puntuación y las fases, el atajo tiene que mandar los tramos de la noche."
                                     : "Sin datos todavía: llegan cada mañana con el atajo de Salud.";
   }
+  cuerpo();
   graficas();
+}
+
+// ---------- peso y composición (de la báscula, vía Salud) ----------
+const coma = (n, d = 1) => n == null ? "—" : n.toFixed(d).replace(".", ",");
+// la media de los pesajes de los 7 días que acaban en d: el peso diario rebota con el agua, la media no
+function media7(serie, d) {
+  const desde = new Date(fecha(d) - 6 * 864e5).toLocaleDateString("sv");
+  const v = serie.filter(([x]) => x >= desde && x <= d).map(x => x[1]);
+  return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+}
+// bajar es lo bueno en peso, grasa e IMC; en masa magra, subir
+function cambio(ahora, antes, u, d = 1, bajaEsBueno = true) {
+  if (ahora == null || antes == null) return null;
+  const x = ahora - antes;
+  return el("small", Math.abs(x) < .05 ? "" : (x < 0) === bajaEsBueno ? "baja" : "sube", ` ${x > 0 ? "+" : x < 0 ? "−" : ""}${coma(Math.abs(x), d)}${u}`);
+}
+function cuerpo() {
+  const P = R.cuerpo.peso;
+  if (!P.length) {
+    $("#peso").textContent = "—";
+    $("#peso-sub").textContent = "Sin pesajes. Llegan con el atajo de Salud (la báscula los deja en Salud).";
+    $("#peso-lienzo").hidden = true;
+  } else {
+    const [d, kg] = P.at(-1), m = media7(P, d);
+    const hace30 = P.filter(([x]) => x <= new Date(fecha(d) - 30 * 864e5).toLocaleDateString("sv")).at(-1);
+    $("#peso").replaceChildren(coma(kg), el("span", null, " kg"));
+    $("#peso").lastChild.style.cssText = "font-size: 18px; font-weight: 500; color: var(--suave)";
+    const sub = $("#peso-sub");
+    sub.replaceChildren(`${larga(d)} · media 7 días ${coma(m)} kg`);
+    if (hace30) sub.append(" · en 30 días", cambio(m, media7(P, hace30[0]), " kg"));
+  }
+  const C = R.cuerpo.comp, caja = $("#comp-cuerpo");
+  if (!C.length) {
+    caja.replaceChildren(el("p", "vacio", "Grasa, masa magra e IMC: llegan con el atajo de Salud cuando la app de la báscula los escribe en Salud."));
+    return;
+  }
+  // el último valor de cada cosa (no todos llegan siempre juntos) y cómo ha cambiado en 30 días
+  const ultimo = i => [...C].reverse().find(f => f[i] != null);
+  const antes = (i, d) => [...C].reverse().find(f => f[i] != null && f[0] <= new Date(fecha(d) - 30 * 864e5).toLocaleDateString("sv"));
+  const tres = el("div", "tres");
+  for (const [i, n, u, d, bien] of [[1, "Grasa", " %", 1, true], [2, "Masa magra", " kg", 1, false], [3, "IMC", "", 1, true]]) {
+    const f = ultimo(i), div = el("div");
+    div.append(el("small", null, n));
+    const b = el("b", null, f ? coma(f[i], d) + u : "—");
+    const a = f && antes(i, f[0]);
+    if (a) b.append(cambio(f[i], a[i], u, d, bien));
+    div.append(b);
+    tres.append(div);
+  }
+  $("#comp-dia").textContent = larga(C.at(-1)[0]);
+  tres.style.marginTop = "0";
+  caja.replaceChildren(tres);
+  if (C.filter(f => f[1] != null).length > 1) {
+    const l = el("div", "lienzo bajo-h"), cv = el("canvas");
+    cv.id = "g-grasa";
+    cv.setAttribute("role", "img");
+    cv.setAttribute("aria-label", "Porcentaje de grasa por pesaje");
+    l.style.marginTop = "12px";
+    l.append(cv);
+    caja.append(l);
+  }
 }
 
 // ---------- gráficas (Chart.js; sin la librería la página funciona igual) ----------
@@ -296,6 +376,29 @@ function graficas() {
   dibuja("g-pasos", {type: "bar", options: op, data: {labels: P.map(n => corta(n.dia)), datasets: [{label: "Pasos",
     data: P.map(n => n.pasos), backgroundColor: t.acento, borderRadius: 4, borderSkipped: "start", barPercentage: .7}]}});
   tabla("#t-pasos-d", ["Día", "Pasos"], P.slice().reverse().filter(n => n.pasos).map(n => [larga(n.dia), miles(n.pasos)]));
+
+  // 5. peso: cada pesaje (puntos) y la media de 7 días (la línea que importa)
+  const W = R.cuerpo.peso;
+  if (W.length) {
+    const ow = base(t, v => coma(v, Number.isInteger(v) ? 0 : 1));
+    ow.plugins.tooltip.callbacks = {title: c => larga(W[c[0].dataIndex][0]),
+      label: c => c.raw == null ? null : `${c.dataset.label}: ${coma(c.raw)} kg`};
+    dibuja("g-peso", {type: "line", options: ow, data: {labels: W.map(w => corta(w[0])), datasets: [
+      {label: "Media 7 días", data: W.map(w => media7(W, w[0])), borderColor: t.acento, backgroundColor: t.acento, borderWidth: 2,
+       pointRadius: 0, pointHoverRadius: 4, tension: .3},
+      {label: "Pesaje", data: W.map(w => w[1]), showLine: false, borderColor: t.carta, backgroundColor: t.suave, borderWidth: 1.5,
+       pointRadius: 4, pointHoverRadius: 6}]}});
+    leyenda("#ley-peso", [["Media 7 días", t.acento], ["Pesaje", t.suave]]);
+    tabla("#t-peso-d", ["Día", "Kg", "Media 7 días"], W.slice().reverse().map(([d, kg]) => [larga(d), coma(kg), coma(media7(W, d))]));
+  }
+  const G = R.cuerpo.comp.filter(f => f[1] != null);
+  if (G.length > 1 && document.getElementById("g-grasa")) {
+    const og = base(t, v => v + " %");
+    og.plugins.tooltip.callbacks = {title: c => larga(G[c[0].dataIndex][0]), label: c => `Grasa: ${coma(c.raw)} %`};
+    dibuja("g-grasa", {type: "line", options: og, data: {labels: G.map(g => corta(g[0])), datasets: [{label: "Grasa",
+      data: G.map(g => g[1]), borderColor: t.acento, backgroundColor: t.acento, borderWidth: 2, pointRadius: 3, pointHoverRadius: 5,
+      pointBorderColor: t.carta, pointBorderWidth: 2, tension: .3}]}});
+  }
 }
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", graficas);
 

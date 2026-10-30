@@ -18,11 +18,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<link rel="stylesheet" href="/calma.css?v=3006c142">
-<script src="/calma.js?v=3006c142"></script>
+<link rel="stylesheet" href="/calma.css?v=f91b7347">
+<script src="/calma.js?v=f91b7347"></script>
 <script src="/anime-4.5.0.min.js"></script>
-<script src="/anima.js?v=3006c142"></script>
-<script src="/hoja.js?v=3006c142"></script>
+<script src="/anima.js?v=f91b7347"></script>
+<script src="/mascota.js?v=2"></script>
+<script src="/hoja.js?v=f91b7347"></script>
 <style>
   /* Estilo Calma: tokens y componentes en /calma.css (fuente: ~/estilo). Aquí solo lo de la portada.
      Bento: lo del día en grande (anillos), cifras pequeñas alrededor, y el resto en piezas de 2 o 1. */
@@ -43,6 +44,13 @@
   #fecha { font-size: 14px; color: var(--suave); }
   #fecha b { color: var(--texto); font-weight: 500; }
   .top nav { margin-left: auto; }
+  .cartel { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; max-width: 170px; padding: 5px 9px; font: inherit; line-height: 1.25; text-align: right;
+    color: var(--texto); background: var(--carta); border: 2px solid var(--linea); border-radius: 0; box-shadow: 3px 3px 0 var(--linea); cursor: pointer; animation: f-cartel 1.2s ease-in-out infinite; }
+  .cartel[hidden] { display: none; }
+  .cartel b { font-size: 13px; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cartel span { font-size: 11px; color: var(--peligro); }
+  @keyframes f-cartel { 0%, 100% { transform: rotate(-1.5deg); } 50% { transform: rotate(1.5deg); } }
+  @media (prefers-reduced-motion: reduce) { .cartel { animation: none; } }
 
   .carta { padding: 16px; min-width: 0; }
   .carta h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
@@ -175,7 +183,8 @@
   <header class="top">
     <h1 id="saludo">Hoy</h1>
     <span id="fecha"></span>
-    <nav><a class="c-btn mini" href="/habitos.html">Hábitos</a><a class="c-btn mini" href="/pendientes.html">Pendientes</a><a class="c-btn mini" href="/entreno.html">Entreno</a><a class="c-btn mini" href="/sueno.html">Sueño</a><a class="c-btn mini" href="/comida.html">Comida</a><a class="c-btn mini" href="/gastos.html">Gastos</a></nav>
+    <button class="cartel" id="cartel" type="button" hidden></button>
+    <nav><a class="c-btn mini" href="/habitos.html">Hábitos</a><a class="c-btn mini" href="/pendientes.html">Pendientes</a><a class="c-btn mini" href="/entreno.html">Entreno</a><a class="c-btn mini" href="/salud.html">Salud</a><a class="c-btn mini" href="/comida.html">Comida</a><a class="c-btn mini" href="/gastos.html">Gastos</a></nav>
   </header>
 
   <section class="carta c-carta c-foco s2 grande anillos" aria-label="Tu día">
@@ -195,8 +204,8 @@
     </div>
   </section>
 
-  <a class="carta c-carta c-foco pieza" href="/sueno.html"><span class="c-eti">Dormido anoche</span><span class="cifra" id="sueno">—</span><span class="bajo" id="sueno-sub"></span><svg class="spark" id="sp-sueno" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true"></svg></a>
-  <a class="carta c-carta c-foco pieza" href="/sueno.html"><span class="c-eti">Pasos ayer</span><span class="cifra" id="pasos">—</span><span class="bajo" id="pasos-sub"></span><svg class="spark" id="sp-pasos" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true"></svg></a>
+  <a class="carta c-carta c-foco pieza" href="/salud.html"><span class="c-eti">Dormido anoche</span><span class="cifra" id="sueno">—</span><span class="bajo" id="sueno-sub"></span><svg class="spark" id="sp-sueno" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true"></svg></a>
+  <a class="carta c-carta c-foco pieza" href="/salud.html"><span class="c-eti">Pasos ayer</span><span class="cifra" id="pasos">—</span><span class="bajo" id="pasos-sub"></span><svg class="spark" id="sp-pasos" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true"></svg></a>
   <a class="carta c-carta c-foco pieza" href="/entreno.html"><span class="c-eti">Peso</span><span class="cifra" id="peso">—</span><span class="bajo" id="peso-sub"></span><svg class="spark" id="sp-peso" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true"></svg></a>
   <a class="carta c-carta c-foco pieza" href="/pendientes.html"><span class="c-eti">Leer luego</span><span class="cifra" id="leer">—</span><span class="bajo">guardados</span></a>
 
@@ -343,10 +352,48 @@ function habitos() {
   if (!hs.length) caja.replaceChildren(el("p", "vacio", "Sin hábitos todavía."));
 }
 
+// ---------- el fantasma: aquí, además, enseña en un cartel lo de ayer ----------
+function estadoFantasma() {
+  const ayer = fantasma.lee(H), c = $("#cartel");
+  c.hidden = !ayer.length;
+  if (!c.hidden) {
+    const a = ayer[0];
+    c.replaceChildren(el("b", null, a.n + (ayer.length > 1 ? ` +${ayer.length - 1}` : "")), el("span", null, "ayer · pasar a hoy"));
+    c.setAttribute("aria-label", `Ayer se te pasó ${a.n}. Pasarlo a hoy`);
+    c.onclick = () => aHoy(a);
+  }
+}
+// mueve un hábito (y su rutina, si la tiene) de un día a otro, como «Hacer hoy» en Entreno
+async function mueve(de, a, id, quitar) {
+  const s = await api("/api/state"), r = (s.sesion[de] || {})[id];
+  if (quitar) s.plan[de] = (s.plan[de] || []).filter(x => x !== id);
+  if (s.plan[de] && !s.plan[de].length) delete s.plan[de];
+  s.plan[a] = [...new Set([...(s.plan[a] || []), id])];
+  if (r) {
+    delete s.sesion[de][id];
+    if (!Object.keys(s.sesion[de]).length) delete s.sesion[de];
+    s.sesion[a] = {...(s.sesion[a] || {}), [id]: r};
+  }
+  await api("/api/state", {method: "PUT", body: JSON.stringify(s)});
+}
+async function aHoy(x) {
+  const ayer = new Date(fecha(H.hoy) - 864e5).toLocaleDateString("sv"), yaHoy = H.habitos.find(h => h.id === x.id)?.plan;
+  try {
+    await mueve(ayer, H.hoy, x.id, true);
+    fantasma.reacciona("feliz");
+    await cargar();
+    toast(`${x.n} pasa a hoy`, async () => { await mueve(H.hoy, ayer, x.id, !yaHoy); cargar(); });
+  } catch (e) {
+    if (e.message !== "401") toast(`No se ha guardado: ${e.message}`);
+  }
+}
+
 async function marca(h) {
   h.hecho = !h.hecho;
   habitos();
   dia_();
+  if (h.hecho) fantasma.reacciona("feliz");
+  estadoFantasma();
   const b = $(`.fila[data-h="${h.id}"]`);
   if (h.hecho && anima.mov) {
     anima.salta(b.querySelector(".bx"));
@@ -612,6 +659,7 @@ function pinta() {
   if ($("#saludo").textContent !== saludo) $("#saludo").textContent = saludo;
   $("#fecha").replaceChildren(el("b", null, `${DIAS[d.getDay()][0].toUpperCase() + DIAS[d.getDay()].slice(1)} ${d.getDate()} de ${MESES[d.getMonth()]}`));
   habitos(); tareas(); carrera(); comida(); gastos(); piezas(); racha(); anio();
+  estadoFantasma();
 }
 
 async function cargar() {

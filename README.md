@@ -1,16 +1,22 @@
 # todo
 
-> Hoy toca pierna, leer y dormir 8 horas: hábitos, entreno, sueño y pendientes en una sola app.
+> Hoy toca pierna, leer y dormir 8 horas: hábitos, entreno, salud y pendientes en una sola app.
 
 Mi app personal del día a día: hábitos, entrenamiento, sueño, peso y pendientes en una sola web
-instalable en el iPhone. Corre en una Raspberry Pi, sin base de datos y sin framework de frontend.
+instalable en el iPhone, con un fantasma que reacciona a lo que haces. Corre en una Raspberry Pi, sin base de datos y sin framework de frontend.
 
 ![Hoy, Hábitos, Entreno y el modo entreno](docs/capturas.png)
-![Músculos de la semana, Sueño y Pendientes](docs/capturas-2.png)
+![Músculos de la semana, Salud y Pendientes](docs/capturas-2.png)
 
 <sub>Capturas con datos inventados.</sub>
 
 ## Qué hace
+
+- **El fantasma** — sale en todas las páginas y cambia de cara y de forma según lo que pase: salta al
+  marcar un hábito, se enfada y te enseña lo que se quedó sin hacer ayer, se duerme de noche y se
+  desvanece si pasas días sin venir (`static/mascota.js`, sin dependencias).
+
+  ![Los estados del fantasma](docs/fantasma.jpg)
 
 - **Hoy** — la portada: tres anillos (hábitos, pasos y sueño), cifras con su tendencia de 7 días,
   las tareas que vencen, el año en puntos y tarjetas de las otras apps (comida y gastos).
@@ -25,7 +31,8 @@ instalable en el iPhone. Corre en una Raspberry Pi, sin base de datos y sin fram
   - *Rutinas guiadas* con temporizador (movilidad de la mañana, core) que se reanudan si la app se recarga.
   - Un monigote animado por ejercicio (SVG dibujado a mano, `static/monigotes.js`).
 - **Carrera** — plan de 5k que se recalcula cada noche con lo que corres de verdad (`carrera.py`).
-- **Sueño** — fases de la noche, nota de 0 a 100 y tendencia, con los datos de Salud del iPhone.
+- **Salud** — fases de la noche, nota de 0 a 100, pasos, peso con su media de 7 días y composición
+  de la báscula, con los datos de Salud del iPhone.
 - **Pendientes** — tareas guardadas como Markdown en un vault de Obsidian (formato del plugin Tasks).
 - **Avisos** por Web Push y un **widget** para Scriptable (`static/widget-hoy.js`).
 

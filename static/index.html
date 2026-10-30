@@ -20,11 +20,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<link rel="stylesheet" href="/calma.css?v=3006c142">
-<script src="/calma.js?v=3006c142"></script>
+<link rel="stylesheet" href="/calma.css?v=f91b7347">
+<script src="/calma.js?v=f91b7347"></script>
+<script src="/mascota.js?v=2"></script>
 <!-- anime.js servido desde aquí, sin CDN; si no carga, la página funciona igual sin animaciones -->
 <script src="/anime-4.5.0.min.js"></script>
-<script src="/anima.js?v=3006c142"></script>
+<script src="/anima.js?v=f91b7347"></script>
 <style>
   /* Estilo Calma: tokens y componentes en /calma.css (fuente: ~/estilo). Aquí solo lo de todo. */
   /* sin bloquear html y body (height 100% + overflow hidden): en la app instalada del iPhone eso hacía
@@ -310,7 +311,7 @@
       <span class="mejor" id="mejor"></span>
       <span id="estado"></span>
     </p>
-    <nav class="ir"><a class="c-btn mini" href="/">Hoy</a><a class="c-btn mini" href="/pendientes.html">Pendientes</a><a class="c-btn mini" href="/entreno.html">Entreno</a><a class="c-btn mini" href="/sueno.html">Sueño</a><a class="c-btn mini" href="/comida.html">Comida</a><a class="c-btn mini" href="/gastos.html">Gastos</a></nav>
+    <nav class="ir"><a class="c-btn mini" href="/">Hoy</a><a class="c-btn mini" href="/pendientes.html">Pendientes</a><a class="c-btn mini" href="/entreno.html">Entreno</a><a class="c-btn mini" href="/salud.html">Salud</a><a class="c-btn mini" href="/comida.html">Comida</a><a class="c-btn mini" href="/gastos.html">Gastos</a></nav>
   </header>
 
   <nav class="tabs c-seg" role="tablist" aria-label="Secciones"></nav>
@@ -477,6 +478,7 @@ function guardar() {
       version = r.headers.get("X-Version") || "";
       S = normaliza(await r.json());   // el servidor devuelve el estado ya limpio
       $("#estado").textContent = "Guardado";
+      fantasma.refresca();
       render();
     } catch (e) {
       $("#estado").textContent = "Sin guardar";

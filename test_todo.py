@@ -308,6 +308,11 @@ def test_portada():
     s = clean({"habits": [{"id": "a", "n": "Correr"}, {"id": "b", "n": "Agua"}, {"id": "c", "n": "Leer"}],
                "log": log, "plan": {"2026-10-26": ["a", "b"]}, "peso": {"2026-10-20": 81, "2026-10-25": 80}})
     h = main.hoy_habitos(s, "2026-10-26")
+    # el fantasma: de lo planificado ayer, lo que quedó sin hacer; y los días desde el último hábito
+    o = main.olvidos(clean({"habits": [{"id": "a", "n": "A", "c": "#111111", "goal": 7}, {"id": "b", "n": "B", "c": "#222222", "goal": 7}],
+                            "plan": {"2026-10-25": ["a", "b"]}, "log": {"2026-10-25": ["a"], "2026-10-27": ["a"], "2026-10-22": ["b"]}}), "2026-10-26")
+    assert o == {"ayer": [{"id": "b", "n": "B"}], "sin_venir": 1}, o
+    assert main.olvidos(clean({}), "2026-10-26") == {"ayer": [], "sin_venir": 0}
     # lo planificado y sin hacer arriba, luego lo planificado hecho, luego el resto
     assert [x["id"] for x in h["habitos"]] == ["a", "b", "c"], h
     assert h["peso"] == {"dia": "2026-10-25", "kg": 80, "media": 80.5,
@@ -338,6 +343,18 @@ def test_salud():
     except main.HTTPException as e:
         assert "dos fuentes" in e.detail
     # lo que no se entiende sale en la notificación, para poder arreglar el atajo
+    # la báscula sola, con coma decimal como lo da Salud en español
+    r = main.registra_salud({"peso": "70,46", "dia": "2026-11-03"}, None, "Bearer x")
+    assert r["texto"] == "Apuntado · 70,5 kg" and clean(json.loads(main.DB.read_text()))["peso"] == {"2026-11-03": 70.5}, r
+    assert main.registra_salud({"peso": "70,9 kg", "dia": "2026-11-04"}, None, "Bearer x")["texto"] == "Apuntado · 70,9 kg"
+    # la composición de la báscula: con unidades, la grasa también como fracción; lo imposible se cae
+    r = main.registra_salud({"grasa": "0,214", "magra": "61,3 kg", "imc": "24,8", "dia": "2026-11-04"}, None, "Bearer x")
+    assert r["texto"] == "Apuntado · 21,4 % grasa · 61,3 kg magra · 24,8 IMC", r
+    main.registra_salud({"grasa": "95 %", "peso": "70", "dia": "2026-11-05"}, None, "Bearer x")
+    s = clean(json.loads(main.DB.read_text()))
+    assert s["salud"]["2026-11-04"] == {"grasa": 21.4, "magra": 61.3, "imc": 24.8} and "grasa" not in s["salud"].get("2026-11-05", {}), s["salud"]
+    c = main.cuerpo(s, date(2026, 11, 5))
+    assert c["peso"][-1] == ["2026-11-05", 70.0] and c["comp"] == [["2026-11-04", 21.4, 61.3, 24.8]], c
     r = main.registra_salud({"sueno": "7 hr 32 min", "pasos": 100}, None, "Bearer x")
     assert r["texto"] == "Apuntado · sueño sin entender: «7 hr 32 min» · 100 pasos ayer", r
     h = main.hoy_salud(clean({"salud": {"2026-11-03": {"sueno": 400}, "2026-11-01": {"sueno": 500, "pasos": 8000},
@@ -356,7 +373,7 @@ def test_sueno():
     texto = ("Awake|2026-10-28T00:40:00+01:00|6\nCore|2026-10-28T00:46:00+01:00|30\nIn Bed|2026-10-28T00:40:00+01:00|431\n"
              "Deep|2026-10-28T01:16:00+01:00|80\nAwake|2026-10-28T02:36:00+01:00|26\nREM|2026-10-28T03:02:00+01:00|60\n"
              "Núcleo|2026-10-28T04:02:00+01:00|232\nAwake|2026-10-28T07:54:00+01:00|5\nbasura")
-    r = main.registra_salud({"fases": texto, "sueno": 999}, None, "Bearer x")
+    r = main.registra_salud({"fases": texto, "sueno": 999, "dia": "2026-10-28"}, None, "Bearer x")   # fija: no depende de hoy
     assert r["texto"] == "Apuntado · dormido 6 h 42 en 7 tramos", r   # lo dormido sale de las fases, no de «sueno»
     s = clean(json.loads(main.DB.read_text()))
     assert s["salud"]["2026-10-28"]["fases"][1] == ["core", "2026-10-28T00:46", 1800], s["salud"]   # en segundos

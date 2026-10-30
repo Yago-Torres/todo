@@ -12,7 +12,7 @@ from pathlib import Path
 
 from fastapi import Body, Cookie, FastAPI, Header, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 import carrera
@@ -264,9 +264,20 @@ ETAPAS = ("awake", "rem", "core", "deep")
 INICIO = re.compile(r"(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2})")
 
 
+COMPOSICION = (("grasa", 2, 70), ("magra", 20, 200), ("imc", 10, 60))
+
+
+def numero(v):
+    """El número de lo que manda Atajos: «70,4 kg», «22,5 %», «0,225»."""
+    m = re.search(r"\d+(?:[.,]\d+)?", str(v if v is not None else ""))
+    return float(m[0].replace(",", ".")) if m else None
+
+
 def dia_salud(v):
     v = dct(v)
     d = {c: n for c, hi in (("sueno", 1440), ("pasos", 200000)) if (n := entero(v.get(c), 0, hi, 0))}
+    # de la báscula, vía Salud: % de grasa, masa magra en kg e IMC
+    d |= {c: n for c, lo, hi in COMPOSICION if (n := real(v.get(c), lo, hi)) is not None}
     # los tramos de la noche: [etapa, "AAAA-MM-DDTHH:MM", segundos], en orden
     fases = [[e, i, n] for f in lst(v.get("fases"))[:400]
              if isinstance(f, list) and len(f) == 3 and (e := str(f[0])) in ETAPAS
@@ -481,15 +492,23 @@ def informe_sueno(s, hoy, n=30):
 def sueno(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
     exige(todo_sesion, authorization)
     s = clean(dct(json.loads(DB.read_text("utf-8")))) if DB.exists() else clean({})
-    return informe_sueno(s, date.today())
+    return {**informe_sueno(s, date.today()), "cuerpo": cuerpo(s, date.today())}
+
+
+def cuerpo(s, hoy, n=120):
+    desde = (hoy - timedelta(days=n - 1)).isoformat()
+    return {"peso": [[d, kg] for d, kg in sorted(s["peso"].items()) if desde <= d <= hoy.isoformat()],
+            "comp": [[d, *(x.get(c) for c, _, _ in COMPOSICION)] for d, x in sorted(s["salud"].items())
+                     if desde <= d <= hoy.isoformat() and any(c in x for c, _, _ in COMPOSICION)]}
 
 
 @app.post("/api/salud")
 def registra_salud(a: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
-    """{"sueno": lo dormido anoche, "pasos": los de ayer}. El sueño va al día en que te levantas."""
+    """{"sueno": lo dormido anoche, "pasos": los de ayer, "peso": kilos de hoy}, cualquiera de ellos.
+    El sueño va al día en que te levantas; el peso, a hoy (o a "dia")."""
     exige(todo_sesion, authorization)
     # lo que manda el atajo, tal cual (journalctl -u todo): para afinarlo sin adivinar
-    print("salud recibido:", json.dumps({k: str(a.get(k))[:200] for k in ("sueno", "pasos", "fases", "dia") if k in a},
+    print("salud recibido:", json.dumps({k: str(a.get(k))[:200] for k in ("sueno", "pasos", "fases", "peso", "grasa", "magra", "imc", "dia") if k in a},
                                         ensure_ascii=False), flush=True)
     estado = clean(dct(json.loads(DB.read_text("utf-8")))) if DB.exists() else clean({})
     hoy = day(a.get("dia")) or date.today().isoformat()
@@ -513,15 +532,31 @@ def registra_salud(a: dict, todo_sesion: str = Cookie(None), authorization: str 
         if fases:
             noche["fases"] = fases
         trozos.append(f"dormido {mins // 60} h {mins % 60:02d}" + (f" en {len(fases)} tramos" if fases else ""))
-    else:
+    # la báscula: Salud lo da en kg con coma decimal y a veces con la unidad («70,4 kg»)
+    peso = real(numero(a.get("peso")), 20, 400)
+    if peso:
+        estado["peso"][hoy] = round(peso, 1)
+        trozos.append(f"{peso:.1f} kg".replace(".", ","))
+    comp = {}
+    for c, lo, hi in COMPOSICION:
+        n = numero(a.get(c))
+        if c == "grasa" and n is not None and n <= 1:   # Salud la da a veces como fracción (0,225)
+            n *= 100
+        if (n := real(n, lo, hi)) is not None:
+            comp[c] = round(n, 1)
+    if comp:
+        estado["salud"].setdefault(hoy, {}).update(comp)
+        trozos += [f"{comp[c]:g}{u}".replace(".", ",") for c, u in (("grasa", " % grasa"), ("magra", " kg magra"), ("imc", " IMC")) if c in comp]
+    if not mins:
         # que la notificación diga qué ha llegado: es la única pista para arreglar el atajo
         raro = a.get("fases") or a.get("sueno")
-        trozos.append(f"sueño sin entender: «{str(raro)[:60]}»" if raro else "sin datos de sueño")
+        if raro or not (peso or comp):
+            trozos.append(f"sueño sin entender: «{str(raro)[:60]}»" if raro else "sin datos de sueño")
     if pasos := round(real(a.get("pasos"), 0, 200000) or 0):
         estado["salud"].setdefault(ayer, {})["pasos"] = pasos
         trozos.append(f"{pasos:,} pasos ayer".replace(",", "."))
-    if not pasos and "dormido" not in trozos[0]:
-        raise HTTPException(400, f"No llega ni sueño ni pasos ({trozos[0]}): revisa las variables del atajo")
+    if not (pasos or mins or peso or comp):
+        raise HTTPException(400, f"No llega ni sueño, ni pasos, ni peso ({trozos[0]}): revisa las variables del atajo")
     guarda(DB, json.dumps(clean(estado), ensure_ascii=False))
     return {"texto": "Apuntado · " + " · ".join(trozos)}
 
@@ -576,6 +611,25 @@ def serie(por_dia, hasta, n=7):
     """Los n días que acaban en `hasta`, del más viejo al más nuevo (None donde no hay dato): las líneas de la portada."""
     d = date.fromisoformat(hasta)
     return [por_dia.get((d - timedelta(days=i)).isoformat()) for i in range(n - 1, -1, -1)]
+
+
+def olvidos(s, hoy):
+    """Para el fantasma de la portada: lo planificado ayer sin hacer y los días desde el último hábito marcado."""
+    d = date.fromisoformat(hoy)
+    ayer = (d - timedelta(days=1)).isoformat()
+    con_algo = [x for x, ids in s["log"].items() if ids and x <= hoy]
+    return {"ayer": [{"id": h["id"], "n": h["n"]} for h in s["habits"]
+                     if h["id"] in s["plan"].get(ayer, []) and h["id"] not in s["log"].get(ayer, [])],
+            "sin_venir": (d - date.fromisoformat(max(con_algo))).days if con_algo else 0}
+
+
+@app.get("/api/fantasma")
+def fantasma(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """Lo justo para el fantasma de cada página; /api/hoy pregunta a todas las apps y es más lento."""
+    exige(todo_sesion, authorization)
+    s = clean(dct(json.loads(DB.read_text("utf-8")))) if DB.exists() else clean({})
+    hoy = date.today().isoformat()
+    return {"habitos": [{k: h[k] for k in ("id", "plan", "hecho")} for h in hoy_habitos(s, hoy)["habitos"]], **olvidos(s, hoy)}
 
 
 def hoy_salud(s, hoy):
@@ -633,6 +687,7 @@ def portada(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
     return {
         "hoy": hoy,
         **hoy_habitos(s, hoy),
+        **olvidos(s, hoy),
         "salud": hoy_salud(s, hoy),
         "anio": hoy_anio(s, hoy),
         "carrera": trozo(lambda: hoy_carrera(s, hoy)),
@@ -779,7 +834,7 @@ def boton(href, texto, actual=False):
 # el mismo menú de arriba a la derecha que en las páginas de todo (en la app del iPhone no hay botón
 # de atrás). Si la cabecera ya tiene algo empujado a la derecha (.ciclo de gastos), va pegado a eso.
 MENU = [("/", "Hoy"), ("/habitos.html", "Hábitos"), ("/pendientes.html", "Pendientes"), ("/entreno.html", "Entreno"),
-        ("/sueno.html", "Sueño"), ("/comida.html", "Comida"), ("/gastos.html", "Gastos")]
+        ("/salud.html", "Salud"), ("/comida.html", "Comida"), ("/gastos.html", "Gastos")]
 ESTILO_MENU = ("<style>.menu-todo{margin-left:auto;display:flex;gap:6px;max-width:100%;overflow-x:auto;"
                "scrollbar-width:none}.menu-todo a{text-decoration:none}"
                "@media(min-width:920px){.ciclo~.menu-todo{margin-left:0}}</style>")   # en móvil va en su línea
@@ -803,7 +858,8 @@ def frontal(nombre):
     ancla = '<nav class="pestanas' if '<nav class="pestanas' in html else "</header>"
     # como las páginas de todo: barra de estado translúcida en la app instalada (los avisos salen de la isla)
     html = html.replace("</title>", '</title>\n<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">'
-                        '\n<link rel="manifest" href="/manifest.json" crossorigin="use-credentials">', 1)
+                        '\n<link rel="manifest" href="/manifest.json" crossorigin="use-credentials">'
+                        '\n<script src="/mascota.js?v=2"></script>', 1)
     return HTMLResponse(html.replace(ancla, menu + ancla, 1))
 
 
@@ -855,6 +911,11 @@ async def otra_app(ruta: str, request: Request, todo_sesion: str = Cookie(None),
 @app.get("/", include_in_schema=False)
 def portada_html():
     return FileResponse(HERE / "static" / "hoy.html")
+
+
+@app.get("/sueno.html", include_in_schema=False)
+def sueno_viejo():
+    return RedirectResponse("/salud.html")
 
 
 @app.get("/habitos.html", include_in_schema=False)

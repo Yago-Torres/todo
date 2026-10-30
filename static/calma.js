@@ -90,7 +90,7 @@ const calma = (() => {
     ["/habitos.html", "Hábitos", I('<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.5"/>')],
     ["/pendientes.html", "Pendientes", I('<path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/>')],
     ["/entreno.html", "Entreno", I('<path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/>')],
-    ["/sueno.html", "Sueño", I('<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>')],
+    ["/salud.html", "Salud", I('<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>')],
     ["/comida.html", "Comida", I('<path d="M3 11h18a9 9 0 0 1-18 0zM8 7c0-1.5 1-2 1-3.5M12 7c0-1.5 1-2 1-3.5M16 7c0-1.5 1-2 1-3.5"/>')],
     ["/gastos.html", "Gastos", I('<rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18M16 15h2"/>')],
   ];
@@ -98,7 +98,7 @@ const calma = (() => {
     const nav = [...document.querySelectorAll("nav")].find(n => n.querySelector('a[href="/pendientes.html"], a[href="/entreno.html"], a[href="/carrera.html"]'));
     if (!nav) return;
     // Hoy es la portada (/, y también /hoy.html); Hábitos vive en /habitos.html (y /index.html)
-    const aqui = {"/hoy.html": "/", "/index.html": "/habitos.html", "/carrera.html": "/entreno.html"}[location.pathname] || location.pathname;
+    const aqui = {"/hoy.html": "/", "/index.html": "/habitos.html", "/carrera.html": "/entreno.html", "/sueno.html": "/salud.html"}[location.pathname] || location.pathname;
     if (!document.getElementById("c-goo")) document.body.insertAdjacentHTML("beforeend",
       // difumina, endurece el borde (la unión se funde) y vuelve a pintar encima lo original, nítido
       '<svg width="0" height="0" style="position:absolute" aria-hidden="true"><filter id="c-goo" color-interpolation-filters="sRGB">' +
