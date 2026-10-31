@@ -18,12 +18,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<link rel="stylesheet" href="/calma.css?v=f91b7347">
-<script src="/calma.js?v=f91b7347"></script>
+<link rel="stylesheet" href="/calma.css?v=1fc40cef">
+<script src="/calma.js?v=1fc40cef"></script>
 <script src="/anime-4.5.0.min.js"></script>
-<script src="/anima.js?v=f91b7347"></script>
-<script src="/mascota.js?v=2"></script>
-<script src="/hoja.js?v=f91b7347"></script>
+<script src="/anima.js?v=1fc40cef"></script>
+<script src="/mascota.js?v=4"></script>
+<script src="/hoja.js?v=1fc40cef"></script>
 <style>
   /* Estilo Calma: tokens y componentes en /calma.css (fuente: ~/estilo). Aquí solo lo de la portada.
      Bento: lo del día en grande (anillos), cifras pequeñas alrededor, y el resto en piezas de 2 o 1. */
@@ -44,6 +44,9 @@
   #fecha { font-size: 14px; color: var(--suave); }
   #fecha b { color: var(--texto); font-weight: 500; }
   .top nav { margin-left: auto; }
+  [data-mod][hidden] { display: none !important; }
+  .engranaje { display: inline-grid; place-items: center; width: 28px; height: 28px; color: var(--suave); }
+  .engranaje svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
   .cartel { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; max-width: 170px; padding: 5px 9px; font: inherit; line-height: 1.25; text-align: right;
     color: var(--texto); background: var(--carta); border: 2px solid var(--linea); border-radius: 0; box-shadow: 3px 3px 0 var(--linea); cursor: pointer; animation: f-cartel 1.2s ease-in-out infinite; }
   .cartel[hidden] { display: none; }
@@ -183,6 +186,7 @@
   <header class="top">
     <h1 id="saludo">Hoy</h1>
     <span id="fecha"></span>
+    <a class="engranaje" href="/ajustes.html" aria-label="Ajustes"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg></a>
     <button class="cartel" id="cartel" type="button" hidden></button>
     <nav><a class="c-btn mini" href="/habitos.html">Hábitos</a><a class="c-btn mini" href="/pendientes.html">Pendientes</a><a class="c-btn mini" href="/entreno.html">Entreno</a><a class="c-btn mini" href="/salud.html">Salud</a><a class="c-btn mini" href="/comida.html">Comida</a><a class="c-btn mini" href="/gastos.html">Gastos</a></nav>
   </header>
@@ -191,53 +195,53 @@
     <div class="dentro">
       <svg viewBox="0 0 120 120" role="img" id="anillos-svg" aria-label="Anillos del día">
         <g fill="none" stroke-width="11" stroke-linecap="round" transform="rotate(-90 60 60)">
-          <circle class="fondo" cx="60" cy="60" r="50" stroke="var(--serie-3)"/><circle id="a-hab" cx="60" cy="60" r="50" stroke="var(--serie-3)" pathLength="100" stroke-dasharray="0 100"/>
-          <circle class="fondo" cx="60" cy="60" r="36" stroke="var(--serie-2)"/><circle id="a-pas" cx="60" cy="60" r="36" stroke="var(--serie-2)" pathLength="100" stroke-dasharray="0 100"/>
-          <circle class="fondo" cx="60" cy="60" r="22" stroke="var(--serie-1)"/><circle id="a-sue" cx="60" cy="60" r="22" stroke="var(--serie-1)" pathLength="100" stroke-dasharray="0 100"/>
+          <circle data-mod="habitos" class="fondo" cx="60" cy="60" r="50" stroke="var(--serie-3)"/><circle data-mod="habitos" id="a-hab" cx="60" cy="60" r="50" stroke="var(--serie-3)" pathLength="100" stroke-dasharray="0 100"/>
+          <circle data-mod="salud" class="fondo" cx="60" cy="60" r="36" stroke="var(--serie-2)"/><circle data-mod="salud" id="a-pas" cx="60" cy="60" r="36" stroke="var(--serie-2)" pathLength="100" stroke-dasharray="0 100"/>
+          <circle data-mod="salud" class="fondo" cx="60" cy="60" r="22" stroke="var(--serie-1)"/><circle data-mod="salud" id="a-sue" cx="60" cy="60" r="22" stroke="var(--serie-1)" pathLength="100" stroke-dasharray="0 100"/>
         </g>
       </svg>
       <ul>
-        <li style="--c: var(--serie-3)"><i></i><small>Hábitos de hoy</small><b id="l-hab">—</b></li>
-        <li style="--c: var(--serie-2)"><i></i><small>Pasos ayer</small><b id="l-pas">—</b></li>
-        <li style="--c: var(--serie-1)"><i></i><small>Dormido anoche</small><b id="l-sue">—</b></li>
+        <li data-mod="habitos" style="--c: var(--serie-3)"><i></i><small>Hábitos de hoy</small><b id="l-hab">—</b></li>
+        <li data-mod="salud" style="--c: var(--serie-2)"><i></i><small>Pasos ayer</small><b id="l-pas">—</b></li>
+        <li data-mod="salud" style="--c: var(--serie-1)"><i></i><small>Dormido anoche</small><b id="l-sue">—</b></li>
       </ul>
     </div>
   </section>
 
-  <a class="carta c-carta c-foco pieza" href="/salud.html"><span class="c-eti">Dormido anoche</span><span class="cifra" id="sueno">—</span><span class="bajo" id="sueno-sub"></span><svg class="spark" id="sp-sueno" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true"></svg></a>
-  <a class="carta c-carta c-foco pieza" href="/salud.html"><span class="c-eti">Pasos ayer</span><span class="cifra" id="pasos">—</span><span class="bajo" id="pasos-sub"></span><svg class="spark" id="sp-pasos" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true"></svg></a>
-  <a class="carta c-carta c-foco pieza" href="/entreno.html"><span class="c-eti">Peso</span><span class="cifra" id="peso">—</span><span class="bajo" id="peso-sub"></span><svg class="spark" id="sp-peso" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true"></svg></a>
-  <a class="carta c-carta c-foco pieza" href="/pendientes.html"><span class="c-eti">Leer luego</span><span class="cifra" id="leer">—</span><span class="bajo">guardados</span></a>
+  <a data-mod="salud" class="carta c-carta c-foco pieza" href="/salud.html"><span class="c-eti">Dormido anoche</span><span class="cifra" id="sueno">—</span><span class="bajo" id="sueno-sub"></span><svg class="spark" id="sp-sueno" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true"></svg></a>
+  <a data-mod="salud" class="carta c-carta c-foco pieza" href="/salud.html"><span class="c-eti">Pasos ayer</span><span class="cifra" id="pasos">—</span><span class="bajo" id="pasos-sub"></span><svg class="spark" id="sp-pasos" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true"></svg></a>
+  <a data-mod="salud" class="carta c-carta c-foco pieza" href="/salud.html"><span class="c-eti">Peso</span><span class="cifra" id="peso">—</span><span class="bajo" id="peso-sub"></span><svg class="spark" id="sp-peso" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true"></svg></a>
+  <a data-mod="pendientes" class="carta c-carta c-foco pieza" href="/pendientes.html"><span class="c-eti">Leer luego</span><span class="cifra" id="leer">—</span><span class="bajo">guardados</span></a>
 
-  <section class="carta c-carta c-foco s2" aria-labelledby="t-hab">
+  <section data-mod="habitos" class="carta c-carta c-foco s2" aria-labelledby="t-hab">
     <h2 id="t-hab">Hábitos <span class="c-chip" id="n-hab"></span><a href="/habitos.html">Abrir</a></h2>
     <div class="c-barra" id="b-hab"><i></i></div>
     <div id="habitos"></div>
   </section>
 
-  <section class="carta c-carta c-foco s2" aria-labelledby="t-tar">
+  <section data-mod="pendientes" class="carta c-carta c-foco s2" aria-labelledby="t-tar">
     <h2 id="t-tar">Para hoy <span class="c-chip" id="n-tar"></span><a href="/pendientes.html">Pendientes</a><button class="mas-tarea" id="b-nueva" type="button" aria-label="Apuntar una tarea"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></h2>
     <div id="tareas"></div>
   </section>
 
-  <section class="carta c-carta c-foco s2" aria-labelledby="t-car">
+  <section data-mod="entreno" class="carta c-carta c-foco s2" aria-labelledby="t-car">
     <h2 id="t-car">Carrera <a href="/carrera.html">Plan</a></h2>
     <div id="carrera"></div>
   </section>
 
-  <section class="carta c-carta c-foco m2" aria-labelledby="t-com">
+  <section data-mod="comida" class="carta c-carta c-foco m2" aria-labelledby="t-com">
     <h2 id="t-com">Comida <a href="/comida.html">Abrir</a></h2>
     <div id="comida"></div>
   </section>
 
-  <section class="carta c-carta c-foco m2" aria-labelledby="t-gas">
+  <section data-mod="gastos" class="carta c-carta c-foco m2" aria-labelledby="t-gas">
     <h2 id="t-gas">Gastos <a href="/gastos.html">Abrir</a></h2>
     <div id="gastos"></div>
   </section>
 
-  <div class="escena3d m2"><a class="racha" id="racha" href="/habitos.html"><small id="racha-q">Mejor racha</small><b id="racha-n">—</b><small id="racha-h"></small></a></div>
+  <div data-mod="habitos" class="escena3d m2"><a class="racha" id="racha" href="/habitos.html"><small id="racha-q">Mejor racha</small><b id="racha-n">—</b><small id="racha-h"></small></a></div>
 
-  <section class="carta c-carta c-foco s2 s3" aria-labelledby="t-anio">
+  <section data-mod="habitos" class="carta c-carta c-foco s2 s3" aria-labelledby="t-anio">
     <h2 id="t-anio">Tu año <span class="c-chip" id="n-anio"></span></h2>
     <div class="anio" id="anio" role="img"></div>
     <div class="anio-pie"><span>ene</span><span>Cada punto es un día: más intenso, más hábitos hechos</span><span>dic</span></div>
@@ -303,7 +307,7 @@ function dia_() {
   $("#l-sue").replaceChildren(su ? hm(su) : "—", el("span", null, " / 8 h"));
   $("#anillos-svg").setAttribute("aria-label", `Hábitos ${hechos} de ${hs.length}; pasos ayer ${pa ? miles(pa) : "sin dato"}; dormido ${su ? hm(su) : "sin dato"}`);
   // los tres cerrados a la vez: una vuelta, brillo, onda en el fondo y confeti (este, una vez al día)
-  const caja = $(".anillos"), cerrados = !!hs.length && p >= 1 && (pa || 0) >= OBJ.pasos && (su || 0) >= OBJ.sueno;
+  const caja = $(".anillos"), cerrados = !!hs.length && p >= 1 && (!H.ajustes.modulos.salud.activo || (pa || 0) >= OBJ.pasos && (su || 0) >= OBJ.sueno);
   if (cerrados && !caja.classList.contains("cerrados")) {
     caja.classList.add("celebra");
     setTimeout(() => caja.classList.remove("celebra"), 1400);
@@ -426,8 +430,7 @@ function tareas() {
     const f = el("div", "tarea"), bx = el("button", "bx");
     f.style.setProperty("--c", colores[i % colores.length]);
     f.dataset.i = i;
-    bx.disabled = t.fija;
-    bx.setAttribute("aria-label", t.fija ? "Del vault del curro: se marca allí" : `Marcar hecha: ${t.t}`);
+    bx.setAttribute("aria-label", `Marcar hecha: ${t.t}`);
     bx.onclick = async e => {
       e.stopPropagation();
       bx.disabled = true;
@@ -653,9 +656,16 @@ function anio() {
   caja.setAttribute("aria-label", `Año ${H.hoy.slice(0, 4)}: ${completos} días con casi todos los hábitos hechos de ${H.anio.length} días que van`);
 }
 
+// lo que este usuario no usa desaparece (Ajustes)
+function modulos() {
+  document.querySelectorAll("[data-mod]").forEach(e => e.toggleAttribute("hidden", !H.ajustes.modulos[e.dataset.mod].activo));
+}
+
 function pinta() {
+  fantasma.ajusta(H.ajustes);
+  modulos();
   const d = new Date(), hora = d.getHours();
-  const saludo = `${hora < 6 || hora >= 21 ? "Buenas noches" : hora < 14 ? "Buenos días" : "Buenas tardes"}, Yago`;
+  const saludo = calma.saludo(hora);
   if ($("#saludo").textContent !== saludo) $("#saludo").textContent = saludo;
   $("#fecha").replaceChildren(el("b", null, `${DIAS[d.getDay()][0].toUpperCase() + DIAS[d.getDay()].slice(1)} ${d.getDate()} de ${MESES[d.getMonth()]}`));
   habitos(); tareas(); carrera(); comida(); gastos(); piezas(); racha(); anio();

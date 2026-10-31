@@ -311,6 +311,50 @@ def logout(response: Response):
     return {"ok": True}
 
 
+# ---------- ajustes de cada usuario (ajustes.json, junto a su data.json) ----------
+# Fuera de data.json a propósito: las páginas guardan el estado entero y aquí no tienen nada que pisar.
+AJUSTES = DB.with_name("ajustes.json")
+MODULOS = ("habitos", "pendientes", "entreno", "salud", "comida", "gastos")
+MASCOTA = {"semilla": (1, 9999, 14), "grumos": (0, .5, .2), "pera": (0, 1, .35), "cola": (-24, 24, -12), "flecos": (2, 6, 4),
+           "fleco": (2, 14, 10), "ancho": (20, 36, 26), "alto": (50, 90, 73), "ojoI": (2, 8, 4.5), "ojoD": (2, 8, 4.5),
+           "sep": (8, 26, 14), "ojosY": (.15, .6, .38)}
+
+
+def conectada(m):
+    """Comida y gastos son otras apps: sin su clave en el .env, esta instancia no puede llegar a ellas."""
+    return m not in OTRAS or bool(os.getenv(OTRAS[m][2]))
+
+
+def limpia_ajustes(v):
+    v, mods, mas = dct(v), dct(dct(v).get("modulos")), dct(dct(v).get("mascota"))
+    color = str(mas.get("color") or "")
+    return {"nombre": " ".join(str(v.get("nombre") or "").split())[:30],
+            "modulos": {m: {c: conectada(m) and dct(mods.get(m)).get(c) is not False for c in ("activo", "barra")} for m in MODULOS},
+            "mascota": {**{k: d if (n := real(mas.get(k), lo, hi)) is None else n for k, (lo, hi, d) in MASCOTA.items()},
+                        "tipo": "flor" if mas.get("tipo") == "flor" else "fantasma",
+                        "color": color if re.fullmatch(r"#[0-9a-fA-F]{6}", color) else "#CDE77F",
+                        "extra": mas.get("extra") if mas.get("extra") in ("lazo", "gorro", "gafas") else "",
+                        "rubor": mas.get("rubor") is True, "paseo": mas.get("paseo") is not False}}
+
+
+def lee_ajustes():
+    return limpia_ajustes(json.loads(AJUSTES.read_text("utf-8")) if AJUSTES.exists() else {})
+
+
+@app.get("/api/ajustes")
+def get_ajustes(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    return {**lee_ajustes(), "sin_app": [m for m in MODULOS if not conectada(m)]}
+
+
+@app.post("/api/ajustes")
+def post_ajustes(a: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    limpio = limpia_ajustes(a)
+    guarda(AJUSTES, json.dumps(limpio, ensure_ascii=False))
+    return limpio
+
+
 def version():
     """Cambia con cada escritura de data.json. No es ETag: Cloudflare debilita los ETag al comprimir."""
     return str(DB.stat().st_mtime_ns) if DB.exists() else "0"
@@ -446,6 +490,38 @@ def lee_fases(v):
     return sorted([[e, i, round(n)] for e, i, n in out if n], key=lambda f: f[1])
 
 
+def noches(fases):
+    """Parte los tramos en noches: más de 3 horas sin ningún tramo es otra noche."""
+    out = []
+    for f in fases:
+        if not out or datetime.fromisoformat(f[1]) - fin_noche(out[-1]) > timedelta(hours=3):
+            out.append([])
+        out[-1].append(f)
+    return out
+
+
+def fin_noche(tramos):
+    return max(datetime.fromisoformat(i) + timedelta(seconds=n) for _, i, n in tramos)
+
+
+def lee_pasos(v, ayer):
+    """Un número son los de ayer (el atajo de antes). Un día por línea, «29.10.26, 00:00|9078», va cada uno
+    a su día y da igual cuándo corra el atajo; varias líneas del mismo día se suman."""
+    if "|" not in str(v):
+        n = round(real(v, 0, 200000) or 0)
+        return {ayer: n} if n else {}
+    out = {}
+    for x in (v if isinstance(v, list) else re.split(r"[;\n]", str(v)))[:40]:
+        partes = str(x).split("|")
+        if len(partes) != 2:
+            continue
+        dia = day((inicio(partes[0] + " 0:00") or "")[:10])   # la hora da igual, y puede no venir
+        n = real(re.sub(r"[.,\s](?=\d{3}(?!\d))", "", partes[1].strip()).replace(",", "."), 0, 200000)
+        if dia and n:
+            out[dia] = out.get(dia, 0) + round(n)
+    return out
+
+
 def desde_mediodia(inicio):
     """Minutos desde el mediodía anterior: las 23:30 y las 00:30 quedan seguidas."""
     return (int(inicio[11:13]) * 60 + int(inicio[14:16]) - 720) % 1440
@@ -504,8 +580,8 @@ def cuerpo(s, hoy, n=120):
 
 @app.post("/api/salud")
 def registra_salud(a: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
-    """{"sueno": lo dormido anoche, "pasos": los de ayer, "peso": kilos de hoy}, cualquiera de ellos.
-    El sueño va al día en que te levantas; el peso, a hoy (o a "dia")."""
+    """{"fases": los tramos de sueño, "pasos": por día o los de ayer, "peso": kilos de hoy}, cualquiera de ellos.
+    Cada noche va al día en que acabó, por sus fechas y no por cuándo corra el atajo; el peso, a hoy (o a "dia")."""
     exige(todo_sesion, authorization)
     # lo que manda el atajo, tal cual (journalctl -u todo): para afinarlo sin adivinar
     print("salud recibido:", json.dumps({k: str(a.get(k))[:200] for k in ("sueno", "pasos", "fases", "peso", "grasa", "magra", "imc", "dia") if k in a},
@@ -514,24 +590,29 @@ def registra_salud(a: dict, todo_sesion: str = Cookie(None), authorization: str 
     hoy = day(a.get("dia")) or date.today().isoformat()
     ayer = (date.fromisoformat(hoy) - timedelta(days=1)).isoformat()
     trozos = []
-    # con los tramos de la noche, lo dormido sale de ellos (sin lo despierto); si no, del total que mande
-    fases = lee_fases(a.get("fases"))
-    if fases:
-        mins = round(sum(n for e, _, n in fases if e != "awake") / 60)
+    # con los tramos, lo dormido sale de ellos (sin lo despierto) y cada noche va al día en que acabó; si
+    # no, del total que mande, a hoy. [(día, minutos, tramos)]
+    if fases := lee_fases(a.get("fases")):
+        camas = [(f"{fin_noche(n):%Y-%m-%d}", round(sum(s for e, _, s in n if e != "awake") / 60), n) for n in noches(fases)]
     elif crudo := real(a.get("sueno"), 0, 10 ** 6):
         # como en los entrenos: Salud suma en horas, minutos o segundos según el atajo; por magnitud
-        mins = round(crudo * 60 if crudo <= 24 else crudo if crudo <= 1440 else crudo / 60)
+        camas = [(hoy, round(crudo * 60 if crudo <= 24 else crudo if crudo <= 1440 else crudo / 60), [])]
     else:
-        mins = 0
-    if mins > 16 * 60:
-        raise HTTPException(400, f"{mins // 60} h de sueño: Salud está sumando dos fuentes (iPhone y COROS) o el "
+        camas = []
+    camas = [c for c in camas if c[1]]
+    if camas and (mas := max(c[1] for c in camas)) > 16 * 60:
+        raise HTTPException(400, f"{mas // 60} h de sueño: Salud está sumando dos fuentes (iPhone y COROS) o el "
                                  "tiempo en la cama. En el atajo, una sola fuente y «Value is not In Bed»")
+    for dia, m, tramos in camas:
+        noche = estado["salud"].setdefault(dia, {})
+        if not tramos or m >= noche.get("sueno", 0):   # el filtro del atajo puede cortar una noche: no pisa a la entera
+            noche["sueno"] = m
+            if tramos:
+                noche["fases"] = tramos
+    mins = camas[-1][1] if camas else 0
     if mins:
-        noche = estado["salud"].setdefault(hoy, {})
-        noche["sueno"] = mins
-        if fases:
-            noche["fases"] = fases
-        trozos.append(f"dormido {mins // 60} h {mins % 60:02d}" + (f" en {len(fases)} tramos" if fases else ""))
+        trozos.append(f"dormido {mins // 60} h {mins % 60:02d}" + (f" en {len(camas[-1][2])} tramos" if camas[-1][2] else "")
+                      + (f" ({len(camas)} noches)" if len(camas) > 1 else ""))
     # la báscula: Salud lo da en kg con coma decimal y a veces con la unidad («70,4 kg»)
     peso = real(numero(a.get("peso")), 20, 400)
     if peso:
@@ -552,9 +633,14 @@ def registra_salud(a: dict, todo_sesion: str = Cookie(None), authorization: str 
         raro = a.get("fases") or a.get("sueno")
         if raro or not (peso or comp):
             trozos.append(f"sueño sin entender: «{str(raro)[:60]}»" if raro else "sin datos de sueño")
-    if pasos := round(real(a.get("pasos"), 0, 200000) or 0):
-        estado["salud"].setdefault(ayer, {})["pasos"] = pasos
-        trozos.append(f"{pasos:,} pasos ayer".replace(",", "."))
+    pasos = lee_pasos(a.get("pasos"), ayer)
+    for i, (d, n) in enumerate(sorted(pasos.items())):
+        x = estado["salud"].setdefault(d, {})
+        # el día más viejo de una tanda puede venir cortado por el filtro del atajo
+        x["pasos"] = max(n, x.get("pasos", 0)) if i == 0 and len(pasos) > 1 else n
+    trozos += [f"{pasos[d]:,} pasos {q}".replace(",", ".") for d, q in ((ayer, "ayer"), (hoy, "hoy")) if d in pasos]
+    if a.get("pasos") and not pasos:
+        trozos.append(f"pasos sin entender: «{str(a['pasos'])[:60]}»")
     if not (pasos or mins or peso or comp):
         raise HTTPException(400, f"No llega ni sueño, ni pasos, ni peso ({trozos[0]}): revisa las variables del atajo")
     guarda(DB, json.dumps(clean(estado), ensure_ascii=False))
@@ -590,6 +676,8 @@ def trozo(fn):
 
 def de_otra(nombre, ruta):
     base, _, var, _ = OTRAS[nombre]
+    if not os.getenv(var):
+        raise RuntimeError(f"Sin conectar: falta {var}")
     req = urllib.request.Request(f"{base}/api/{ruta}", headers={"Authorization": f"Bearer {os.getenv(var) or ''}"})
     with urllib.request.urlopen(req, timeout=8) as r:
         return json.load(r)
@@ -629,7 +717,8 @@ def fantasma(todo_sesion: str = Cookie(None), authorization: str = Header(None))
     exige(todo_sesion, authorization)
     s = clean(dct(json.loads(DB.read_text("utf-8")))) if DB.exists() else clean({})
     hoy = date.today().isoformat()
-    return {"habitos": [{k: h[k] for k in ("id", "plan", "hecho")} for h in hoy_habitos(s, hoy)["habitos"]], **olvidos(s, hoy)}
+    return {"habitos": [{k: h[k] for k in ("id", "plan", "hecho")} for h in hoy_habitos(s, hoy)["habitos"]], **olvidos(s, hoy),
+            "ajustes": lee_ajustes()}
 
 
 def hoy_salud(s, hoy):
@@ -686,6 +775,7 @@ def portada(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
     hoy = date.today().isoformat()
     return {
         "hoy": hoy,
+        "ajustes": lee_ajustes(),
         **hoy_habitos(s, hoy),
         **olvidos(s, hoy),
         "salud": hoy_salud(s, hoy),
@@ -821,8 +911,9 @@ def baja_push(sub: dict, todo_sesion: str = Cookie(None), authorization: str = H
 # por 127.0.0.1 con el bearer de cada app. Sus webs propias siguen igual.
 # Los gastos de Aitana son otra instancia de gastos (~/gastos-aitana, :8086): datos aparte, mismo frontal.
 GASTOS = Path("/home/pi/gastos/static/index.html")
+# La copia de todo de Aitana (~/todo-aitana) apunta GASTOS_URL a :8086 con su propia clave: no tiene la de Yago.
 OTRAS = {"comida": ("http://127.0.0.1:8084", Path("/home/pi/comida/static/index.html"), "COMIDA_PASS", ""),
-         "gastos": ("http://127.0.0.1:8085", GASTOS, "GASTOS_PASS", ""),
+         "gastos": (os.getenv("GASTOS_URL", "http://127.0.0.1:8085"), GASTOS, "GASTOS_PASS", ""),
          "gastos-aitana": ("http://127.0.0.1:8086", GASTOS, "GASTOS_AITANA_PASS", "Aitana")}
 
 
@@ -848,7 +939,7 @@ def frontal(nombre):
     if quien := OTRAS[nombre][3]:
         html = html.replace("<h1>Gastos</h1>", f"<h1>Gastos · {quien}</h1>", 1)
     # entre los dos gastos se salta con un toque, junto al título
-    if nombre.startswith("gastos"):
+    if nombre.startswith("gastos") and os.getenv("GASTOS_AITANA_PASS"):
         botones = boton("/gastos.html", "Yago", nombre == "gastos") + boton("/gastos-aitana.html", "Aitana", nombre != "gastos")
         html = re.sub(r"(<h1>[^<]*</h1>)", lambda m: m[1] + botones, html, count=1)
     aqui = "/" + nombre.split("-")[0] + ".html"
@@ -859,7 +950,7 @@ def frontal(nombre):
     # como las páginas de todo: barra de estado translúcida en la app instalada (los avisos salen de la isla)
     html = html.replace("</title>", '</title>\n<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">'
                         '\n<link rel="manifest" href="/manifest.json" crossorigin="use-credentials">'
-                        '\n<script src="/mascota.js?v=2"></script>', 1)
+                        '\n<script src="/mascota.js?v=4"></script>', 1)
     return HTMLResponse(html.replace(ancla, menu + ancla, 1))
 
 

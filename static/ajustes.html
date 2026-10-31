@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="es">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#F4F5F0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#171A16" media="(prefers-color-scheme: dark)">
+<title>Ajustes</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.json" crossorigin="use-credentials">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Ajustes">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="/calma.css?v=1fc40cef">
+<script src="/calma.js?v=1fc40cef"></script>
+<script src="/mascota.js?v=4"></script>
+<script src="/anime-4.5.0.min.js"></script>
+<script src="/anima.js?v=1fc40cef"></script>
+<style>
+  /* Estilo Calma: tokens y componentes en /calma.css (fuente: ~/estilo). Aquí solo lo de esta página. */
+  body { padding: 16px; padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px)); }
+  .app { max-width: 1120px; margin: 0 auto; display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+  .col { display: grid; gap: 14px; align-content: start; min-width: 0; }
+  @media (min-width: 920px) { .app { grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); } }
+  .top { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 4px 2px 0; }
+  header.top { min-height: 0; padding-right: 2px; }
+  h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -.02em; }
+  .top nav { margin-left: auto; }
+  #estado { font-size: 13px; color: var(--suave); }
+  .carta { padding: 16px; min-width: 0; }
+  .carta h2 { margin: 0 0 10px; font-size: 16px; font-weight: 600; }
+  .pista { margin: 0 0 12px; font-size: 13px; color: var(--suave); }
+  input[type=checkbox] { width: 20px; height: 20px; margin: 0; accent-color: var(--acento); }
+  input[type=range] { width: 100%; accent-color: var(--acento); }
+  input[type=color] { width: 44px; height: 32px; padding: 0; border: 1px solid var(--linea); border-radius: 8px; background: none; }
+  #modulos { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px 18px; align-items: center; }
+  #modulos .cab { font-size: 12px; color: var(--suave); text-align: center; }
+  #modulos .nom { font-weight: 500; display: flex; align-items: center; gap: 8px; }
+  #modulos input { justify-self: center; }
+  .escenario { display: grid; place-items: center; padding: 18px 0 14px; margin-bottom: 12px; border-radius: 12px; background: var(--carta-2); }
+  #sitio-fantasma { width: min(100%, 320px); height: 180px; position: relative; }
+  #sitio-fantasma #fantasma { position: static; width: 100%; height: 100%; }
+  #sitio-fantasma #fantasma.flor .mec { stroke-width: .5; }
+  .eleccion { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; font-size: 14px; }
+  .eleccion select { width: auto; min-height: 36px; }
+  .probar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .controles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px 16px; }
+  .controles label { display: grid; gap: 4px; font-size: 12px; color: var(--suave); }
+  .controles label > span { display: flex; justify-content: space-between; }
+  .fila-op { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px; margin-top: 14px; font-size: 14px; }
+  .fila-op label { display: flex; align-items: center; gap: 8px; }
+  .solo-fantasma[hidden] { display: none; }
+</style>
+<body>
+
+<div class="puerta c-puerta" id="puerta">
+  <form id="f-clave">
+    <h2>Ajustes</h2>
+    <p id="puerta-msg">Contraseña de todo</p>
+    <input class="c-campo" type="password" name="pass" required autocomplete="current-password" aria-label="Contraseña">
+    <button class="c-btn pri" type="submit">Entrar</button>
+  </form>
+</div>
+
+<div class="app">
+  <header class="top">
+    <h1>Ajustes</h1>
+    <span id="estado"></span>
+    <nav><a class="c-btn mini" href="/">Hoy</a><a class="c-btn mini" href="/pendientes.html">Pendientes</a></nav>
+  </header>
+
+  <div class="col">
+    <section class="carta c-carta" aria-labelledby="t-tu">
+      <h2 id="t-tu">Tú</h2>
+      <input class="c-campo" id="nombre" maxlength="30" placeholder="Cómo te saludo" aria-label="Tu nombre">
+    </section>
+
+    <section class="carta c-carta" aria-labelledby="t-mod">
+      <h2 id="t-mod">Secciones</h2>
+      <p class="pista">Lo que no esté activo desaparece también de Hoy. Lo activo puede estar fuera de la barra de abajo: sigue en Hoy, pero no ocupa sitio.</p>
+      <div id="modulos"></div>
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="carta c-carta" aria-labelledby="t-fan">
+      <h2 id="t-fan">Tu mascota</h2>
+      <label class="eleccion">Es <select class="c-campo" id="tipo"><option value="fantasma">Un fantasma</option><option value="flor">Una flor de boli</option></select></label>
+      <div class="escenario"><div id="sitio-fantasma"></div></div>
+      <div class="probar" id="probar"></div>
+      <div class="controles solo-fantasma" id="controles"></div>
+      <div class="fila-op">
+        <label class="solo-fantasma">Color <input type="color" id="color"></label>
+        <label class="solo-fantasma">Lleva <select class="c-campo" id="extra" style="width:auto;min-height:36px"><option value="">Nada</option><option value="lazo">Lazo</option><option value="gorro">Gorro</option><option value="gafas">Gafas</option></select></label>
+        <label class="solo-fantasma"><input type="checkbox" id="rubor"> Rubor</label>
+        <label><input type="checkbox" id="paseo"> Pasea por la web</label>
+        <button class="c-btn mini" id="otra" type="button">Otra forma</button>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const el = (t, cls, txt) => { const e = document.createElement(t); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+const NOMBRES = {habitos: "Hábitos", pendientes: "Pendientes", entreno: "Entreno", salud: "Salud", comida: "Comida", gastos: "Gastos"};
+const CONTROLES = [["ancho", "Ancho", 20, 36, 1], ["alto", "Alto", 50, 90, 1], ["pera", "Forma de pera", 0, 1, .05], ["cola", "Cola de lado", -24, 24, 1],
+  ["flecos", "Flecos", 2, 6, 1], ["fleco", "Largo de flecos", 2, 14, 1], ["grumos", "Grumos", 0, .5, .01], ["ojoI", "Ojo izquierdo", 2, 8, .5],
+  ["ojoD", "Ojo derecho", 2, 8, .5], ["sep", "Separación de ojos", 8, 26, 1], ["ojosY", "Altura de ojos", .15, .6, .01]];
+const PRUEBAS = [["Salta", "salto"], ["Voltereta", "voltereta"], ["Baila", "baile"], ["Bosteza", "bostezo"], ["Guiña", "guino"], ["Estornuda", "estornudo"]];
+const PRUEBAS_DE = {fantasma: [["Se esconde", "escondite"]], flor: [["Saluda", "saluda"], ["Molinillo", "molinillo"], ["Aletea", "aletea"], ["Patadita", "patadita"]]};
+let A = null, pend;
+
+function puerta(mostrar, msg) {
+  $("#puerta").toggleAttribute("data-on", mostrar);
+  $("#puerta-msg").textContent = msg || "Contraseña de todo";
+  $("#puerta-msg").classList.toggle("mal", !!msg);
+  if (mostrar) $("#puerta input").focus();
+}
+async function api(url, cuerpo) {
+  const r = await fetch(url, cuerpo === undefined ? {} : {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(cuerpo)});
+  if (r.status === 401) { puerta(true); throw new Error("401"); }
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.status);
+  return r.json();
+}
+function guardar() {
+  fantasma.previa(A.mascota);
+  $("#estado").textContent = "Guardando…";
+  clearTimeout(pend);
+  pend = setTimeout(async () => {
+    try {
+      const {sin_app, ...lo} = A;
+      fantasma.ajusta(await api("/api/ajustes", lo));
+      $("#estado").textContent = "Guardado";
+    } catch (e) {
+      $("#estado").textContent = "Sin guardar";
+    }
+  }, 400);
+}
+
+function modulos() {
+  const caja = $("#modulos");
+  caja.replaceChildren(el("span"), el("span", "cab", "Activa"), el("span", "cab", "En la barra"));
+  for (const [k, n] of Object.entries(NOMBRES)) {
+    const v = A.modulos[k], fuera = A.sin_app.includes(k), nom = el("span", "nom", n);
+    if (fuera) nom.append(el("span", "c-chip", "sin conectar"));
+    const toque = (campo, etiqueta) => {
+      const c = Object.assign(el("input"), {type: "checkbox", checked: v[campo], disabled: fuera || (campo === "barra" && !v.activo)});
+      c.setAttribute("switch", "");
+      c.setAttribute("aria-label", `${n}: ${etiqueta}`);
+      c.onchange = () => { v[campo] = c.checked; modulos(); guardar(); };
+      return c;
+    };
+    caja.append(nom, toque("activo", "activa"), toque("barra", "en la barra"));
+  }
+}
+
+function fantasmita() {
+  const m = A.mascota, caja = $("#controles");
+  caja.replaceChildren(...CONTROLES.map(([k, n, lo, hi, paso]) => {
+    const l = el("label"), v = el("b", null, m[k]);
+    const r = Object.assign(el("input"), {type: "range", min: lo, max: hi, step: paso, value: m[k]});
+    r.oninput = () => { m[k] = +r.value; v.textContent = r.value; guardar(); };
+    const cab = el("span", null, n);
+    cab.append(v);
+    l.append(cab, r);
+    return l;
+  }));
+  $("#tipo").value = m.tipo; $("#color").value = m.color; $("#extra").value = m.extra; $("#rubor").checked = m.rubor; $("#paseo").checked = m.paseo;
+  tipo();
+}
+// la flor es un dibujo: de ella solo se elige el garabato («Otra forma»); los controles son del fantasma
+function tipo() {
+  document.querySelectorAll(".solo-fantasma").forEach(e => { e.hidden = A.mascota.tipo === "flor"; });
+  $("#probar").replaceChildren(...[...PRUEBAS, ...PRUEBAS_DE[A.mascota.tipo]].map(([n, k]) => {
+    const b = el("button", "c-btn mini", n);
+    b.type = "button";
+    b.onclick = () => fantasma.emote(k);
+    return b;
+  }));
+}
+
+async function cargar() {
+  try {
+    A = await api("/api/ajustes");
+    puerta(false);
+    $("#nombre").value = A.nombre;
+    modulos();
+    fantasmita();
+  } catch (e) {
+    if (e.message !== "401") $("#estado").textContent = `Sin conexión: ${e.message}`;
+  }
+}
+
+$("#tipo").onchange = e => { A.mascota.tipo = e.target.value; tipo(); guardar(); };
+$("#nombre").oninput = e => { A.nombre = e.target.value; guardar(); };
+$("#color").oninput = e => { A.mascota.color = e.target.value; guardar(); };
+$("#extra").onchange = e => { A.mascota.extra = e.target.value; guardar(); };
+$("#rubor").onchange = e => { A.mascota.rubor = e.target.checked; guardar(); };
+$("#paseo").onchange = e => { A.mascota.paseo = e.target.checked; guardar(); };
+$("#otra").onclick = () => { A.mascota.semilla = 1 + Math.floor(Math.random() * 9998); guardar(); };
+$("#f-clave").onsubmit = async e => {
+  e.preventDefault();
+  const inp = e.target.pass;
+  const r = await fetch("/api/login", {method: "POST", headers: {"Content-Type": "application/json"},
+                                       body: JSON.stringify({pass: inp.value})}).catch(() => null);
+  if (r && r.ok) { inp.value = ""; await cargar(); fantasma.refresca(); }
+  else puerta(true, r && r.status === 401 ? "Contraseña incorrecta" : "No se pudo conectar");
+};
+cargar();
+</script>
+</body>
+</html>

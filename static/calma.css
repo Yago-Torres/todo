@@ -185,7 +185,7 @@ html::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
    (el reel «Meniscus»): un filtro SVG difumina y vuelve a endurecer los bordes. */
 nav.c-dock { position: fixed; z-index: 150; left: 50%; transform: translateX(-50%); bottom: calc(12px + env(safe-area-inset-bottom, 0px));
              width: min(560px, calc(100% - 16px)); height: 62px; margin: 0; padding: 0;
-             display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+             display: grid; grid-template-columns: repeat(var(--n, 7), minmax(0, 1fr)); }
 .c-goo { position: absolute; inset: -44px 0 0; pointer-events: none; filter: url(#c-goo) drop-shadow(0 10px 22px rgba(0, 0, 0, .2)); }
 .c-tira { position: absolute; left: 0; right: 0; bottom: 0; height: 62px; border-radius: 22px; background: var(--dock); }
 .c-gota { position: absolute; left: 0; bottom: 36px; width: 52px; height: 52px; border-radius: 50%; background: #CDE77F;

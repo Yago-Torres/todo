@@ -14,7 +14,8 @@ instalable en el iPhone, con un fantasma que reacciona a lo que haces. Corre en 
 
 - **El fantasma** — sale en todas las páginas y cambia de cara y de forma según lo que pase: salta al
   marcar un hábito, se enfada y te enseña lo que se quedó sin hacer ayer, se duerme de noche y se
-  desvanece si pasas días sin venir (`static/mascota.js`, sin dependencias).
+  desvanece si pasas días sin venir. Hace gestos por su cuenta y a veces se da un paseo por la página.
+  Cada usuario elige la suya: el fantasma de píxeles o una flor garabateada a boli (`static/mascota.js`).
 
   ![Los estados del fantasma](docs/fantasma.jpg)
 
@@ -34,6 +35,7 @@ instalable en el iPhone, con un fantasma que reacciona a lo que haces. Corre en 
 - **Salud** — fases de la noche, nota de 0 a 100, pasos, peso con su media de 7 días y composición
   de la báscula, con los datos de Salud del iPhone.
 - **Pendientes** — tareas guardadas como Markdown en un vault de Obsidian (formato del plugin Tasks).
+- **Ajustes** — nombre, qué secciones están activas, cuáles salen en la barra de abajo y la mascota.
 - **Avisos** por Web Push y un **widget** para Scriptable (`static/widget-hoy.js`).
 
 ## Cómo está hecho
@@ -43,6 +45,8 @@ instalable en el iPhone, con un fantasma que reacciona a lo que haces. Corre en 
   - `clean()` lo reconstruye con una forma fija antes de guardar.
   - Cada guardado lleva la versión (`X-Version`): si otra pestaña escribió entre medias, da 409 en vez de pisarlo.
   - Se escribe de forma atómica (temporal + `fsync` + `rename`).
+  - Los ajustes van aparte, en un `ajustes.json` junto a los datos, para que ese guardado no pueda pisarlos.
+  - Otro usuario es otra instancia: el mismo código con otro `.env`, otro puerto y sus propios datos.
 - **Frontend:** HTML, CSS y JavaScript sin compilar, una página por sección.
   - El estilo común («Calma»: tokens, menú inferior, fondo ASCII, hojas) va en `static/calma.css` y `static/calma.js`.
   - Gráficas con Chart.js y animaciones con anime.js; sin ellos, la página funciona igual.
@@ -65,5 +69,6 @@ TODO_PASS=una-clave TODO_SECRET=$(openssl rand -hex 16) uv run uvicorn main:app 
 | `TODO_SUBS` | Suscripciones de Web Push, en su propio fichero. |
 | `VAULT` | Carpeta del vault de Obsidian para Pendientes. |
 | `VAPID_PUB` | Clave pública VAPID de los avisos. |
+| `GASTOS_URL` | Dónde está la app de gastos de esta instancia. |
 
 Pruebas: `uv run python test_todo.py`.

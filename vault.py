@@ -16,7 +16,7 @@ VAULT = Path(os.getenv("VAULT", "/srv/obsidian/Yago_obsidian_vault"))
 PENDIENTES = "Pendientes.md"          # donde caen las tareas sueltas (bot y web)
 LEER = "Recursos/Leer luego"
 FUERA = {"Archivo", "_plantillas", "templates", "_adjuntos", ".obsidian", ".trash", "Inbox"}
-SOLO_LECTURA = ("Curro/",)            # espejo del portátil del trabajo: no se toca
+SOLO_LECTURA = ("Curro/",)            # lo escribe el portátil del trabajo: se tacha, pero no se edita ni se borra
 # el hub lleva la bucket list ("Visit Japan"): son sueños, no pendientes
 SIN_TAREAS = {"Main hub.md", "Tareas.md", "CLAUDE.md"}
 # las notas diarias del curro copian las tareas abiertas al día siguiente: solo vale la última
@@ -241,14 +241,16 @@ def marca(id_, hecha=True):
     hoy = date.today().isoformat()
     for p in notas():
         rel = ruta(p)
-        if rel.startswith(SOLO_LECTURA):
-            continue
-        lineas = p.read_text("utf-8").splitlines(keepends=True)
-        for i, linea in enumerate(lineas):
-            if TAREA.match(linea.rstrip("\n")) and tid(rel, linea) == id_:
-                m = TAREA.match(linea.rstrip("\n"))
+        # lee() no falla con lo que no es UTF-8: en Curro hay de todo y aquí solo se busca
+        for i, linea in enumerate(lee(p).splitlines(keepends=True)):
+            fila = linea.rstrip("\n")
+            # en las diarias del curro las tareas pueden ser viñetas sin casilla: al tacharlas se les pone
+            if p.parent.name == DIARIAS and re.match(r"[-*] (?!\[[ xX]\] )", fila):
+                fila = f"{fila[:2]}[ ] {fila[2:]}"
+            if (m := TAREA.match(fila)) and tid(rel, linea) == id_:
                 resto = HECHA.sub("", m[4]).rstrip()
                 nueva = f"{m[1]}{'x' if hecha else ' '}{m[3]}{resto}" + (f" ✅ {hoy}" if hecha else "")
+                lineas = p.read_text("utf-8").splitlines(keepends=True)
                 lineas[i] = nueva + ("\n" if linea.endswith("\n") else "")
                 escribe(p, "".join(lineas))
                 return tid(rel, nueva)

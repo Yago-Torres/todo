@@ -94,6 +94,19 @@ const calma = (() => {
     ["/comida.html", "Comida", I('<path d="M3 11h18a9 9 0 0 1-18 0zM8 7c0-1.5 1-2 1-3.5M12 7c0-1.5 1-2 1-3.5M16 7c0-1.5 1-2 1-3.5"/>')],
     ["/gastos.html", "Gastos", I('<rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18M16 15h2"/>')],
   ];
+  /* Lo que cada usuario ha elegido en Ajustes: mascota.js lo deja aquí al llegar del servidor, y así la
+     barra y el saludo salen bien desde el primer momento en la página siguiente. */
+  const perfil = () => { try { return JSON.parse(localStorage.getItem("calma-perfil")) || {}; } catch { return {}; } };
+  let rehaz = () => {};
+  function ponPerfil(p) {
+    const antes = JSON.stringify(perfil().barra);
+    try { localStorage.setItem("calma-perfil", JSON.stringify(p)); } catch { /* sin almacenamiento, la barra entera */ }
+    if (JSON.stringify(p.barra) !== antes) rehaz();
+  }
+  function saludo(hora) {
+    const n = perfil().nombre;
+    return `${hora < 6 || hora >= 21 ? "Buenas noches" : hora < 14 ? "Buenos días" : "Buenas tardes"}${n ? `, ${n}` : ""}`;
+  }
   function menu() {
     const nav = [...document.querySelectorAll("nav")].find(n => n.querySelector('a[href="/pendientes.html"], a[href="/entreno.html"], a[href="/carrera.html"]'));
     if (!nav) return;
@@ -109,11 +122,13 @@ const calma = (() => {
     const gota = goo.lastChild;
     nav.className = "c-dock";   // fuera las clases de cada página (.menu-todo): manda calma.css
     nav.setAttribute("aria-label", "Menú");
-    nav.replaceChildren(goo, ...MENU.map(([href, nombre, icono]) => {
+    const enlaces = () => MENU.filter(([href]) => href === "/" || !perfil().barra || perfil().barra.includes(href)).map(([href, nombre, icono]) => {
       const a = Object.assign(document.createElement("a"), {href, innerHTML: `${icono}<span>${nombre}</span>`});
       if (href === aqui) a.setAttribute("aria-current", "page");
       return a;
-    }));
+    });
+    const pinta = () => { nav.replaceChildren(goo, ...enlaces()); nav.style.setProperty("--n", nav.querySelectorAll("a").length); };
+    pinta();
     document.body.append(nav);   // fuera de la cabecera: el mismo sitio en todas las páginas
     const actual = () => nav.querySelector('a[aria-current="page"]');
     const pon = (a, animada) => {
@@ -122,6 +137,7 @@ const calma = (() => {
     };
     const coloca = () => { gota.hidden = !actual(); if (actual()) pon(actual(), false); };
     coloca();
+    rehaz = () => { pinta(); coloca(); };
     addEventListener("resize", coloca);
     nav.addEventListener("click", e => {
       const a = e.target.closest("a");
@@ -263,5 +279,5 @@ const calma = (() => {
     c.style.setProperty("--y", e.clientY - r.top + "px");
   }, {passive: true});
 
-  return {transicion, cuenta, fiesta, vibra, onda};
+  return {transicion, cuenta, fiesta, vibra, onda, perfil, ponPerfil, saludo};
 })();

@@ -1,3 +1,4 @@
+import os
 import time
 from datetime import date
 
@@ -149,7 +150,19 @@ def test_vault():
     nuevo = vault.marca(ts[0]["id"])
     assert nuevo and "- [x] llamar al dentista ⏰ 10:00 📅 2026-10-30 ✅" in (vault.VAULT / "Pendientes.md").read_text("utf-8")
     assert vault.marca(nuevo, False) == ts[0]["id"]          # deshacer devuelve el id de antes
-    assert vault.marca(ts[4]["id"]) is None                  # Curro no se toca
+    # lo del curro se tacha (y se destacha), pero no se edita ni se borra
+    n = vault.marca(ts[4]["id"])
+    assert "- [x] cosa del curro ✅" in (vault.VAULT / "Curro" / "Jira.md").read_text("utf-8")
+    assert vault.marca(n, False) == ts[4]["id"]
+    # una viñeta sin casilla de la última daily: al tacharla se le pone
+    diaria = vault.VAULT / "Curro" / "Daily notes" / "2026-12-01 Martes.md"
+    diaria.write_text("## TODO's today\n\n- revisar PR\n- [ ] otra\n\nun apunte\n", "utf-8")
+    t = next(x for x in vault.tareas() if x["t"] == "revisar PR")
+    n = vault.marca(t["id"])
+    assert diaria.read_text("utf-8").startswith("## TODO's today\n\n- [x] revisar PR ✅") and "un apunte" in diaria.read_text("utf-8")
+    assert "revisar PR" not in [x["t"] for x in vault.tareas()]
+    assert vault.marca(n, False) and "revisar PR" in [x["t"] for x in vault.tareas()]
+    diaria.unlink()
     # editar: cambia texto, día y hora en su sitio; la prioridad del plugin Tasks se queda
     e = vault.edita(ts[1]["id"], " rotar  el token ", "2026-11-03", "09:30")
     assert (e["t"], e["due"], e["hora"]) == ("rotar el token", "2026-11-03", "09:30"), e
@@ -243,6 +256,10 @@ def test_carrera():
 
 
 def test_frontal():
+    # la copia de Aitana no tiene la clave de los otros gastos: ni botones ni forma de saltar a ellos
+    os.environ.pop("GASTOS_AITANA_PASS", None)
+    assert 'href="/gastos-aitana.html" style' not in main.frontal("gastos").body.decode()
+    os.environ["GASTOS_AITANA_PASS"] = "x"
     import tempfile
     from pathlib import Path
     f = Path(tempfile.mkdtemp()) / "index.html"
@@ -313,6 +330,15 @@ def test_portada():
                             "plan": {"2026-10-25": ["a", "b"]}, "log": {"2026-10-25": ["a"], "2026-10-27": ["a"], "2026-10-22": ["b"]}}), "2026-10-26")
     assert o == {"ayer": [{"id": "b", "n": "B"}], "sin_venir": 1}, o
     assert main.olvidos(clean({}), "2026-10-26") == {"ayer": [], "sin_venir": 0}
+    # ajustes: lo que falta, por defecto; lo imposible, fuera; sin la clave de una app, esa sección no se puede activar
+    a = main.limpia_ajustes({"nombre": "  Ana   Prueba ", "modulos": {"entreno": {"activo": False}, "salud": {"barra": False}, "comida": {"activo": True}},
+                             "mascota": {"ancho": 999, "alto": 60, "color": "red\"><script>", "extra": "x", "rubor": True}, "otra": 1})
+    assert a["nombre"] == "Ana Prueba" and a["modulos"]["entreno"] == {"activo": False, "barra": True}, a
+    assert a["modulos"]["salud"] == {"activo": True, "barra": False} and a["modulos"]["comida"]["activo"] is bool(os.getenv("COMIDA_PASS")), a
+    assert (a["mascota"]["ancho"], a["mascota"]["alto"], a["mascota"]["color"], a["mascota"]["extra"], a["mascota"]["rubor"]) == (26, 60, "#CDE77F", "", True), a
+    assert "otra" not in a and main.limpia_ajustes(a) == a
+    assert a["mascota"]["tipo"] == "fantasma" and main.limpia_ajustes({"mascota": {"tipo": "flor"}})["mascota"]["tipo"] == "flor"
+    assert main.limpia_ajustes({"mascota": {"tipo": "<script>"}})["mascota"]["tipo"] == "fantasma"
     # lo planificado y sin hacer arriba, luego lo planificado hecho, luego el resto
     assert [x["id"] for x in h["habitos"]] == ["a", "b", "c"], h
     assert h["peso"] == {"dia": "2026-10-25", "kg": 80, "media": 80.5,
@@ -387,6 +413,22 @@ def test_sueno():
     assert a["nota"] == {"total": 85, "duracion": 42, "hora": 30, "interrupciones": 13}, a["nota"]
     assert i["noches"][-1]["fases"] == {"awake": 26, "rem": 60, "core": 262, "deep": 80}, i["noches"][-1]
     assert len(i["noches"]) == 30 and i["noches"][0]["fases"] is None and [t[0] for t in a["tramos"]][0] == "core"
+    # dos noches en una tanda: cada una al día en que acabó, y nada al día en que corre el atajo
+    r = main.registra_salud({"fases": "Core|09.11.26, 00:19|300\nCore|09.11.26, 05:19|100\nCore|09.11.26, 23:30|420", "dia": "2026-11-12"}, None, "Bearer x")
+    s = clean(json.loads(main.DB.read_text()))
+    assert (s["salud"]["2026-11-09"]["sueno"], s["salud"]["2026-11-10"]["sueno"]) == (400, 420), s["salud"]
+    assert "2026-11-12" not in s["salud"] and "(2 noches)" in r["texto"], r
+    assert len(s["salud"]["2026-11-09"]["fases"]) == 2
+    # una noche que llega cortada no pisa a la entera
+    main.registra_salud({"fases": "Core|09.11.26, 05:19|100"}, None, "Bearer x")
+    assert clean(json.loads(main.DB.read_text()))["salud"]["2026-11-09"]["sueno"] == 400
+    # pasos por día: cada uno al suyo, con los miles escritos o no; el día más viejo no baja
+    main.registra_salud({"pasos": 7000, "dia": "2026-11-09"}, None, "Bearer x")
+    r = main.registra_salud({"pasos": "08.11.26, 00:00|500\n09.11.26, 00:00|9.078\n10.11.26|1200", "dia": "2026-11-10"}, None, "Bearer x")
+    s = clean(json.loads(main.DB.read_text()))
+    assert [s["salud"][d]["pasos"] for d in ("2026-11-08", "2026-11-09", "2026-11-10")] == [7000, 9078, 1200], s["salud"]
+    assert "9.078 pasos ayer · 1.200 pasos hoy" in r["texto"], r
+    assert main.lee_pasos("9078", "2026-11-09") == {"2026-11-09": 9078} and main.lee_pasos("nada|x", "2026-11-09") == {}
     # acostarse dos horas más tarde de lo normal se paga entero en la hora
     assert main.nota([["core", "2026-10-29T03:00", 480]], [main.desde_mediodia("2026-10-28T01:00")])["hora"] == 0
 
