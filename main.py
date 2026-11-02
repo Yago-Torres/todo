@@ -144,6 +144,8 @@ def sesion_gym(s):
         "t1": entero(s.get("t1"), 0, 2**42, 0),
         "min": entero(s.get("min"), 0, 600, 0),
         "fin": bool(s.get("fin")),
+        # ejercicios de la rutina que hoy no se hacen (gimnasio lleno); los añadidos van en "ej" sin más
+        "quita": [q for x in lst(s.get("quita"))[:30] if (q := str(x or "").strip()[:80])],
         "ej": [
             {"ej": str(e.get("ej") or "").strip()[:80],
              # cada serie hecha: [kilos, repeticiones] (o segundos, en la plancha)
@@ -379,6 +381,26 @@ def put_state(state: dict, response: Response, todo_sesion: str = Cookie(None), 
     guarda(DB, json.dumps(state, ensure_ascii=False))
     response.headers["X-Version"] = version()
     return state
+
+
+# ---------- marcar un hábito sin el estado entero ----------
+# Dice cómo queda el hábito ese día, no «cámbialo»: una marca hecha sin red puede llegar tarde o dos
+# veces sin estropear nada, y no lleva X-Version porque no pisa nada más (static/sinred.js).
+@app.post("/api/marca")
+def marca_habito(a: dict, response: Response, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    dia, h = day(a.get("dia")), str(a.get("id") or "")
+    if not dia:
+        raise HTTPException(400, "Falta el día")
+    antes = version()
+    estado = clean(dct(json.loads(DB.read_text("utf-8")))) if DB.exists() else clean({})
+    l = set(estado["log"].get(dia, [])) - {h}
+    estado["log"][dia] = sorted(l | {h} if a.get("hecho") else l)
+    estado = clean(estado)   # un hábito borrado mientras esperaba se cae aquí
+    guarda(DB, json.dumps(estado, ensure_ascii=False))
+    # con «antes» la página sabe si nadie más escribió entre medias y puede quedarse la versión nueva
+    response.headers["X-Version"] = version()
+    return {"dia": dia, "hechos": estado["log"].get(dia, []), "antes": antes, "version": version()}
 
 
 # ---------- registrar un entreno de una sola llamada ----------

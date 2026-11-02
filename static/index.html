@@ -23,6 +23,7 @@
 <link rel="stylesheet" href="/calma.css?v=1fc40cef">
 <script src="/calma.js?v=1fc40cef"></script>
 <script src="/mascota.js?v=4"></script>
+<script src="/sinred.js?v=1"></script>
 <!-- anime.js servido desde aquí, sin CDN; si no carga, la página funciona igual sin animaciones -->
 <script src="/anime-4.5.0.min.js"></script>
 <script src="/anima.js?v=1fc40cef"></script>
@@ -430,10 +431,15 @@ function animaEntrada() {
 }
 
 function marcar(d, h) {
-  const l = hechos(d);
-  S.log[d] = l.includes(h) ? l.filter(x => x !== h) : [...l, h];
+  const si = !hecho(d, h);
+  S.log[d] = si ? [...hechos(d), h] : hechos(d).filter(x => x !== h);
   if (!S.log[d].length) delete S.log[d];
-  guardar();
+  render();
+  // va sola, sin el estado entero: sin red se apunta y sale al volver (sinred.js)
+  sinred.marca(d, h, si).then(st => {
+    if (st === 401) return puerta(true);
+    $("#estado").textContent = st === 200 ? "Guardado" : "Sin red: se guarda al volver";
+  });
   if (d === sel && hecho(d, h)) animaMarca(h);
   // todo lo planificado de hoy hecho (o todos los hábitos, si no había plan): confeti, una vez al día
   const objetivo = planeados(HOY).length ? planeados(HOY) : S.habits.map(x => x.id);
@@ -501,9 +507,19 @@ async function refresca() {
   render();
 }
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && !sinGuardar) refresca(); });
+// cada marca que llega trae la versión de antes y la de después: si nadie escribió entre medias, la nueva es la nuestra
+addEventListener("marca-enviada", ({detail: m}) => {
+  if (m.antes === version) version = m.version;
+  else if (!sinGuardar) refresca();
+  fantasma.refresca();
+});
 
-// un data.json viejo no trae las claves nuevas
-const normaliza = s => ({todos: [], habits: [], log: {}, plan: {}, rutinas: [], sesion: {}, peso: {}, actividad: {}, ...s});
+// un data.json viejo no trae las claves nuevas; y encima va lo marcado sin red que aún no ha salido
+const normaliza = s => {
+  const n = {todos: [], habits: [], log: {}, plan: {}, rutinas: [], sesion: {}, peso: {}, actividad: {}, ...s};
+  sinred.aplica(n.log);
+  return n;
+};
 
 // ---------- la puerta ----------
 function puerta(mostrar, msg) {
@@ -526,6 +542,7 @@ async function cargar() {
     render();
     animaEntrada();
     marcaDesdeURL();
+    sinred.envia();   // por si quedó algo esperando a que entraras
   } catch (e) {
     $("#estado").textContent = "Sin conexión";
     render();

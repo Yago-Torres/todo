@@ -23,6 +23,7 @@
 <script src="/anime-4.5.0.min.js"></script>
 <script src="/anima.js?v=1fc40cef"></script>
 <script src="/mascota.js?v=4"></script>
+<script src="/sinred.js?v=1"></script>
 <script src="/hoja.js?v=1fc40cef"></script>
 <style>
   /* Estilo Calma: tokens y componentes en /calma.css (fuente: ~/estilo). Aquí solo lo de la portada.
@@ -403,17 +404,11 @@ async function marca(h) {
     anima.salta(b.querySelector(".bx"));
     anime.animate(anime.svg.createDrawable(b.querySelector("path")), {draw: ["0 0", "0 1"], duration: 260, delay: 40, ease: "outQuad"});
   }
-  try {
-    // el estado entero, como hace index.html: leer, cambiar el día de hoy y guardar
-    const s = await api("/api/state");
-    const l = s.log[H.hoy] || [];
-    s.log[H.hoy] = h.hecho ? [...new Set([...l, h.id])] : l.filter(x => x !== h.id);
-    await api("/api/state", {method: "PUT", body: JSON.stringify(s)});
-    if (H.habitos.every(x => x.hecho)) calma.fiesta("todo-dia");
-  } catch (e) {
-    if (e.message !== "401") toast(`No se ha guardado: ${e.message}`);
-    cargar();
-  }
+  // va sola, sin el estado entero: sin red se apunta y sale al volver (sinred.js)
+  const st = await sinred.marca(H.hoy, h.id, h.hecho);
+  if (st === 401) return puerta(true);
+  if (st !== 200) toast("Sin red: se guarda al volver");
+  if (H.habitos.every(x => x.hecho)) calma.fiesta("todo-dia");
 }
 
 // ---------- tareas en pila: tocar una la abre para cambiarla; «+» apunta otra ----------
@@ -676,7 +671,11 @@ async function cargar() {
   try {
     const primera = !H;
     H = await api("/api/hoy");
+    const dia = new Date().toLocaleDateString("sv");
+    if (H.hoy < dia) { H.hoy = dia; for (const h of H.habitos) h.hecho = false; }   // copia de otro día (sin red): hoy aún nada
+    for (const h of H.habitos) h.hecho = sinred.hecho(H.hoy, h.id, h.hecho);
     puerta(false);
+    sinred.envia();   // por si quedó algo esperando a que entraras
     primera ? pinta() : calma.transicion(pinta);
     if (primera) {   // la entrada común a todas las páginas; aquí además las barras y los anillos
       anima.entrada();
@@ -697,6 +696,7 @@ $("#f-clave").onsubmit = async e => {
   else puerta(true, r && r.status === 401 ? "Contraseña incorrecta" : "No se pudo conectar");
 };
 addEventListener("visibilitychange", () => document.visibilityState === "visible" && H && cargar());
+addEventListener("marca-enviada", e => e.detail.cola && H && cargar());   // lo apuntado sin red ya está en el servidor
 cargar();
 </script>
 <style>

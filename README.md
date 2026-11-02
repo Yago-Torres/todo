@@ -22,10 +22,12 @@ instalable en el iPhone, con un fantasma que reacciona a lo que haces. Corre en 
 - **Hoy** — la portada: tres anillos (hábitos, pasos y sueño), cifras con su tendencia de 7 días,
   las tareas que vencen, el año en puntos y tarjetas de las otras apps (comida y gastos).
 - **Hábitos** — marcar el día, rachas con llama, objetivo semanal por hábito, calendario tipo
-  mapa de calor de GitHub y planificación arrastrando hábitos a los días.
+  mapa de calor de GitHub y planificación arrastrando hábitos a los días. Se marcan también sin red:
+  quedan en el móvil y se mandan al volver (`static/sinred.js`), y la app abre con la última copia (`static/sw.js`).
 - **Entreno**
   - *Modo entreno* serie a serie: los kilos de la última vez ya puestos, descanso con cuenta atrás y pitido,
-    y la pantalla encendida mientras entrenas (Wake Lock).
+    y la pantalla encendida mientras entrenas (Wake Lock). Si el gimnasio está lleno, se quitan o añaden
+    ejercicios solo para ese día, sin tocar la rutina.
   - *Doble progresión*: si la última vez todas las series llegaron al tope del rango, sugiere subir peso.
   - *Músculos de la semana* en un mapa delante/detrás y en barras, a partir de los ejercicios hechos.
   - *Progreso* por ejercicio (1RM estimado con Epley, récords) e historial.

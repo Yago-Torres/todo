@@ -433,6 +433,36 @@ def test_sueno():
     assert main.nota([["core", "2026-10-29T03:00", 480]], [main.desde_mediodia("2026-10-28T01:00")])["hora"] == 0
 
 
+def test_marca():
+    import tempfile
+    from pathlib import Path
+    from fastapi import Response
+    main.PASS, main.SECRET = "x", b"s"
+    main.DB = Path(tempfile.mkdtemp()) / "data.json"
+    main.put_state({"habits": [{"id": "a", "n": "Leer"}, {"id": "b", "n": "Correr"}]}, Response(), None, "Bearer x", None)
+    v, r = main.version(), Response()
+    m = main.marca_habito({"dia": "2026-11-02", "id": "a", "hecho": True}, r, None, "Bearer x")
+    assert m["hechos"] == ["a"] and m["antes"] == v and m["version"] == r.headers["X-Version"] == main.version(), m
+    # dice cómo queda, no lo cambia: repetida (llegó tarde, salió dos veces) no se deshace
+    assert main.marca_habito({"dia": "2026-11-02", "id": "a", "hecho": True}, Response(), None, "Bearer x")["hechos"] == ["a"]
+    main.marca_habito({"dia": "2026-11-02", "id": "b", "hecho": True}, Response(), None, "Bearer x")
+    assert main.marca_habito({"dia": "2026-11-02", "id": "a", "hecho": False}, Response(), None, "Bearer x")["hechos"] == ["b"]
+    # un hábito borrado mientras la marca esperaba sin red se cae, sin error
+    assert main.marca_habito({"dia": "2026-11-03", "id": "zz", "hecho": True}, Response(), None, "Bearer x")["hechos"] == []
+    try:
+        main.marca_habito({"id": "a", "hecho": True}, Response(), None, "Bearer x")
+        assert False
+    except main.HTTPException as e:
+        assert e.status_code == 400
+
+
+def test_quita():
+    s = main.sesion_gym({"id": "s", "quita": ["Press banca ", "", None, "Fondos"], "ej": [{"ej": "Remo", "series": []}]})
+    # lo quitado de hoy se guarda; un ejercicio añadido sin series todavía, también
+    assert s["quita"] == ["Press banca", "Fondos"] and s["ej"] == [{"ej": "Remo", "series": []}], s
+    assert main.sesion_gym({"id": "s"})["quita"] == []
+
+
 if __name__ == "__main__":
     test_sueno()
     test_salud()
@@ -445,4 +475,6 @@ if __name__ == "__main__":
     test_portada()
     test_guarda()
     test_version()
+    test_marca()
+    test_quita()
     print("ok")

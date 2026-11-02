@@ -139,7 +139,7 @@
 
   /* ---------- hojas a pantalla completa ---------- */
   /* por encima del menú de abajo (150): entrenando no se navega */
-  .hoja { position: fixed; inset: 0; z-index: 160; background: var(--fondo); display: none; grid-template-rows: auto minmax(0, 1fr) auto; }
+  .hoja { position: fixed; inset: 0; z-index: 160; background: var(--fondo); display: none; grid-template-rows: auto minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr); }
   .hoja[data-on] { display: grid; }
   .hoja > header { background: var(--carta); border-bottom: 1px solid var(--linea); padding: 14px 16px; padding-top: calc(14px + env(safe-area-inset-top, 0px)); display: flex; align-items: center; gap: 10px; }
   .hoja > header b { flex: 1; min-width: 0; font-size: 18px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -164,6 +164,13 @@
   .ej .cab b { font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
   .ej .cab span { font-size: 13px; color: var(--suave); }
   .ej .cab .c-chip { margin-left: auto; }
+  .ej .cab .quita { margin-left: auto; }
+  .ej .cab .c-chip + .quita { margin-left: 0; }
+  /* al final de la sesión: lo quitado hoy, para recuperarlo, y añadir otro ejercicio */
+  .ej.pie .c-chip { margin: 0 6px 6px 0; }
+  .anade { display: flex; gap: 8px; margin-top: 4px; }
+  .anade input { flex: 1; min-width: 0; min-height: 44px; border: 1px solid var(--linea); border-radius: var(--r-s); background: var(--carta); padding: 0 10px; font-size: 16px; color: var(--texto); }
+  .anade input:focus { outline: none; border-color: var(--acento); }
   .ej .nota { font-size: 13px; color: var(--suave); line-height: 1.45; margin: 4px 0 8px; }
   .ej .antes { font-size: 12px; color: var(--tenue); margin: 6px 0 0; font-variant-numeric: tabular-nums; }
   .serie { display: grid; grid-template-columns: 1.6em minmax(0, 1fr) auto minmax(0, 1fr) auto 48px; gap: 8px; align-items: center; margin-top: 6px; }
@@ -634,15 +641,67 @@ function abre(s) {
 
 const ejDe = (s, ej) => s.ej.find(e => e.ej === ej) || (s.ej.push({ej, series: []}), s.ej.at(-1));
 
+// lo de hoy: la rutina sin lo quitado (gimnasio lleno) y, detrás, lo añadido. La rutina no cambia
+// cómo se hizo un ejercicio en alguna rutina: series y repes de partida para uno añadido
+const molde = ej => S.rutinas.flatMap(r => r.bloques).find(b => b.ej === ej) || {ej, series: 3, repes: ""};
+function bloquesHoy() {
+  const de = new Set(A.r.bloques.map(b => b.ej)), quita = new Set(A.s.quita || []);
+  return [...A.r.bloques.filter(b => !quita.has(b.ej)),
+          ...A.s.ej.filter(e => !de.has(e.ej)).map(e => ({...molde(e.ej), ej: e.ej, extra: true}))];
+}
+const ejercicios = () => [...new Set([...S.rutinas.flatMap(r => r.bloques.map(b => b.ej)), ...sesiones().flatMap(x => x.s.ej.map(e => e.ej))])]
+  .sort((a, b) => a.localeCompare(b, "es"));
+
+function quitaHoy(b) {
+  if (b.extra) A.s.ej = A.s.ej.filter(e => e.ej !== b.ej);
+  else A.s.quita = [...new Set([...(A.s.quita || []), b.ej])];
+  guardar(false);
+  pintaSesion();
+}
+function pieSesion() {
+  const pie = el("div", "ej pie"), quitados = A.s.quita || [];
+  if (quitados.length) {
+    pie.append(el("p", "nota", "Quitados hoy (tócalo para volver a ponerlo):"));
+    for (const ej of quitados) {
+      const c = el("button", "c-chip", "↺ " + ej);
+      c.onclick = () => { A.s.quita = quitados.filter(x => x !== ej); guardar(false); pintaSesion(); };
+      pie.append(c);
+    }
+  }
+  const f = el("form", "anade"), inp = Object.assign(el("input"), {placeholder: "Añadir un ejercicio hoy", required: true, enterKeyHint: "done"});
+  inp.setAttribute("list", "ej-todos");
+  inp.setAttribute("aria-label", "Ejercicio que añadir a la sesión de hoy");
+  const dl = $("#ej-todos") || document.body.appendChild(Object.assign(el("datalist"), {id: "ej-todos"}));
+  dl.replaceChildren(...ejercicios().map(n => Object.assign(el("option"), {value: n})));
+  f.append(inp, el("button", "c-btn mini", "Añadir"));
+  f.onsubmit = ev => {
+    ev.preventDefault();
+    const ej = inp.value.trim().replace(/\s+/g, " ");
+    if (!ej || bloquesHoy().some(b => b.ej === ej)) return pintaSesion();
+    if (A.r.bloques.some(b => b.ej === ej)) A.s.quita = (A.s.quita || []).filter(x => x !== ej);   // era de la rutina: vuelve
+    else A.s.ej.push({ej, series: []});
+    guardar(false);
+    pintaSesion();
+  };
+  pie.append(f);
+  return pie;
+}
+
 function pintaSesion() {
   const c = $("#hs-lista");
   const y = c.scrollTop;
-  c.replaceChildren(...A.r.bloques.map(b => {
+  c.replaceChildren(...bloquesHoy().map(b => {
     const e = A.s.ej.find(e => e.ej === b.ej) || {ej: b.ej, series: []};
     const sg = sugerencia(b, A.s), r = rango(b.repes), seg = !!b.seg && !b.repes;
     const caja = el("div", "ej"), cab = el("div", "cab");
     cab.append(el("b", null, b.ej), el("span", null, `${b.series}×${b.repes || (seg ? b.seg + " s" : "–")}`));
     if (sg.sube) cab.append(el("span", "c-chip ok", `↑ sube a ${num(sg.kg)} kg`));
+    if (!e.series.length) {   // con alguna serie hecha ya no se quita: se hizo
+      const q = el("button", "c-btn mini quita", "Quitar");
+      q.setAttribute("aria-label", `Quitar ${b.ej} de la sesión de hoy`);
+      q.onclick = () => quitaHoy(b);
+      cab.append(q);
+    }
     const txt = el("div", "txt"), f = foto(b.ej);
     txt.append(cab);
     if (b.nota) txt.append(el("p", "nota", b.nota));
@@ -654,7 +713,7 @@ function pintaSesion() {
     caja.append(m);
     if (sg.u) caja.append(el("p", "antes", "La última vez: " + sg.u.map(([k, n]) => (k ? `${num(k)}×${n}` : `${n}`)).join(" · ")));
     return caja;
-  }));
+  }), pieSesion());
   c.scrollTop = y;
 }
 
