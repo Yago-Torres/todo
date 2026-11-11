@@ -3,8 +3,9 @@ import AppIntents
 import SwiftUI
 import WidgetKit
 
-/// El entreno en la isla dinámica y en la pantalla de bloqueo: ejercicio, serie y, en el descanso, la cuenta atrás
-/// (Text(timerInterval:) la pinta el sistema, sin actualizaciones). Estilo Calma oscuro.
+/// El entreno en la isla dinámica y en la pantalla de bloqueo: ejercicio, serie y, en el descanso, la cuenta atrás.
+/// Text(timerInterval:) y ProgressView(timerInterval:) los anima el sistema solos, sin actualizaciones: son lo único
+/// que se mueve en una Live Activity. Estilo Calma oscuro (la isla siempre es negra).
 struct EntrenoLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: EntrenoActividad.self) { contexto in
@@ -25,39 +26,26 @@ struct EntrenoLiveActivity: Widget {
                     .foregroundStyle(Tono.suave)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    if enDescanso, let fin = e.finDescanso {
-                        EntrenoVista.cuenta(fin)
-                            .font(.title2.weight(.semibold).monospacedDigit())
-                            .multilineTextAlignment(.trailing)
-                            .foregroundStyle(Tono.acento)
-                    } else if !e.hecho {
-                        EntrenoVista.serie(e)
-                            .font(.title2.weight(.semibold))
-                            .foregroundStyle(Tono.texto)
+                    if enDescanso {
+                        Text("Descanso")
+                            .font(.caption)
+                            .foregroundStyle(Tono.suave)
                     }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    HStack(alignment: .center, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(e.ejercicio)
-                                .font(.headline)
-                                .foregroundStyle(Tono.texto)
-                                .lineLimit(1)
-                            EntrenoVista.linea(e, conSerie: enDescanso)
-                                .font(.subheadline)
-                                .foregroundStyle(Tono.suave)
-                                .lineLimit(1)
-                        }
-                        Spacer(minLength: 0)
-                        EntrenoVista.boton(e)
-                    }
+                    EntrenoVista.abierta(e, enDescanso: enDescanso)
                 }
             } compactLeading: {
-                Image(systemName: "dumbbell.fill")
-                    .foregroundStyle(Tono.acento)
+                if enDescanso, let fin = e.finDescanso {
+                    EntrenoVista.anillo(e, fin: fin)
+                } else {
+                    Image(systemName: "dumbbell.fill")
+                        .foregroundStyle(Tono.acento)
+                }
             } compactTrailing: {
                 if enDescanso, let fin = e.finDescanso {
                     EntrenoVista.cuenta(fin)
+                        .font(.body.weight(.semibold).monospacedDigit())
                         .multilineTextAlignment(.trailing)
                         .frame(maxWidth: 44)
                         .foregroundStyle(Tono.acento)
@@ -70,10 +58,7 @@ struct EntrenoLiveActivity: Widget {
                 }
             } minimal: {
                 if enDescanso, let fin = e.finDescanso {
-                    EntrenoVista.cuenta(fin)
-                        .font(.caption2.monospacedDigit())
-                        .minimumScaleFactor(0.7)
-                        .foregroundStyle(Tono.acento)
+                    EntrenoVista.anillo(e, fin: fin)
                 } else {
                     Image(systemName: "dumbbell.fill")
                         .foregroundStyle(Tono.acento)
@@ -86,7 +71,8 @@ struct EntrenoLiveActivity: Widget {
 
 private enum Tono {
     static let fondo = Color(hex: "#171A16")
-    static let acento = Color(hex: "#2E8B57")
+    static let acento = Color(hex: "#CDE77F")        // acento Calma oscuro
+    static let acentoTexto = Color(hex: "#26300A")   // texto sobre el acento
     static let texto = Color(hex: "#EEF0E8")
     static let suave = Color(hex: "#A3A892")
 }
@@ -112,24 +98,19 @@ private struct EntrenoBloqueo: View {
             .foregroundStyle(Tono.suave)
 
             HStack(alignment: .center, spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(e.ejercicio)
-                        .font(.headline)
-                        .foregroundStyle(Tono.texto)
-                        .lineLimit(1)
-                    EntrenoVista.linea(e, conSerie: true)
-                        .font(.subheadline)
-                        .foregroundStyle(Tono.suave)
-                        .lineLimit(1)
-                }
+                EntrenoVista.cabecera(e, talla: .title2)
                 Spacer(minLength: 0)
                 if enDescanso, let fin = e.finDescanso {
                     EntrenoVista.cuenta(fin)
-                        .font(.system(size: 36, weight: .semibold, design: .rounded).monospacedDigit())
+                        .font(.system(size: 40, weight: .semibold, design: .rounded).monospacedDigit())
                         .multilineTextAlignment(.trailing)
                         .foregroundStyle(Tono.acento)
-                        .frame(maxWidth: 110, alignment: .trailing)
+                        .frame(maxWidth: 120, alignment: .trailing)
                 }
+            }
+
+            if enDescanso, let fin = e.finDescanso {
+                EntrenoVista.barra(e, fin: fin)
             }
 
             if !e.hecho {
@@ -140,6 +121,7 @@ private struct EntrenoBloqueo: View {
             }
         }
         .padding(16)
+        .animation(.spring(duration: 0.45), value: e.serie)
     }
 }
 
@@ -156,34 +138,95 @@ private enum EntrenoVista {
             .monospacedDigit()
     }
 
+    /// Lo que dura el descanso entero, para que el anillo y la barra empiecen llenos. Si el estado no trae los
+    /// segundos (o el fin queda más lejos), cuenta desde ahora. Siempre inicio < fin.
+    static func intervalo(_ e: EntrenoActividad.ContentState, fin: Date) -> ClosedRange<Date> {
+        let dura = TimeInterval(e.descanso > 0 ? e.descanso : 90)
+        var inicio = min(fin.addingTimeInterval(-dura), Date())
+        if inicio >= fin { inicio = fin.addingTimeInterval(-1) }
+        return inicio...fin
+    }
+
+    /// Mini anillo que se vacía con el descanso (lo anima el sistema).
+    static func anillo(_ e: EntrenoActividad.ContentState, fin: Date) -> some View {
+        ProgressView(timerInterval: intervalo(e, fin: fin), countsDown: true) {
+            EmptyView()
+        } currentValueLabel: {
+            EmptyView()
+        }
+        .progressViewStyle(.circular)
+        .labelsHidden()
+        .tint(Tono.acento)
+    }
+
+    /// La misma cuenta en barra, para la pantalla de bloqueo.
+    static func barra(_ e: EntrenoActividad.ContentState, fin: Date) -> some View {
+        ProgressView(timerInterval: intervalo(e, fin: fin), countsDown: true) {
+            EmptyView()
+        } currentValueLabel: {
+            EmptyView()
+        }
+        .progressViewStyle(.linear)
+        .labelsHidden()
+        .tint(Tono.acento)
+    }
+
     static func serie(_ e: EntrenoActividad.ContentState) -> some View {
         Text("\(e.serie)/\(e.total)")
             .monospacedDigit()
             .contentTransition(.numericText(value: Double(e.serie)))
     }
 
-    /// «Serie 3/4 · 70 kg · 8-10 rep», o «Hecho» si no queda serie conocida.
-    static func linea(_ e: EntrenoActividad.ContentState, conSerie: Bool) -> some View {
-        var partes: [String] = []
-        if e.hecho {
-            partes.append("Hecho")
-        } else if conSerie {
-            partes.append("Serie \(e.serie)/\(e.total)")
+    /// «Press banca · 70 kg · 8-10 rep» y, debajo y grande, «Serie 3 de 4» (o «Hecho»).
+    static func cabecera(_ e: EntrenoActividad.ContentState, talla: Font) -> some View {
+        let ejercicio = e.detalle.isEmpty || e.hecho ? e.ejercicio : "\(e.ejercicio) · \(e.detalle)"
+        let serie = e.hecho ? "Hecho" : "Serie \(e.serie) de \(e.total)"
+        return VStack(alignment: .leading, spacing: 1) {
+            Text(ejercicio)
+                .font(.footnote)
+                .foregroundStyle(Tono.suave)
+                .lineLimit(1)
+            Text(serie)
+                .font(talla.weight(.bold))
+                .monospacedDigit()
+                .foregroundStyle(Tono.texto)
+                .lineLimit(1)
+                .contentTransition(.numericText(value: Double(e.serie)))
         }
-        if !e.hecho && !e.detalle.isEmpty { partes.append(e.detalle) }
-        return Text(partes.joined(separator: " · "))
-            .contentTransition(.numericText(value: Double(e.serie)))
+    }
+
+    /// La isla abierta: cabecera arriba; abajo el reloj grande en acento y «Serie hecha».
+    static func abierta(_ e: EntrenoActividad.ContentState, enDescanso: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            cabecera(e, talla: .title3)
+            HStack(alignment: .bottom, spacing: 8) {
+                if enDescanso, let fin = e.finDescanso {
+                    cuenta(fin)
+                        .font(.system(size: 40, weight: .semibold, design: .rounded).monospacedDigit())
+                        .foregroundStyle(Tono.acento)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .frame(maxWidth: 150, alignment: .leading)
+                }
+                Spacer(minLength: 0)
+                boton(e)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(.spring(duration: 0.45), value: e.serie)
     }
 
     @ViewBuilder static func boton(_ e: EntrenoActividad.ContentState) -> some View {
         if !e.hecho {
             Button(intent: SerieHechaIntent()) {
                 Label("Serie hecha", systemImage: "checkmark")
-                    .font(.subheadline.weight(.semibold))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(Tono.acentoTexto)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Tono.acento, in: Capsule())
             }
-            .buttonStyle(.borderedProminent)
-            .buttonBorderShape(.capsule)
-            .tint(Tono.acento)
+            .buttonStyle(.plain)
         }
     }
 }

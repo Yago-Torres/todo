@@ -34,7 +34,7 @@ struct Voz: View {
                 Button {
                     Task { await charla.empieza() }
                 } label: {
-                    Indicador(fase: charla.fase, acento: acento, sinMovimiento: sinMovimiento)
+                    Orbe(charla: charla, sinMovimiento: sinMovimiento)
                 }
                 .buttonStyle(.plain)
                 .disabled(!charla.puedeReintentar)
@@ -79,29 +79,6 @@ struct Voz: View {
 }
 
 // MARK: vistas
-
-private struct Indicador: View {
-    let fase: Conversacion.Fase
-    let acento: Color
-    let sinMovimiento: Bool
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(acento.opacity(0.14))
-                .frame(width: 168, height: 168)
-            Circle()
-                .fill(acento)
-                .frame(width: 112, height: 112)
-            Image(systemName: fase.simbolo)
-                .font(.system(size: 44, weight: .semibold))
-                .foregroundStyle(.white)
-                .symbolEffect(.variableColor.iterative, isActive: fase == .escuchando && !sinMovimiento)
-                .symbolEffect(.pulse, isActive: fase == .pensando && !sinMovimiento)
-        }
-        .accessibilityHidden(true)
-    }
-}
 
 private struct Turnos: View {
     let turnos: [Conversacion.Turno]
@@ -166,6 +143,9 @@ final class Conversacion: NSObject, AVSpeechSynthesizerDelegate {
     private(set) var parcial = ""
     private(set) var turnos: [Turno] = []
     private(set) var cerrada = false
+    /// Nivel del micrófono (0…1, RMS en dB) y última palabra de Tom: los lee el orbe en cada fotograma, sin observar.
+    @ObservationIgnored private(set) var nivel: Double = 0
+    @ObservationIgnored private(set) var ultimoPulso: TimeInterval = 0
 
     private static let sinHablar: Double = 8      // s sin decir nada al escuchar: se acabó la conversación
     private static let trasHablar: Double = 1.6   // s de silencio después de hablar: la frase ha terminado
@@ -262,7 +242,11 @@ final class Conversacion: NSObject, AVSpeechSynthesizerDelegate {
                 fase = .parada("No encuentro el micrófono. Toca para reintentar.")
                 return
             }
-            Self.conecta(entrada, formato, p)
+            nivel = 0
+            Self.conecta(entrada, formato, p) { [weak self] valor in
+                guard let self else { return }
+                self.nivel += (valor - self.nivel) * 0.5   // suavizado; el orbe vuelve a suavizar por fotograma
+            }
             motor.prepare()
             try motor.start()
 
@@ -283,11 +267,29 @@ final class Conversacion: NSObject, AVSpeechSynthesizerDelegate {
 
     // El micrófono y el reconocedor llaman desde sus propias colas: estos cierres no son del hilo principal.
     nonisolated private static func conecta(_ nodo: AVAudioInputNode, _ formato: AVAudioFormat,
-                                            _ p: SFSpeechAudioBufferRecognitionRequest) {
+                                            _ p: SFSpeechAudioBufferRecognitionRequest,
+                                            _ alNivel: @escaping @MainActor (Double) -> Void) {
         nodo.removeTap(onBus: 0)
         nodo.installTap(onBus: 0, bufferSize: 1024, format: formato) { buffer, _ in
             p.append(buffer)
+            let valor = Conversacion.rms(de: buffer)
+            Task { @MainActor in alNivel(valor) }
         }
+    }
+
+    /// RMS del primer canal pasado a dB y a 0…1 (-50 dB → 0, -10 dB → 1).
+    nonisolated private static func rms(de buffer: AVAudioPCMBuffer) -> Double {
+        guard let canal = buffer.floatChannelData?[0] else { return 0 }
+        let n = Int(buffer.frameLength)
+        guard n > 0 else { return 0 }
+        var suma: Float = 0
+        for i in 0..<n {
+            let v = canal[i]
+            suma += v * v
+        }
+        let rms = (suma / Float(n)).squareRoot()
+        let db = 20 * log10(Double(max(rms, 0.000_01)))
+        return min(max((db + 50) / 40, 0), 1)
     }
 
     nonisolated private static func reconoce(_ r: SFSpeechRecognizer, _ p: SFSpeechAudioBufferRecognitionRequest,
@@ -325,6 +327,7 @@ final class Conversacion: NSObject, AVSpeechSynthesizerDelegate {
         ronda += 1
         if motor.isRunning { motor.stop() }
         motor.inputNode.removeTap(onBus: 0)
+        nivel = 0
         peticion?.endAudio()
         tarea?.cancel()
         peticion = nil
@@ -376,6 +379,12 @@ final class Conversacion: NSObject, AVSpeechSynthesizerDelegate {
 
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
         Task { @MainActor in self.acabaDeHablar() }
+    }
+
+    /// Cada palabra que va a decir Tom es un latido del orbe.
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, willSpeakRangeOfSpeechString characterRange: NSRange,
+                                       utterance: AVSpeechUtterance) {
+        Task { @MainActor in self.ultimoPulso = Date.timeIntervalSinceReferenceDate }
     }
 }
 
