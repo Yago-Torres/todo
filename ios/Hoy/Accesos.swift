@@ -1,0 +1,25 @@
+import UIKit
+
+/// Los accesos que salen al mantener pulsado el icono.
+enum Accesos {
+    private static let secciones: [(tipo: String, titulo: String, simbolo: String, ruta: String)] = [
+        ("entreno", "Entreno", "figure.run", "/entreno.html"),
+        ("pendientes", "Pendientes", "checklist", "/pendientes.html"),
+        ("habitos", "Hábitos", "checkmark.circle", "/habitos.html"),
+        ("salud", "Salud", "heart.fill", "/salud.html"),
+    ]
+
+    static func instala() {
+        Task { @MainActor in
+            UIApplication.shared.shortcutItems = secciones.map {
+                UIApplicationShortcutItem(type: $0.tipo, localizedTitle: $0.titulo, localizedSubtitle: nil,
+                                          icon: UIApplicationShortcutIcon(systemImageName: $0.simbolo), userInfo: nil)
+            }
+        }
+    }
+
+    static func maneja(_ tipo: String) {
+        guard let s = secciones.first(where: { $0.tipo == tipo }) else { return }
+        Task { @MainActor in Navegador.shared.abre(s.ruta) }
+    }
+}

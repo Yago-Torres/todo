@@ -1,0 +1,71 @@
+# Compila la app de iPhone (ios/) SIN firmar y la deja en la release «ios». La firma la pone SideStore en el
+# iPhone con tu Apple ID gratis (ios/README.md). Gratis: los Mac de Actions no cuestan nada en un repo público.
+name: iOS
+
+on:
+  push:
+    branches: [main]
+    paths: ["ios/**", ".github/workflows/ios.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  ipa:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Xcode
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_16*.app | sort -V | tail -1)"
+          xcodebuild -version
+
+      - name: Proyecto (XcodeGen)
+        working-directory: ios
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Compilar
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild -project Hoy.xcodeproj -scheme Hoy -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build 2>&1 | tee build.log | xcbeautify --renderer github-actions
+
+      - name: Empaquetar el IPA
+        working-directory: ios
+        run: |
+          APP=build/Build/Products/Release-iphoneos/Hoy.app
+          # sin firmar, pero con los permisos dentro: SideStore los lee de aquí al firmar
+          brew install ldid
+          ldid -SHoy/Hoy.entitlements "$APP"
+          ldid -SHoyWidget/HoyWidget.entitlements "$APP/PlugIns/HoyWidget.appex"
+          ldid -SHoyCompartir/HoyCompartir.entitlements "$APP/PlugIns/HoyCompartir.appex"
+          mkdir -p Payload && cp -R "$APP" Payload/
+          zip -qry Hoy.ipa Payload
+          ls -la Hoy.ipa
+
+      - name: Publicar en la release «ios»
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTAS="Compilada $(date -u '+%Y-%m-%d %H:%M') UTC desde ${GITHUB_SHA::7}. Instálala con SideStore (ios/README.md)."
+          gh release view ios >/dev/null 2>&1 || gh release create ios --title "Hoy para iPhone" --notes "$NOTAS" --prerelease
+          gh release edit ios --notes "$NOTAS"
+          gh release upload ios ios/Hoy.ipa --clobber
+
+      # si falla, el registro queda descargable sin iniciar sesión (para arreglarlo desde la Pi)
+      - name: Registro del fallo
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view ios-log >/dev/null 2>&1 || gh release create ios-log --title "Registro de la última compilación fallida" --notes "Solo para depurar" --prerelease
+          grep -E "error:|warning: .*deprecated|BUILD FAILED|\*\* " ios/build.log > ios/errores.txt || true
+          tail -n 300 ios/build.log >> ios/errores.txt || echo "sin build.log" >> ios/errores.txt
+          gh release upload ios-log ios/errores.txt --clobber

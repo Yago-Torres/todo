@@ -5,6 +5,8 @@
 Mi app personal del día a día: hábitos, entrenamiento, sueño, peso y pendientes en una sola web
 instalable en el iPhone, con un fantasma que reacciona a lo que haces. Corre en una Raspberry Pi, sin base de datos y sin framework de frontend.
 
+También como app nativa de iPhone, gratis con SideStore: ver ios/README.md
+
 ![Hoy, Hábitos, Entreno y el modo entreno](docs/capturas.png)
 ![Músculos de la semana, Salud y Pendientes](docs/capturas-2.png)
 
