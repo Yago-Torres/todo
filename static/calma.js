@@ -175,54 +175,75 @@ const calma = (() => {
     if (navigator.standalone && sonda.offsetHeight >= 51) document.documentElement.classList.add("c-isla-real");
     sonda.remove();
   }
-  /* Fondo: un «shader» de caracteres ASCII. Un plasma de senos decide en cada celda qué carácter
-     toca (de « » a «@»); se mueve despacio y se aviva alrededor del dedo. Canvas 2D, una llamada
-     por fila, a 12 fotogramas por segundo; parado con la pestaña oculta y quieto con «reducir movimiento».
-     Tampoco se repinta mientras haces scroll, hay una transición, una hoja de cristal (su desenfoque se
-     recalcularía con cada fotograma de debajo) o la página se va; y sin tocar nada en 8 s, va a 6 por segundo. */
+  /* Fondo: un «shader» de caracteres ASCII. Canvas 2D, una llamada por fila y color, a 12 fotogramas por segundo;
+     parado con la pestaña oculta y quieto con «reducir movimiento». Tampoco se repinta mientras haces scroll, hay una
+     transición, una hoja de cristal (su desenfoque se recalcularía con cada fotograma de debajo) o la página se va; y sin
+     tocar nada en 8 s, va a 6 por segundo. Se aviva alrededor del dedo y una onda sale de donde marcas algo.
+     Tres dibujos, con data-fondo en el <body> o en una carta (que lo lleva dentro, con su forma):
+     - (nada): un plasma de senos decide qué carácter toca (de « » a «@»).
+     - "plano": rejilla de papel milimetrado, + - | y puntos, con un brillo que la recorre despacio.
+     - "curvas": curvas de nivel de un relieve de ruido que se desplaza; cada cuarta curva, más viva.
+     Los dibujos con nombre se apagan en este dispositivo con localStorage calma-fondos = "no" (vuelve el plasma;
+     en las cartas, nada). */
   const RAMPA = " .·:-=+*#%@";
-  const ondas = [];   // {x, y, t0}: una onda que sale de donde has marcado algo
+  const ondas = [];   // {x, y, t0}: una onda que sale de donde has marcado algo (coordenadas de la ventana)
   function onda(x, y) { if (!quieto()) ondas.push({x, y, t0: performance.now()}); }
-  function fondo() {
-    // una página con fondo propio (fondos.js de todo: rejilla de plano, curvas de nivel) no lleva el ASCII encima,
-    // salvo que esos fondos estén apagados en este dispositivo
-    if (document.body.dataset.fondo) { let no = null; try { no = localStorage.getItem("tom-fondos"); } catch {} if (no !== "no") return; }
-    const cv = Object.assign(document.createElement("canvas"), {id: "c-fondo"});
+  const fondosApagados = () => { try { return localStorage.getItem("calma-fondos") === "no"; } catch { return false; } };
+  // ruido de valor suave, para el relieve de las curvas
+  const hash = (i, j) => { let h = Math.imul(i, 374761393) + Math.imul(j, 668265263) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+  const ruido = (x, y) => { const i = Math.floor(x), j = Math.floor(y), fx = x - i, fy = y - j, u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy);
+    const a = hash(i, j), b = hash(i + 1, j), c = hash(i, j + 1), d = hash(i + 1, j + 1);
+    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v; };
+  const relieve = (x, y) => ruido(x, y) * .62 + ruido(x * 2.03 + 1.7, y * 2.03 + 9.2) * .28 + ruido(x * 4.1 + 3.1, y * 4.1 + 4.7) * .1;
+  let px = -9999, py = -9999, toque = performance.now(), calla = performance.now() + 900;   // calla: hasta cuándo no repintar
+  const VIDA = 1.6, VELOCIDAD = 380, ANCHO = 70;   // la onda: segundos, px/s y grosor del frente
+
+  function fondo(host) {
+    const pagina = host === document.body;
+    let modo = host.dataset.fondo || "";
+    if (modo && fondosApagados()) { if (!pagina) return; modo = ""; }
+    if (modo && modo !== "plano" && modo !== "curvas") modo = "";
+    const cv = Object.assign(document.createElement("canvas"), pagina ? {id: "c-fondo"} : {className: "c-fondo-carta"});
     cv.setAttribute("aria-hidden", "true");
-    document.body.prepend(cv);
+    host.prepend(cv);
     const cx = cv.getContext("2d");
-    let W, H, cw, ch, cols, filas, tinta, vivo, px = -9999, py = -9999, ultimo = 0, pedido = false;
-    let calla = performance.now() + 900, toque = performance.now();   // calla: hasta cuándo no repintar (la entrada, el scroll)
+    let W, H, cw, ch, cols, filas, tinta, vivo, ultimo = 0, pedido = false, visible = true, F = null, ox = 0, oy = 0;
     const libre = ms => ms >= calla && !ocupado();
     const medir = () => {
       const r = Math.min(devicePixelRatio || 1, 2), C = innerWidth < 600 ? 12 : 14;
-      W = innerWidth; H = innerHeight;
-      cv.width = W * r; cv.height = H * r;
+      W = pagina ? innerWidth : host.clientWidth; H = pagina ? innerHeight : host.clientHeight;
+      cv.width = Math.max(1, W * r); cv.height = Math.max(1, H * r);
       cx.setTransform(r, 0, 0, r, 0, 0);
       cx.font = `${C}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
       cx.textBaseline = "top";
       cw = cx.measureText("M").width; ch = C * 1.25;
       cols = Math.ceil(W / cw) + 1; filas = Math.ceil(H / ch) + 1;
+      F = modo === "curvas" ? new Float32Array((cols + 2) * (filas + 2)) : null;
       const css = getComputedStyle(document.documentElement);
       tinta = css.getPropertyValue("--ascii").trim(); vivo = css.getPropertyValue("--ascii-vivo").trim();
     };
-    const VIDA = 1.6, VELOCIDAD = 380, ANCHO = 70;   // la onda: segundos, px/s y grosor del frente
-    const pinta = ms => {
-      const t = ms / 1000 * .35, R = RAMPA.length - 1;
-      while (ondas.length && (ms - ondas[0].t0) / 1000 > VIDA) ondas.shift();
-      cx.clearRect(0, 0, W, H);
+    // el dedo y las ondas en una celda: d = distancia al dedo, ola = cuánto frente de onda pasa por ella
+    const efectos = (x, y, ms) => {
+      const cxp = x * cw + ox, cyp = y * ch + oy, d = Math.hypot(cxp - px, cyp - py);
+      let ola = 0;
+      for (const o of ondas) {
+        const edad = (ms - o.t0) / 1000, k = Math.abs(Math.hypot(cxp - o.x, cyp - o.y) - edad * VELOCIDAD);
+        if (k < ANCHO) ola += (1 - k / ANCHO) * (1 - edad / VIDA);
+      }
+      return [d, ola];
+    };
+    const R = RAMPA.length - 1;
+
+    const plasma = (t, ms) => {
       for (let y = 0; y < filas; y++) {
         let fila = "", fuerte = "";
         for (let x = 0; x < cols; x++) {
           const v = Math.sin(x * .13 + t) + Math.sin(y * .19 - t * .8) + Math.sin((x + y) * .07 + t * .5)
                   + Math.sin(Math.hypot(x - cols * .7, y - filas * .25) * .16 - t * 1.2);   // -4..4
-          let n = (v + 4) / 8, ola = 0;
-          const d = Math.hypot(x * cw - px, y * ch - py);
+          let n = (v + 4) / 8;
+          const [d, ola] = efectos(x, y, ms);
           if (d < 160) n += (1 - d / 160) * .55;   // el dedo aviva lo que tiene alrededor
-          for (const o of ondas) {                  // el frente de cada onda, que se apaga al alejarse
-            const edad = (ms - o.t0) / 1000, k = Math.abs(Math.hypot(x * cw - o.x, y * ch - o.y) - edad * VELOCIDAD);
-            if (k < ANCHO) ola += (1 - k / ANCHO) * (1 - edad / VIDA);
-          }
           n += ola * .9;
           const i = Math.max(0, Math.min(R, Math.floor(n ** 1.25 * (R + 1))));   // toda la rampa, algo más de huecos
           fila += RAMPA[i];
@@ -232,10 +253,72 @@ const calma = (() => {
         cx.fillStyle = vivo; cx.fillText(fuerte, 0, y * ch);
       }
     };
+
+    // cuadros grandes de 8 columnas × 4 filas (~56 × 60 px) y un punto en cada cuadro pequeño (4 × 2)
+    const plano = (t, ms) => {
+      for (let y = 0; y < filas; y++) {
+        let fila = "", fuerte = "";
+        for (let x = 0; x < cols; x++) {
+          const v = x % 8 === 0, h = y % 4 === 0;
+          let c = v && h ? "+" : v ? "|" : h ? "-" : x % 4 === 0 && y % 2 === 0 ? "·" : " ";
+          const [d, ola] = efectos(x, y, ms);
+          const brillo = Math.sin(x * .05 - y * .11 + t * .9) > .985 - (h || v ? .03 : 0);   // una franja que barre la rejilla
+          if (c === " " && ola > .25) c = RAMPA[Math.min(R, 2 + Math.floor(ola * 5))];
+          else if (c === " " && d < 70) c = "·";
+          fila += c;
+          fuerte += c !== " " && (ola > .25 || d < 110 || brillo && c !== "·") ? c : " ";
+        }
+        cx.fillStyle = tinta; cx.fillText(fila, 0, y * ch);
+        cx.fillStyle = vivo; cx.fillText(fuerte, 0, y * ch);
+      }
+    };
+
+    // el relieve en cada celda (con una de margen para los vecinos); una curva donde cambia de nivel
+    const NIVELES = 10, ESCALA = 210;   // px por unidad de ruido: igual en una carta que en la página
+    const curvas = (t, ms) => {
+      const A = cols + 2;
+      for (let y = -1; y <= filas; y++) for (let x = -1; x <= cols; x++) {
+        const xp = x * cw + ox, yp = y * ch + oy;
+        let v = relieve(xp / ESCALA + t * .06, yp / ESCALA + t * .045) * NIVELES;
+        const d = Math.hypot(xp - px, yp - py);
+        if (d < 150) v += (1 - d / 150) ** 2 * 1.6;   // el dedo levanta una colina: las curvas lo rodean
+        F[(y + 1) * A + x + 1] = v;
+      }
+      for (let y = 0; y < filas; y++) {
+        let fila = "", fuerte = "";
+        for (let x = 0; x < cols; x++) {
+          const k = (y + 1) * A + x + 1, v = F[k], nivel = Math.round(v);
+          const [, ola] = efectos(x, y, ms);
+          let c = " ", viva = false;
+          // la curva pasa por esta celda si el nivel entero más cercano queda a menos de media celda (medida a lo
+          // largo de la pendiente, que es por donde cruza): así sale de un carácter de grueso, sin dobles
+          const gx = (F[k + 1] - F[k - 1]) / (2 * cw), gy = (F[k + A] - F[k - A]) / (2 * ch), g = Math.hypot(gx, gy);
+          const e = Math.abs(gx) * cw + Math.abs(gy) * ch;   // cuántos niveles cruza una celda
+          const paso = e > .7 ? 4 : e > .35 ? 2 : 1;            // en lo empinado, como en los mapas, solo una de cada 2 o 4
+          if (g > 1e-6 && Math.abs(v - nivel) < e / 2 && nivel % paso === 0) {
+            const ax = Math.abs(gx), ay = Math.abs(gy);   // la curva va perpendicular a la pendiente
+            c = ax > 2.2 * ay ? "|" : ay > 2.2 * ax ? "-" : gx * gy > 0 ? "/" : "\\";
+            viva = nivel % 4 === 0;
+          }
+          if (ola > .3) { if (c === " ") c = RAMPA[Math.min(R, 2 + Math.floor(ola * 4))]; viva = true; }
+          fila += c; fuerte += viva ? c : " ";
+        }
+        cx.fillStyle = tinta; cx.fillText(fila, 0, y * ch);
+        cx.fillStyle = vivo; cx.fillText(fuerte, 0, y * ch);
+      }
+    };
+
+    const dibujo = modo === "plano" ? plano : modo === "curvas" ? curvas : plasma;
+    const pinta = ms => {
+      while (ondas.length && (ms - ondas[0].t0) / 1000 > VIDA) ondas.shift();
+      if (!pagina) { const r = host.getBoundingClientRect(); ox = r.left; oy = r.top; }
+      cx.clearRect(0, 0, W, H);
+      dibujo(ms / 1000 * .35, ms);
+    };
     const bucle = ms => {
       if (document.visibilityState !== "visible") { pedido = false; return; }
       const cada = ondas.length ? 33 : ms - toque > 8000 ? 166 : 83;   // con onda, más fluido; sin tocar nada, más calma
-      if (ms - ultimo > cada && (ondas.length || libre(ms))) { ultimo = ms; pinta(ms); }
+      if (visible && ms - ultimo > cada && (ondas.length || libre(ms))) { ultimo = ms; pinta(ms); }
       requestAnimationFrame(bucle);
     };
     const arranca = () => { if (!pedido && !quieto()) { pedido = true; requestAnimationFrame(bucle); } };
@@ -243,14 +326,23 @@ const calma = (() => {
     pinta(performance.now());
     arranca();
     let tm;
-    addEventListener("resize", () => { clearTimeout(tm); tm = setTimeout(() => { medir(); pinta(performance.now()); }, 120); });
+    const otraVez = () => { clearTimeout(tm); tm = setTimeout(() => { medir(); pinta(performance.now()); }, 120); };
+    if (pagina) addEventListener("resize", otraVez);
+    else {
+      new ResizeObserver(otraVez).observe(host);   // la carta crece cuando llegan sus datos
+      new IntersectionObserver(es => { visible = es[0].isIntersecting; }).observe(host);
+    }
     matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { medir(); pinta(performance.now()); });
     document.addEventListener("visibilitychange", arranca);
+  }
+  function fondos() {
     addEventListener("pointermove", e => { px = e.clientX; py = e.clientY; toque = performance.now(); }, {passive: true});
     addEventListener("pointerdown", () => { toque = performance.now(); }, {passive: true});
     // en captura: también el scroll de dentro de una carta o una hoja
     addEventListener("scroll", () => { calla = toque = performance.now(); calla += 250; }, {passive: true, capture: true});
     addEventListener("pointerup", () => setTimeout(() => { px = py = -9999; }, 600));
+    fondo(document.body);
+    document.querySelectorAll("[data-fondo]:not(body)").forEach(fondo);
   }
 
   /* ?medir=1 (hasta ?medir=0): arriba a la izquierda, fotogramas por segundo, tirones (fotogramas de más de
@@ -278,7 +370,7 @@ const calma = (() => {
     };
     requestAnimationFrame(vuelta);
   }
-  const listo = () => { menu(); islaReal(); fondo(); medidor(); };
+  const listo = () => { menu(); islaReal(); fondos(); medidor(); };
   document.readyState === "loading" ? addEventListener("DOMContentLoaded", listo) : listo();
 
   /* Al irse a otra página: el contenido baja un poco mientras se desvanece (.c-saliendo en calma.css)

@@ -102,6 +102,9 @@ body {
 .c-saliendo .app { opacity: 0; transform: translateY(22px); transition: opacity .23s ease-in, transform .23s cubic-bezier(.5, 0, .75, 0); }
 /* fondo: un «shader» de caracteres ASCII que ondula despacio (calma.js → fondo()). Detrás de todo. */
 #c-fondo { position: fixed; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
+/* una carta con data-fondo lleva el dibujo dentro, debajo de su contenido y con sus esquinas */
+[data-fondo]:not(body) { position: relative; isolation: isolate; }
+.c-fondo-carta { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; border-radius: inherit; }
 button, input, select, textarea { font: inherit; color: inherit; }
 button { cursor: pointer; }
 :focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
