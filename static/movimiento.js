@@ -59,7 +59,8 @@ const mov = (() => {
   // Devuelve false si no ha animado (sin GSAP o quieto), por si la página quiere lo de antes.
   // fila: el botón .fila (la cifra de la racha, en su .rc); fmt: cómo se escribe la racha.
   function marca(fila, hecho, antes, ahora, fmt = String) {
-    if (hecho) navigator.vibrate?.([12, 40, 18]);   // el toque corto ya lo da calma.js; esto es el «hecho»
+    // vibración con patrón (y clic, si hay sonidos) de tom.js; el toque genérico de calma.js se queda en uno solo
+    if (navegador) window.tom?.avisa(hecho ? "marcar" : "desmarcar");
     const g = gs(), svg = fila?.querySelector("svg.liq");
     if (!g || !svg) return false;
     const nivel = svg.querySelector(".nivel"), ola = svg.querySelector(".ola"), f = svg.querySelector(".forma");

@@ -167,6 +167,7 @@ const fantasma = (() => {
   }
   // la cara: ojos de óvalos dentro de óvalos (uno redondeado, otro en punta) y la sonrisa torcida con su manchón
   function rostroFlor(e) {
+    if (e === "susto") e = "sorpresa";
     const J = azar(A.semilla + 5), sonrie = e === "feliz" || e === "contento", cerrados = e === "dormido" || e === "bostezo";
     const ojoI = () => `<g class="ojo"><path d="${ovillo(J, [89.5, 32.3], [101.5, 32.1], 3)}${ovillo(J, [92.5, 32.4], [98.5, 32], 1.7)}"/><path d="M95 31.6L96 31.6" stroke-width="1.8"/></g>`;
     const ojoD = () => `<g class="ojo"><path d="M105.5 33.2Q113 28.8 123 33Q113 36 105.5 33.2Z"/><path d="${ovillo(J, [109, 33.2], [118, 33], 1.1)}"/></g>`;
@@ -207,9 +208,10 @@ const fantasma = (() => {
     for (const [q, z] of [[-1, A.ojoI], [1, A.ojoD]]) {
       const X = sn(fx + q * A.sep / 2), Y = sn(ey), w = Math.max(s, sn(z * 1.6));
       if (sonrie) ojos += R(X - s, Y, s, s) + R(X, Y - s, s, s) + R(X + s, Y, s, s);
+      else if (e === "susto") ojos += `<g class="ojo">${R(X - s / 2, Y - s * 1.5, w + s, w + s * 2)}</g>`;
       else if (cerrados || (e === "guino" && q > 0)) ojos += R(X - s, Y, s * 3, s * .6);
       else ojos += `<g class="ojo">${R(X, Y - s, w, w + s)}</g>`;
-      if (e === "animo" || e === "sorpresa") sobre += R(X - s, Y - s * 2, s * 2, s * .6);
+      if (e === "animo" || e === "sorpresa" || e === "susto") sobre += R(X - s, Y - s * (e === "susto" ? 3 : 2), s * 2, s * .6);
       if (e === "ausente") sobre += R(X - s, Y - s * (q < 0 ? 2 : 3), s * 2, s * .6);
       if (e === "enfadado") sobre += R(X + (q < 0 ? -s : s), Y - s * 2, s, s * .7) + R(X, Y - s * 1.3, s, s * .7);
       if (A.extra === "gafas") sobre += `<rect x="${X + w / 2 - s * 1.4}" y="${Y - s * 2}" width="${s * 2.8}" height="${s * 3.6}" fill="none" stroke="${TINTA}" stroke-width="1.6"/>`;
@@ -221,6 +223,7 @@ const fantasma = (() => {
       : e === "enfadado" ? R(X - s, Y, s, s * .7) + R(X, Y + s * .7, s, s * .7) + R(X + s, Y, s, s * .7) + R(X + s * 2, Y + s * .7, s, s * .7)
       : e === "ausente" ? R(X - s, Y + s * .7, s * 3, s * .7) + R(X, Y, s, s * .7)
       : e === "bostezo" ? R(X - s, Y, s * 2, s * 3)
+      : e === "susto" ? R(X - s * .5, Y, s * 2, s * 2)
       : e === "guino" ? R(X, Y, s * 2, s * .7) + R(X + s * 2, Y - s * .7, s, s * .7)
       : e === "animo" || e === "dormido" || e === "sorpresa" ? R(X, Y, s, s) : R(X - s, Y, s * 2, s * .7);
     return `<g class="ojos">${ojos}</g>${sobre}${boca}`;
@@ -403,6 +406,7 @@ const fantasma = (() => {
     const r = caja.getBoundingClientRect();
     if (r.bottom < 0 || r.top > innerHeight) return;   // la cabecera está fuera de la pantalla
     paseando = true;
+    aCasa();
     document.body.append(caja);
     caja.classList.add("pasea");
     Object.assign(caja.style, {left: r.left + "px", top: r.top + "px"});
@@ -423,9 +427,59 @@ const fantasma = (() => {
     });
   }
 
+
+  // ---------- con física: cae hacia donde se inclina el móvil, dentro de la cabecera, y rebota ----------
+  // Va con la propiedad `translate` (los gestos y el paseo usan `transform`, y así no se pisan). Dormido no se mueve.
+  // Solo hay bucle mientras llega la inclinación y la página se ve; sin inclinación se queda en su sitio de siempre.
+  let g = {x: 0, y: 0}, p = {x: 0, y: 0, vx: 0, vy: 0}, cayendo = false, ultimoPaso = 0;
+  const quieta = () => !mov() || paseando || document.hidden || actual === "dormido" || !caja?.firstChild;
+  function cae(nueva) {
+    g = nueva;
+    if (!cayendo && !quieta()) { cayendo = true; ultimoPaso = performance.now(); requestAnimationFrame(paso); }
+  }
+  function limites() {
+    const r = sitio.getBoundingClientRect(), w = caja.offsetWidth, h = caja.offsetHeight;
+    return {x0: -Math.max(0, r.width - w - 6), x1: 0, y0: -4, y1: Math.max(0, r.height - h)};
+  }
+  function paso(t) {
+    const hay = window.tom?.hay();
+    if (quieta() || (!hay && Math.hypot(p.x, p.y) < .5)) { cayendo = false; if (!hay || paseando) aCasa(); return; }
+    const k = Math.min(3, (t - ultimoPaso) / 16.7), L = limites();
+    ultimoPaso = t;
+    // sin inclinación (se dejó de recibir), vuelve despacio a casa
+    const ax = hay ? g.x * .55 : -p.x * .02, ay = hay ? g.y * .55 : -p.y * .02;
+    p.vx = (p.vx + ax * k) * .97 ** k; p.vy = (p.vy + ay * k) * .97 ** k;
+    p.x += p.vx * k; p.y += p.vy * k;
+    if (p.x < L.x0) { p.x = L.x0; p.vx *= -.5; } else if (p.x > L.x1) { p.x = L.x1; p.vx *= -.5; }
+    if (p.y < L.y0) { p.y = L.y0; p.vy *= -.5; } else if (p.y > L.y1) { p.y = L.y1; p.vy *= -.45; if (Math.abs(p.vy) < .6) p.vy = 0; }
+    caja.style.translate = `${p.x.toFixed(1)}px ${p.y.toFixed(1)}px`;
+    if (Math.abs(p.vx) > 1.2) caja.classList.toggle("izq", p.vx < 0);
+    // fuera de su sitio no tapa los botones de la cabecera
+    caja.style.pointerEvents = Math.hypot(p.x, p.y) > 10 ? "none" : "";
+    requestAnimationFrame(paso);
+  }
+  function aCasa() {
+    p = {x: 0, y: 0, vx: 0, vy: 0};
+    if (!caja) return;
+    caja.style.translate = caja.style.pointerEvents = "";
+    if (!paseando) caja.classList.remove("izq");
+  }
+  // agitar el móvil (lo avisa la app): se asusta, tiembla y da un salto
+  function asusta() {
+    if (!caja?.firstChild || enAjustes) return;
+    rato("susto", 2600);
+    if (!mov()) return;
+    gesto("temblor");
+    setTimeout(() => gesto("salto"), 560);
+    if (cayendo) { p.vy -= 9; p.vx += (Math.random() - .5) * 12; }
+  }
+  addEventListener("tom-agitar", asusta);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && window.tom?.hay()) cae(g); });
+
   // ---------- estados ----------
   function cambia(e) {
     actual = e;
+    if (e !== "dormido" && window.tom?.hay()) cae(g);
     expresion(e);
     bucle?.pause();
     bucle = null;
@@ -443,12 +497,14 @@ const fantasma = (() => {
     caja = document.createElement("div");
     caja.id = "fantasma";
     caja.onclick = () => {
+      window.tom?.permiso();
       if (!enHoy() && !enAjustes && actual === "enfadado") return location.assign("/");   // lo de ayer se arregla en Hoy
       if (performance.now() < libre) return;
       rato(actual === "enfadado" ? "enfadado" : "feliz", 900);
       EMOTES[uno(["salto", "voltereta", "giro", "baile", "estornudo", "saltito"])]();
     };
     sitio.append(caja);
+    if (!enAjustes && window.tom) tom.escucha(cae);
     return caja;
   }
   const enHoy = () => !!document.querySelector('meta[name="calma-datos"][content*="/api/hoy"]');
@@ -506,6 +562,7 @@ const fantasma = (() => {
   }
   // lo que llega de Ajustes: el aspecto del fantasma y, para calma.js, el nombre y la barra de abajo
   function ajusta(aj) {
+    window.tom?.ponAjustes(aj);
     const barra = Object.entries(aj.modulos).filter(([, v]) => v.activo && v.barra).map(([k]) => `/${k}.html`);
     calma.ponPerfil({nombre: aj.nombre, barra});
     previa(aj.mascota);
@@ -535,5 +592,5 @@ const fantasma = (() => {
     document.addEventListener("DOMContentLoaded", refresca);
     document.addEventListener("visibilitychange", () => { if (!document.hidden) refresca(); });
   }
-  return {lee, ajusta, previa, refresca, reacciona, tipo: () => A.tipo, emote: n => EMOTES[n]?.(), emotes: Object.keys(EMOTES), pasea};
+  return {lee, ajusta, previa, refresca, reacciona, tipo: () => A.tipo, emote: n => EMOTES[n]?.(), emotes: Object.keys(EMOTES), pasea, asusta};
 })();

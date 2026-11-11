@@ -18,7 +18,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <link rel="stylesheet" href="/calma.css?v=4423d460">
 <script src="/calma.js?v=4423d460"></script>
-<script src="/mascota.js?v=5"></script>
+<script src="/tom.js?v=1"></script>
+<script src="/mascota.js?v=6"></script>
 <script src="/anime-4.5.0.min.js"></script>
 <script src="/anima.js?v=4423d460"></script>
 <style>
@@ -62,6 +63,10 @@
   .fila-op { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px; margin-top: 14px; font-size: 14px; }
   .fila-op label { display: flex; align-items: center; gap: 8px; }
   .solo-fantasma[hidden] { display: none; }
+  .opcion { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 44px; font-weight: 500; }
+  .opcion small { display: block; margin-top: 2px; font-size: 13px; font-weight: 400; color: var(--suave); }
+  .opcion-app { width: 100%; margin-top: 12px; min-height: 44px; }
+  .opcion-app[hidden] { display: none; }
 </style>
 <body>
 
@@ -85,6 +90,13 @@
     <section class="carta c-carta" aria-labelledby="t-tu">
       <h2 id="t-tu">Tú</h2>
       <input class="c-campo" id="nombre" maxlength="30" placeholder="Cómo te saludo" aria-label="Tu nombre">
+    </section>
+
+    <section class="carta c-carta" aria-labelledby="t-son">
+      <h2 id="t-son">Sonidos</h2>
+      <label class="opcion"><span>Sonidos sutiles<small>Un clic al marcar, una campanita al completar el día, el fin del descanso y cuando algo falla. Respetan el modo silencio.</small></span>
+        <input type="checkbox" switch id="sonidos"></label>
+      <button class="c-btn opcion-app" id="app-ajustes" type="button" hidden>Ajustes de la app (iPhone)</button>
     </section>
 
     <section class="carta c-carta" aria-labelledby="t-mod">
@@ -218,6 +230,7 @@ async function cargar() {
     A = await api("/api/ajustes");
     puerta(false);
     $("#nombre").value = A.nombre;
+    $("#sonidos").checked = A.sonidos;
     modulos();
     fantasmita();
     limites();
@@ -226,6 +239,13 @@ async function cargar() {
   }
 }
 
+// apagados por defecto; al encenderlos, suena uno para que se oiga cómo son (el toque ya ha despertado el audio)
+$("#sonidos").onchange = e => { A.sonidos = e.target.checked; tom.ponAjustes(A); if (A.sonidos) tom.suena("clic"); guardar(); };
+// dentro de la app: sus propios ajustes (claves, Face ID, Salud, avisos), que antes se abrían agitando el móvil
+if (window.HoyApp) {
+  $("#app-ajustes").hidden = false;
+  $("#app-ajustes").onclick = () => { try { window.webkit.messageHandlers.hoy.postMessage({accion: "configurar"}); } catch (e) { /* app vieja */ } };
+}
 $("#tipo").onchange = e => { A.mascota.tipo = e.target.value; tipo(); guardar(); };
 $("#nombre").oninput = e => { A.nombre = e.target.value; guardar(); };
 $("#color").oninput = e => { A.mascota.color = e.target.value; guardar(); };

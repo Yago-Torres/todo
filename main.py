@@ -344,6 +344,8 @@ def limpia_ajustes(v):
                         "color": color if re.fullmatch(r"#[0-9a-fA-F]{6}", color) else "#CDE77F",
                         "extra": mas.get("extra") if mas.get("extra") in ("lazo", "gorro", "gafas") else "",
                         "rubor": mas.get("rubor") is True, "paseo": mas.get("paseo") is not False},
+            # sonidos sutiles de la web (tom.js): solo si se activan a propósito
+            "sonidos": v.get("sonidos") is True,
             # sin la clave, los de siempre; con ella aunque esté vacía (es que no quiere ninguno)
             "limites": {" ".join(str(k).split())[:30]: int(n) for k, x in list(dct(v.get("limites")).items())[:30]
                         if (n := real(x, 1, 600)) is not None} if isinstance(v.get("limites"), dict) else dict(LIMITES)}
@@ -1233,6 +1235,14 @@ def racha(log, hid, hoy):
     return n
 
 
+def rota(log, hid, hoy):
+    """La racha que se rompió ayer (sin hacer ayer, hecho anteayer): sus días. Si ayer se hizo, 0. La planta de Hoy se mustia con ella."""
+    d = date.fromisoformat(hoy) - timedelta(days=1)
+    if hid in log.get(d.isoformat(), []):
+        return 0
+    return racha(log, hid, d.isoformat())
+
+
 def trozo(fn):
     """Si una app no responde, su tarjeta lo dice y el resto de la portada sale igual."""
     try:
@@ -1254,7 +1264,7 @@ def hoy_habitos(s, hoy):
     plan, hecho = set(s["plan"].get(hoy, [])), set(s["log"].get(hoy, []))
     # orden: su sitio en la lista de hábitos, para que la portada reordene al marcar sin perderlo
     habitos = [{"id": h["id"], "n": h["n"], "c": h["c"], "plan": h["id"] in plan, "hecho": h["id"] in hecho,
-                "racha": racha(s["log"], h["id"], hoy), "orden": i} for i, h in enumerate(s["habits"])]
+                "racha": racha(s["log"], h["id"], hoy), "rota": rota(s["log"], h["id"], hoy), "orden": i} for i, h in enumerate(s["habits"])]
     habitos.sort(key=lambda h: (not h["plan"], h["hecho"]))   # lo planificado y sin hacer, primero
     pesos = sorted(s["peso"].items())
     semana = [kg for d, kg in pesos if d > (date.fromisoformat(hoy) - timedelta(days=7)).isoformat()]
@@ -1756,7 +1766,8 @@ def frontal(nombre):
     # como las páginas de todo: barra de estado translúcida en la app instalada (los avisos salen de la isla)
     html = html.replace("</title>", '</title>\n<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">'
                         '\n<link rel="manifest" href="/manifest.json" crossorigin="use-credentials">'
-                        '\n<script src="/mascota.js?v=5"></script>'
+                        '\n<script src="/tom.js?v=1"></script>'
+                        '\n<script src="/mascota.js?v=6"></script>'
                         # y la transición entre páginas de todo (calma.css, calma.js): la cabecera vuela, la barra quieta
                         '\n<style>@view-transition{navigation:auto}'
                         '@media(prefers-reduced-motion:reduce){@view-transition{navigation:none}}</style>', 1)

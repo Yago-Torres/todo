@@ -20,7 +20,8 @@
 <link rel="stylesheet" href="/calma.css?v=4423d460">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="/calma.js?v=4423d460"></script>
-<script src="/mascota.js?v=5"></script>
+<script src="/tom.js?v=1"></script>
+<script src="/mascota.js?v=6"></script>
 <script src="/anime-4.5.0.min.js"></script>
 <script src="/anima.js?v=4423d460"></script>
 <style>
@@ -197,14 +198,14 @@ async function cargar() {
 function pinta() {
   const a = R.anoche, ult = [...R.noches].reverse().find(n => n.sueno);
   if (a) {
-    calma.cuenta($("#nota"), a.nota.total, n => String(Math.round(n)), 700);
+    tom.cifra($("#nota"), a.nota.total, n => String(Math.round(n)));
     $("#nivel").replaceChildren(el("span", "c-chip " + (a.nota.total >= 80 ? "ok" : a.nota.total < 70 ? "mal" : ""), nivel(a.nota.total)));
     $("#resumen").textContent = `${hm(a.sueno)} dormido · de ${a.acostarse} a ${a.levantarse}` + (a.dia !== R.noches.at(-1).dia ? ` · ${larga(a.dia)}` : "");
     const parte = (id, v, de) => { $(id).replaceChildren(String(v), el("span", null, ` / ${de}`)); };
     parte("#p-dur", a.nota.duracion, 50); parte("#p-hora", a.nota.hora, 30); parte("#p-int", a.nota.interrupciones, 20);
     $("#partes").hidden = false;
   } else {
-    $("#nota").textContent = ult ? hm(ult.sueno) : "—";
+    if (ult) tom.cifra($("#nota"), ult.sueno, hm); else $("#nota").textContent = "—";
     $("#resumen").textContent = ult ? "dormido. Para la puntuación y las fases, el atajo tiene que mandar los tramos de la noche."
                                     : "Sin datos todavía: llegan cada mañana con el atajo de Salud.";
   }
@@ -236,6 +237,16 @@ function cuerpo() {
     const [d, kg] = P.at(-1), m = media7(P, d);
     const hace30 = P.filter(([x]) => x <= new Date(fecha(d) - 30 * 864e5).toLocaleDateString("sv")).at(-1);
     $("#peso").replaceChildren(coma(kg), el("span", null, " kg"));
+    if (!pesoContado && anima.mov && window.Chart && P.length > 1) {
+      pesoContado = true;
+      const nodo = $("#peso").firstChild, de = P[0][1], t0 = performance.now() + 250;
+      const paso = t => {
+        const q = Math.max(0, Math.min(1, (t - t0) / 1200)), e = q < .5 ? 2 * q * q : 1 - (-2 * q + 2) ** 2 / 2;
+        nodo.data = coma(de + (kg - de) * e);
+        if (q < 1) requestAnimationFrame(paso);
+      };
+      requestAnimationFrame(paso);
+    }
     $("#peso").lastChild.style.cssText = "font-size: 18px; font-weight: 500; color: var(--suave)";
     const sub = $("#peso-sub");
     sub.replaceChildren(`${larga(d)} · media 7 días ${coma(m)} kg`);
@@ -254,6 +265,7 @@ function cuerpo() {
     const f = ultimo(i), div = el("div");
     div.append(el("small", null, n));
     const b = el("b", null, f ? coma(f[i], d) + u : "—");
+    if (f && !descifradas.has(n)) { descifradas.add(n); tom.descifra(b, coma(f[i], d) + u); }   // una vez por carga
     const a = f && antes(i, f[0]);
     if (a) b.append(cambio(f[i], a[i], u, d, bien));
     div.append(b);
@@ -275,6 +287,67 @@ function cuerpo() {
 
 // ---------- gráficas (Chart.js; sin la librería la página funciona igual) ----------
 const graf = {};
+let pesoContado = false;
+const descifradas = new Set();
+// Las de líneas, la primera vez en esta carga: la línea se traza de izquierda a derecha, luego aparece el área de
+// debajo y el último punto hace pop. Al repintar (modo oscuro, datos nuevos) salen ya dibujadas, con su área y su punto.
+const trazadas = new Set();
+const suave = p => (p < .5 ? 2 * p * p : 1 - (-2 * p + 2) ** 2 / 2), rebote = p => 1 + 2.70158 * (p - 1) ** 3 + 1.70158 * (p - 1) ** 2;
+function traza(id, color, carta) {
+  const primera = anima.mov && !trazadas.has(id), st = {k: primera ? 0 : 1, a: primera ? 0 : 1, p: primera ? 0 : 1};
+  trazadas.add(id);
+  const puntos = ch => ch.getDatasetMeta(0).data.filter(q => !q.skip && Number.isFinite(q.y));
+  return {
+    id: "traza",
+    afterInit(ch) {
+      if (!primera) return;
+      const t0 = performance.now() + 200;
+      const paso = t => {
+        const e = (t - t0) / 1000, c = x => Math.max(0, Math.min(1, x));
+        st.k = suave(c(e / 1.2)); st.a = c((e - .9) / .6); st.p = c((e - 1.15) / .45);
+        if (!ch.ctx) return;   // destruida (repintada) a medias
+        ch.draw();
+        if (e < 1.7) requestAnimationFrame(paso);
+      };
+      requestAnimationFrame(paso);
+    },
+    beforeDatasetsDraw(ch) {
+      const {ctx, chartArea: z} = ch, P = puntos(ch);
+      if (st.a > 0 && P.length > 1) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(P[0].x, P[0].y);
+        // por las mismas curvas que la línea (con tension, Chart.js deja sus puntos de control en cada punto)
+        for (let i = 1; i < P.length; i++) {
+          const a = P[i - 1], b = P[i];
+          if (a.cp2x != null && b.cp1x != null) ctx.bezierCurveTo(a.cp2x, a.cp2y, b.cp1x, b.cp1y, b.x, b.y); else ctx.lineTo(b.x, b.y);
+        }
+        ctx.lineTo(P.at(-1).x, z.bottom); ctx.lineTo(P[0].x, z.bottom); ctx.closePath();
+        const g = ctx.createLinearGradient(0, z.top, 0, z.bottom);
+        g.addColorStop(0, color); g.addColorStop(1, "rgba(0, 0, 0, 0)");
+        ctx.globalAlpha = .2 * st.a;
+        ctx.fillStyle = g;
+        ctx.fill();
+        ctx.restore();
+      }
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(z.left - 10, z.top - 10, (z.right - z.left + 20) * st.k, z.bottom - z.top + 20);
+      ctx.clip();
+    },
+    afterDatasetsDraw(ch) {
+      const {ctx} = ch, u = puntos(ch).at(-1);
+      ctx.restore();
+      if (!u || st.p <= 0) return;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(u.x, u.y, Math.max(0, 4.5 * rebote(st.p)), 0, Math.PI * 2);
+      ctx.fillStyle = color; ctx.strokeStyle = carta; ctx.lineWidth = 2;
+      ctx.fill(); ctx.stroke();
+      ctx.restore();
+    },
+  };
+}
 function tokens() {
   const s = getComputedStyle(document.documentElement), v = n => s.getPropertyValue(n).trim();
   return {texto: v("--texto"), suave: v("--suave"), tenue: v("--tenue"), linea: v("--linea"), acento: v("--acento"),
@@ -366,7 +439,8 @@ function graficas() {
   on2.plugins.tooltip.callbacks = {title: c => larga(R.noches[c[0].dataIndex].dia),
     label: c => { const x = R.noches[c.dataIndex].nota; return x ? [`Puntuación ${x.total} · ${nivel(x.total).toLowerCase()}`,
       `Duración ${x.duracion}/50 · hora ${x.hora}/30 · interrupciones ${x.interrupciones}/20`] : null; }};
-  dibuja("g-nota", {type: "line", options: on2, data: {labels: R.noches.map(n => corta(n.dia)), datasets: [{label: "Puntuación",
+  on2.animation = false;
+  dibuja("g-nota", {type: "line", options: on2, plugins: [traza("g-nota", t.acento, t.carta)], data: {labels: R.noches.map(n => corta(n.dia)), datasets: [{label: "Puntuación",
     data: R.noches.map(n => n.nota ? n.nota.total : null), borderColor: t.acento, backgroundColor: t.acento, borderWidth: 2,
     pointRadius: 4, pointHoverRadius: 6, pointBorderColor: t.carta, pointBorderWidth: 2, spanGaps: true}]}});
 
@@ -386,7 +460,8 @@ function graficas() {
     const ow = base(t, v => coma(v, Number.isInteger(v) ? 0 : 1));
     ow.plugins.tooltip.callbacks = {title: c => larga(W[c[0].dataIndex][0]),
       label: c => c.raw == null ? null : `${c.dataset.label}: ${coma(c.raw)} kg`};
-    dibuja("g-peso", {type: "line", options: ow, data: {labels: W.map(w => corta(w[0])), datasets: [
+    ow.animation = false;
+    dibuja("g-peso", {type: "line", options: ow, plugins: [traza("g-peso", t.acento, t.carta)], data: {labels: W.map(w => corta(w[0])), datasets: [
       {label: "Media 7 días", data: W.map(w => media7(W, w[0])), borderColor: t.acento, backgroundColor: t.acento, borderWidth: 2,
        pointRadius: 0, pointHoverRadius: 4, tension: .3},
       {label: "Pesaje", data: W.map(w => w[1]), showLine: false, borderColor: t.carta, backgroundColor: t.suave, borderWidth: 1.5,
@@ -398,7 +473,8 @@ function graficas() {
   if (G.length > 1 && document.getElementById("g-grasa")) {
     const og = base(t, v => v + " %");
     og.plugins.tooltip.callbacks = {title: c => larga(G[c[0].dataIndex][0]), label: c => `Grasa: ${coma(c.raw)} %`};
-    dibuja("g-grasa", {type: "line", options: og, data: {labels: G.map(g => corta(g[0])), datasets: [{label: "Grasa",
+    og.animation = false;
+    dibuja("g-grasa", {type: "line", options: og, plugins: [traza("g-grasa", t.acento, t.carta)], data: {labels: G.map(g => corta(g[0])), datasets: [{label: "Grasa",
       data: G.map(g => g[1]), borderColor: t.acento, backgroundColor: t.acento, borderWidth: 2, pointRadius: 3, pointHoverRadius: 5,
       pointBorderColor: t.carta, pointBorderWidth: 2, tension: .3}]}});
   }

@@ -22,10 +22,11 @@
 <script src="/calma.js?v=4423d460"></script>
 <script src="/anime-4.5.0.min.js"></script>
 <script src="/anima.js?v=4423d460"></script>
-<script src="/mascota.js?v=5"></script>
+<script src="/tom.js?v=1"></script>
+<script src="/mascota.js?v=6"></script>
 <script src="/sinred.js?v=1"></script>
 <script src="/hoja.js?v=4423d460"></script>
-<script src="/movimiento.js?v=1"></script>
+<script src="/movimiento.js?v=2"></script>
 <script defer src="/gsap-3.13.0.min.js"></script>
 <script defer src="/MorphSVGPlugin-3.13.0.min.js"></script>
 <script defer src="/Flip-3.13.0.min.js"></script>
@@ -175,6 +176,15 @@
   .racha::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(circle at var(--mx) var(--my), rgba(255, 255, 255, .35), transparent 55%); }
   .racha small { font-size: 13px; opacity: .85; }
   .racha b { font-size: 34px; font-weight: 800; letter-spacing: -.03em; line-height: 1; }
+  .racha small, .racha b { position: relative; margin-right: 92px; }
+  /* la planta de la racha (tom.js): crece con la mejor racha y se mustia si se rompe una más larga */
+  .racha canvas { position: absolute; right: 10px; bottom: 6px; width: 84px; height: 108px; image-rendering: pixelated; pointer-events: none; }
+
+  /* tarjetas con profundidad (tom.profundidad): con la inclinación del móvil, ≤5° y capas a 1,5-3 px. Sin ella, nada */
+  .app.inclina { perspective: 900px; }
+  .app.inclina :is(.anillos, .pieza, .racha) { rotate: var(--inc-rot, none); }
+  .app.inclina :is(.anillos svg, .pieza .cifra, .racha b, .racha canvas) { translate: calc(var(--inc-x, 0) * 3px) calc(var(--inc-y, 0) * 3px); }
+  .app.inclina :is(.anillos ul, .pieza .spark) { translate: calc(var(--inc-x, 0) * 1.5px) calc(var(--inc-y, 0) * 1.5px); }
 
   /* el año en puntos */
   .anio { display: grid; grid-template-columns: repeat(53, minmax(0, 1fr)); grid-template-rows: repeat(7, auto); grid-auto-flow: column; gap: 2px; }
@@ -261,7 +271,7 @@
     <div id="gastos"></div>
   </section>
 
-  <div data-mod="habitos" class="escena3d m2"><a class="racha" id="racha" href="/habitos.html"><small id="racha-q">Mejor racha</small><b id="racha-n">—</b><small id="racha-h"></small></a></div>
+  <div data-mod="habitos" class="escena3d m2"><a class="racha" id="racha" href="/habitos.html"><small id="racha-q">Mejor racha</small><b id="racha-n">—</b><small id="racha-h"></small><canvas id="planta" role="img" aria-label="Planta de la racha"></canvas></a></div>
 
   <section data-mod="habitos" class="carta c-carta c-foco s2 s3" aria-labelledby="t-anio">
     <h2 id="t-anio">Tu año <span class="c-chip" id="n-anio"></span></h2>
@@ -300,6 +310,8 @@ async function api(url, op = {}) {
 }
 
 let reloj;
+// lo que no se ha podido guardar: el aviso, y además vibra (y suena, si hay sonidos) como un error
+const mal = txt => { toast(txt); tom.avisa("error"); };
 function toast(txt, fn) {
   $("#toast-txt").textContent = txt;
   $("#toast-btn").hidden = !fn;
@@ -410,7 +422,7 @@ async function aHoy(x) {
     await cargar();
     toast(`${x.n} pasa a hoy`, async () => { await mueve(H.hoy, ayer, x.id, !yaHoy); cargar(); });
   } catch (e) {
-    if (e.message !== "401") toast(`No se ha guardado: ${e.message}`);
+    if (e.message !== "401") mal(`No se ha guardado: ${e.message}`);
   }
 }
 
@@ -430,7 +442,8 @@ async function marca(h) {
   const st = await sinred.marca(H.hoy, h.id, h.hecho);
   if (st === 401) return puerta(true);
   if (st !== 200) toast("Sin red: se guarda al volver");
-  if (H.habitos.every(x => x.hecho)) calma.fiesta("todo-dia");
+  // el día completo: confeti (una vez al día), y la vibración larga y la campanita
+  if (h.hecho && H.habitos.every(x => x.hecho)) { calma.fiesta("todo-dia"); tom.avisa("dia"); }
 }
 
 // ---------- tareas en pila: tocar una la abre para cambiarla; «+» apunta otra ----------
@@ -457,7 +470,7 @@ function tareas() {
       try {
         const r = await api("/api/tarea/hecha", {method: "POST", body: JSON.stringify({id: t.id, hecha: true})});
         toast(`Hecha: ${t.t}`, async () => { await api("/api/tarea/hecha", {method: "POST", body: JSON.stringify({id: r.id, hecha: false})}); cargar(); });
-      } catch (e) { toast(`No se ha podido: ${e.message}`); }
+      } catch (e) { mal(`No se ha podido: ${e.message}`); }
       await fin;
       cargar();
     };
@@ -513,7 +526,7 @@ function editar(t) {
       toast(`Cambiada: ${n.t} · ${hoja.etiqueta(n.due, n.hora)}`);
       cargar();
     } catch (e) {
-      if (e.message !== "401") toast(`No se ha cambiado: ${e.message}`);
+      if (e.message !== "401") mal(`No se ha cambiado: ${e.message}`);
       return false;
     }
   }, alBorrar: async () => {
@@ -522,7 +535,7 @@ function editar(t) {
       toast(`Borrada: ${t.t}`, async () => { await post("/api/tarea/restaura", b); cargar(); });
       cargar();
     } catch (e) {
-      if (e.message !== "401") toast(`No se ha borrado: ${e.message}`);
+      if (e.message !== "401") mal(`No se ha borrado: ${e.message}`);
       return false;
     }
   }});
@@ -534,7 +547,7 @@ $("#b-nueva").onclick = () => hoja.abre({titulo: "Nueva tarea", texto: "", due: 
     toast(`Apuntado · ${hoja.etiqueta(n.due, n.hora)}: ${n.t}`);
     cargar();
   } catch (e) {
-    if (e.message !== "401") toast(`No se ha apuntado: ${e.message}`);
+    if (e.message !== "401") mal(`No se ha apuntado: ${e.message}`);
     return false;
   }
 }});
@@ -547,7 +560,7 @@ function carrera() {
   bajo.textContent = `5k estimado · objetivo ${mmss(c.objetivo)} · ` +
     (c.semana ? `semana ${c.semana} de ${c.n_semanas}, ${c.fase.toLowerCase()}` : "el plan aún no ha empezado");
   caja.replaceChildren(cifra, bajo);
-  calma.cuenta(cifra, c.estimacion, mmss, 800);
+  tom.cifra(cifra, c.estimacion, mmss, "carrera");
   const s = el("div", "sesion");
   if (c.hoy_hecho) {
     s.classList.add("hoy");
@@ -606,11 +619,19 @@ function linea(id, serie) {
   const p = ([i, v]) => [i / n * 100, hi === lo ? 14 : 24 - (v - lo) / (hi - lo) * 20];
   const pts = xs.map(p), [ux, uy] = pts.at(-1);
   svg.innerHTML = `<polyline points="${pts.map(q => q.join(",")).join(" ")}"/><circle cx="${ux}" cy="${uy}" r="2.6"/>`;
+  // la primera vez en esta carga, la línea se dibuja de izquierda a derecha y el punto final hace pop
+  if (trazadas.has(id) || !anima.mov) return;
+  trazadas.add(id);
+  svg.animate([{clipPath: "inset(-8px 100% -8px -8px)"}, {clipPath: "inset(-8px -8px -8px -8px)"}], {duration: 900, delay: 250, easing: "cubic-bezier(.45, 0, .25, 1)", fill: "backwards"});
+  const c = svg.querySelector("circle");
+  c.style.transformBox = "fill-box"; c.style.transformOrigin = "center";
+  c.animate([{transform: "scale(0)"}, {transform: "scale(1.8)", offset: .6}, {transform: "scale(1)"}], {duration: 420, delay: 1100, easing: "ease-out", fill: "backwards"});
 }
+const trazadas = new Set();
 function piezas() {
   const pe = H.peso;
   if (pe) {
-    calma.cuenta($("#peso"), pe.kg, n => n.toFixed(1), 700);
+    tom.cifra($("#peso"), pe.kg, n => n.toFixed(1));
     $("#peso-sub").textContent = pe.media ? `media 7 días ${pe.media.toFixed(1)}` : "kg";
     linea("#sp-peso", pe.serie);
   } else {
@@ -632,7 +653,7 @@ function piezas() {
   }
   for (const [k, fmt] of [["sueno", hm], ["pasos", miles]]) {
     const x = H.salud[k];
-    if (x.ultimo) calma.cuenta($("#" + k), x.ultimo, fmt, 700);
+    if (x.ultimo) tom.cifra($("#" + k), x.ultimo, fmt);
     else $("#" + k).textContent = "—";
     $(`#${k}-sub`).textContent = x.media ? `media 7 días ${fmt(x.media)}` : "sin datos de Salud";
     linea("#sp-" + k, x.serie);
@@ -641,7 +662,14 @@ function piezas() {
 
 // ---------- la mejor racha, en una tarjeta que se inclina ----------
 function racha() {
-  const mejor = [...H.habitos].sort((a, b) => b.racha - a.racha)[0];
+  const mejor = [...H.habitos].sort((a, b) => b.racha - a.racha)[0], pl = tom.planta(H.habitos);
+  tom.ponPlanta($("#planta"), pl);
+  if (pl.mustia) {
+    $("#racha-q").textContent = "Se te rompió una racha";
+    $("#racha-n").textContent = `${pl.de.rota} días`;
+    $("#racha-h").textContent = `${pl.de.n}: márcalo hoy y vuelve a crecer`;
+    return;
+  }
   if (!mejor || !mejor.racha) {
     $("#racha-q").textContent = "Mejor racha";
     $("#racha-n").textContent = "0 días";
@@ -750,6 +778,7 @@ addEventListener("pageshow", e => {
   document.querySelectorAll(".app [style*='view-transition-name']").forEach(x => x.style.viewTransitionName = "");
 });
 mov.cielo();
+tom.profundidad($(".app"));
 addEventListener("marca-enviada", e => e.detail.cola && H && cargar());   // lo apuntado sin red ya está en el servidor
 cargar();
 </script>

@@ -336,6 +336,9 @@ def test_portada():
     # hoy sin hacer no rompe la racha; hecho hoy, cuenta
     assert main.racha(log, "a", "2026-10-26") == 2 and main.racha(log, "b", "2026-10-26") == 2
     assert main.racha(log, "c", "2026-10-26") == 0
+    # la racha que se rompió ayer (la planta de Hoy se mustia con ella): sus días; si ayer se hizo, ninguna
+    assert main.rota(log, "a", "2026-10-26") == 0 and main.rota(log, "a", "2026-10-27") == 2
+    assert main.rota(log, "b", "2026-10-27") == 0 and main.rota(log, "a", "2026-10-28") == 0 and main.rota({}, "a", "2026-10-27") == 0
     assert main.trozo(lambda: 1 / 0) == {"error": "division by zero"}
     s = clean({"habits": [{"id": "a", "n": "Correr"}, {"id": "b", "n": "Agua"}, {"id": "c", "n": "Leer"}],
                "log": log, "plan": {"2026-10-26": ["a", "b"]}, "peso": {"2026-10-20": 81, "2026-10-25": 80}})
@@ -354,6 +357,9 @@ def test_portada():
     assert "otra" not in a and main.limpia_ajustes(a) == a
     assert a["mascota"]["tipo"] == "fantasma" and main.limpia_ajustes({"mascota": {"tipo": "flor"}})["mascota"]["tipo"] == "flor"
     assert main.limpia_ajustes({"mascota": {"tipo": "<script>"}})["mascota"]["tipo"] == "fantasma"
+    # los sonidos de la web, apagados salvo que se activen a propósito (con True, no con «sí»)
+    assert main.limpia_ajustes({})["sonidos"] is False and main.limpia_ajustes({"sonidos": True})["sonidos"] is True
+    assert main.limpia_ajustes({"sonidos": "si"})["sonidos"] is False
     # lo planificado y sin hacer arriba, luego lo planificado hecho, luego el resto
     assert [x["id"] for x in h["habitos"]] == ["a", "b", "c"], h
     # su sitio en la lista de hábitos, para que la portada reordene al marcar (movimiento.js → ordena)
@@ -661,7 +667,7 @@ def test_tom():
 
 
 def test_movimiento():
-    """movimiento.js (GSAP): el orden de Hoy, el cuentakilómetros y el cielo, con node; y que GSAP no bloquee."""
+    """movimiento.js (GSAP) y tom.js: el orden de Hoy, el cuentakilómetros, el cielo, la planta y las cifras, con node."""
     import shutil
     import subprocess
     from pathlib import Path
@@ -699,6 +705,30 @@ def test_movimiento():
     ok(m.colores(23.9).flat().every(v => v >= 0 && v <= 255), m.colores(23.9));
     """
     r = subprocess.run(["node", "-e", js, str(st / "movimiento.js")], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    # tom.js: la planta de la racha, las cifras que se descifran, la inclinación del navegador y los patrones
+    js = """
+    const t = require(process.argv[1]), ok = (c, x) => { if (!c) { console.error(JSON.stringify(x)); process.exit(1); } };
+    const h = (racha, rota = 0, hecho = false) => ({n: "x", racha, rota, hecho});
+    ok(JSON.stringify(t.planta([])) === JSON.stringify({etapa: 0, mustia: false, de: null}), t.planta([]));
+    ok(t.planta([h(3), h(12)]).etapa === 7 && !t.planta([h(3), h(12)]).mustia, "crece hasta 7");
+    // ayer se rompió una de 5 y la mejor viva es de 2: mustia, del tamaño de la perdida
+    let p = t.planta([h(0, 5), h(2)]);
+    ok(p.mustia && p.etapa === 5, p);
+    // hecha hoy otra vez (racha 1): vuelve a crecer desde abajo; y una rota de 1 día no cuenta
+    p = t.planta([h(1, 5, true), h(2)]);
+    ok(!p.mustia && p.etapa === 2, p);
+    ok(!t.planta([h(0, 1)]).mustia, "rota de un día");
+    ok(!t.planta([h(0, 4), h(6)]).mustia, "la viva es más larga");
+    // solo cambian los dígitos que faltan por fijar; el resto (y el largo) se queda
+    const r = t.revuelve("7 h 12", 2, () => .5);
+    ok(r === "7 h 55" && r.length === 6, r);
+    ok(t.revuelve("8.432", 5) === "8.432" && t.revuelve("8.432", 0, () => 0) === "0.000", "8.432");
+    ok(JSON.stringify(t.deOrientacion(0, 0)) === JSON.stringify({x: 0, y: 0}), t.deOrientacion(0, 0));
+    ok(t.deOrientacion(90, 0).y === 1 && t.deOrientacion(-120, 200).y >= -1 && t.deOrientacion(0, 90).x === 1, "orientación");
+    for (const k of ["marcar", "desmarcar", "serie", "record", "descanso", "error", "dia"]) ok(t.PATRONES[k] && t.SUENA[k] !== undefined, k);
+    """
+    r = subprocess.run(["node", "-e", js, str(st / "tom.js")], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
 
 

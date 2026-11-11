@@ -22,12 +22,13 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
 <link rel="stylesheet" href="/calma.css?v=4423d460">
 <script src="/calma.js?v=4423d460"></script>
-<script src="/mascota.js?v=5"></script>
+<script src="/tom.js?v=1"></script>
+<script src="/mascota.js?v=6"></script>
 <script src="/sinred.js?v=1"></script>
 <!-- anime.js servido desde aquí, sin CDN; si no carga, la página funciona igual sin animaciones -->
 <script src="/anime-4.5.0.min.js"></script>
 <script src="/anima.js?v=4423d460"></script>
-<script src="/movimiento.js?v=1"></script>
+<script src="/movimiento.js?v=2"></script>
 <!-- GSAP (sin CDN) solo para marcar; con defer y, si no llega, se marca con anime.js como antes -->
 <script defer src="/gsap-3.13.0.min.js"></script>
 <script defer src="/MorphSVGPlugin-3.13.0.min.js"></script>
@@ -461,7 +462,7 @@ function marcar(d, h) {
   if (f && !mov.marca(f, si, antes, racha(h), dd) && si) animaMarca(h);
   // todo lo planificado de hoy hecho (o todos los hábitos, si no había plan): confeti, una vez al día
   const objetivo = planeados(HOY).length ? planeados(HOY) : S.habits.map(x => x.id);
-  if (d === HOY && objetivo.length && objetivo.every(x => hecho(HOY, x))) calma.fiesta("todo-dia");
+  if (si && d === HOY && objetivo.length && objetivo.every(x => hecho(HOY, x))) { calma.fiesta("todo-dia"); tom.avisa("dia"); }
 }
 
 function planear(d, h) {
@@ -503,7 +504,7 @@ function guardar() {
         method: "PUT", headers: {"Content-Type": "application/json", "X-Version": version}, body: JSON.stringify(S),
       });
       if (r.status === 401) { $("#estado").textContent = "Sesión caducada"; return puerta(true); }
-      if (r.status === 409) { await refresca(); $("#estado").textContent = "Había cambios de otro sitio: repite lo último"; return; }
+      if (r.status === 409) { await refresca(); $("#estado").textContent = "Había cambios de otro sitio: repite lo último"; tom.avisa("error"); return; }
       if (!r.ok) throw new Error(r.status);
       version = r.headers.get("X-Version") || "";
       S = normaliza(await r.json());   // el servidor devuelve el estado ya limpio
@@ -512,6 +513,7 @@ function guardar() {
       render();
     } catch (e) {
       $("#estado").textContent = "Sin guardar";
+      tom.avisa("error");
     }
   }, 400);
 }
