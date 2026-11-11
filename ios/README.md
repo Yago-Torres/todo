@@ -63,7 +63,7 @@ Sácalas desde el PC:
 ssh pi@192.168.1.70 'sudo cat /etc/cloudflare-access/todo-bot.json'
 ```
 
-Después, en la pantalla de **Configuración** (se abre agitando el iPhone), activa:
+Después, en la pantalla de **Configuración** (la primera vez sale sola; luego, en la web, **Ajustes › Ajustes de la app**; si la web no carga, el botón **Ajustes de la app** de la pantalla «Sin conexión» o el enlace `hoy://configurar`), activa:
 
 - **Salud**, para que la app lea sueño, pasos, peso y entrenos.
 - **Avisos**, para los recordatorios locales.

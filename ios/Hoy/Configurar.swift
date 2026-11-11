@@ -2,8 +2,8 @@ import SwiftUI
 import LocalAuthentication
 import WidgetKit
 
-/// Claves y ajustes. La primera vez sale sola; después se abre agitando el iPhone con la web delante
-/// (ver la extensión de UIWindow en HoyApp.swift).
+/// Claves y ajustes. La primera vez sale sola; después se abre desde la web (fila «Ajustes de la app» en Ajustes,
+/// que manda {accion:"configurar"}), con hoy://configurar o con el botón de la página «Sin conexión» (ver Raiz).
 struct Configurar: View {
     let alGuardar: (Claves) -> Void
 

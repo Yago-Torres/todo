@@ -25,6 +25,8 @@ final class Coordinador: NSObject, WKNavigationDelegate, WKUIDelegate {
     private weak var vista: WKWebView?
     private let refresco = UIRefreshControl()
     private var suscripcion: AnyCancellable?
+    private var agitado: AnyCancellable?
+    private let inclinacion = Inclinacion()
     private var listo = false            // las cookies ya están (o se intentó): se puede cargar
     private var pendiente: String?       // lo que pidió el Navegador antes de estar listo
     private var ultima: URL?             // la última página propia pedida, para volver a ella tras renovar
@@ -69,12 +71,17 @@ final class Coordinador: NSObject, WKNavigationDelegate, WKUIDelegate {
         refresco.addTarget(self, action: #selector(recarga), for: .valueChanged)
         v.scrollView.refreshControl = refresco
         vista = v
+        inclinacion.vista = v
         Entreno.shared.web = v
 
         suscripcion = Navegador.shared.$ruta
             .compactMap { $0 }
             .receive(on: DispatchQueue.main)
             .sink { [weak self] ruta in self?.ve(ruta) }
+        // agitar el iPhone ya no abre Configurar: se le cuenta a la web (Raiz decide si toca, ver HoyApp.swift)
+        agitado = NotificationCenter.default.publisher(for: .hoyAgitaWeb)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.agita() }
 
         Task {
             await prepara(forzar: false)
@@ -94,6 +101,8 @@ final class Coordinador: NSObject, WKNavigationDelegate, WKUIDelegate {
 
     func desmonta() {
         suscripcion?.cancel()
+        agitado?.cancel()
+        inclinacion.pide(false)
         vista?.configuration.userContentController.removeScriptMessageHandler(forName: "hoy")
         vista?.configuration.userContentController.removeScriptMessageHandler(forName: PuenteLocal.nombre, contentWorld: .page)
         UIApplication.shared.isIdleTimerDisabled = false
@@ -161,6 +170,11 @@ final class Coordinador: NSObject, WKNavigationDelegate, WKUIDelegate {
         guard let url = accion.request.url else { return .allow }
         let esquema = url.scheme?.lowercased() ?? ""
         if ["about", "blob", "data", "javascript"].contains(esquema) { return .allow }
+        // hoy://configurar desde la página de error (la salida de emergencia si la web no carga)
+        if esquema == "hoy" && url.host == "configurar" {
+            NotificationCenter.default.post(name: .hoyConfigurar, object: nil)
+            return .cancel
+        }
         let principal = accion.targetFrame?.isMainFrame ?? true
 
         // obsidian://, mailto:, tel:... y las webs de fuera, a su app o a Safari
@@ -200,6 +214,7 @@ final class Coordinador: NSObject, WKNavigationDelegate, WKUIDelegate {
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         UIApplication.shared.isIdleTimerDisabled = false   // página nueva: su wake lock ya no existe
+        inclinacion.pide(false)                            // ni su inclinación: si la quiere, que la vuelva a pedir
         // en el entreno, tirar hacia abajo sin querer recargaría y se perdería la serie en curso
         let enEntreno = webView.url?.path.hasPrefix("/entreno") == true
         webView.scrollView.refreshControl = enEntreno ? nil : refresco
@@ -286,6 +301,12 @@ final class Coordinador: NSObject, WKNavigationDelegate, WKUIDelegate {
         switch accion {
         case "vibra":
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        case "haptica":
+            Haptica.shared.toca(datos["patron"] as? String ?? "")
+        case "inclinacion":
+            inclinacion.pide(datos["activa"] as? Bool ?? false)
+        case "configurar":
+            NotificationCenter.default.post(name: .hoyConfigurar, object: nil)
         case "pantalla":
             UIApplication.shared.isIdleTimerDisabled = datos["activa"] as? Bool ?? false
         case "entreno":
@@ -295,6 +316,12 @@ final class Coordinador: NSObject, WKNavigationDelegate, WKUIDelegate {
         default:
             break
         }
+    }
+
+    /// El iPhone se ha agitado con la web delante: un tic suave y el evento para la web.
+    private func agita() {
+        Haptica.shared.toca(.desmarcar)
+        vista?.evaluateJavaScript("window.dispatchEvent(new CustomEvent(\"tom-agitar\"));true", completionHandler: nil)
     }
 
     private static func paginaError(_ motivo: String) -> String {
@@ -307,7 +334,11 @@ final class Coordinador: NSObject, WKNavigationDelegate, WKUIDelegate {
         font:17px -apple-system,sans-serif;background:#F4F5F0;color:#2B3028;padding:24px;box-sizing:border-box}
         @media (prefers-color-scheme:dark){body{background:#171A16;color:#EEF0E8}}
         p{opacity:.7}
-        </style></head><body><div><h2>Sin conexión</h2><p>\(limpio)</p><p>Tira hacia abajo para reintentar.</p></div></body></html>
+        a{display:inline-block;margin-top:12px;padding:12px 20px;border-radius:12px;background:rgba(46,139,87,.14);
+        color:#2E8B57;text-decoration:none;font-weight:600}
+        @media (prefers-color-scheme:dark){a{background:rgba(46,139,87,.28);color:#6FCF97}}
+        </style></head><body><div><h2>Sin conexión</h2><p>\(limpio)</p><p>Tira hacia abajo para reintentar.</p>
+        <a href="hoy://configurar">Ajustes de la app</a></div></body></html>
         """
     }
 

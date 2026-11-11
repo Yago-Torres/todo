@@ -3,6 +3,7 @@ import UIKit
 import WidgetKit
 import Observation
 import AppIntents
+import AVFoundation
 
 @main
 struct HoyApp: App {
@@ -41,10 +42,15 @@ struct HoyApp: App {
     }
 
     /// hoy://ruta?r=/habitos.html (el widget): la web navega a esa ruta. hoy://voz abre el modo voz.
+    /// hoy://configurar abre Configurar (sin claves ya está delante).
     private func abre(_ url: URL) {
         guard url.scheme == "hoy" else { return }
         if url.host == "voz" {
             Navegador.shared.voz = true
+            return
+        }
+        if url.host == "configurar" {
+            if estado.claves != nil { estado.configurando = true }
             return
         }
         guard let r = URLComponents(url: url, resolvingAgainstBaseURL: false)?
@@ -71,6 +77,12 @@ struct Raiz: View {
                 set: { navegador.voz = $0 })
     }
 
+    /// Igual con Configurar: lo pedido con la app bloqueada sale después de desbloquear.
+    private var configurarVisible: Binding<Bool> {
+        Binding(get: { estado.configurando && !estado.bloqueado },
+                set: { estado.configurando = $0 })
+    }
+
     var body: some View {
         ZStack {
             Color("Fondo").ignoresSafeArea()
@@ -78,10 +90,17 @@ struct Raiz: View {
                 // la web sigue viva debajo del bloqueo: al desbloquear no se recarga ni pierde lo que tenías a medias
                 Web(claves: claves)
                     .ignoresSafeArea()
+                    // agitar es ahora cosa de la web; Configurar lo pide ella ({accion:"configurar"}), hoy://configurar
+                    // o el botón «Ajustes de la app» de la página sin conexión
                     .onReceive(NotificationCenter.default.publisher(for: .hoyAgitado)) { _ in
-                        if !estado.bloqueado { estado.configurando = true }
+                        if !estado.bloqueado && !estado.configurando && !navegador.voz {
+                            NotificationCenter.default.post(name: .hoyAgitaWeb, object: nil)
+                        }
                     }
-                    .sheet(isPresented: $estado.configurando) {
+                    .onReceive(NotificationCenter.default.publisher(for: .hoyConfigurar)) { _ in
+                        estado.configurando = true
+                    }
+                    .sheet(isPresented: configurarVisible) {
                         NavigationStack {
                             Configurar { estado.claves = $0 }
                         }
@@ -104,12 +123,17 @@ struct Raiz: View {
 }
 
 extension Notification.Name {
+    /// El iPhone se ha agitado (lo manda la ventana).
     static let hoyAgitado = Notification.Name("hoyAgitado")
+    /// …y no hay nada encima de la web: el Coordinador se lo cuenta con el evento «tom-agitar».
+    static let hoyAgitaWeb = Notification.Name("hoyAgitaWeb")
+    /// Abrir Configurar: {accion:"configurar"} de la web o el enlace hoy://configurar de la página de error.
+    static let hoyConfigurar = Notification.Name("hoyConfigurar")
 }
 
-// Configurar se abre AGITANDO el iPhone con la web delante: la web ocupa toda la pantalla y no hay sitio para un
-// botón nativo. El agitado llega aquí por la cadena de respondedores desde el WKWebView (o la ventana, si no hay
-// primer respondedor), así que basta con escucharlo en la ventana.
+// Agitar el iPhone con la web delante se le pasa a la web (evento «tom-agitar»); ya no abre Configurar.
+// El agitado llega aquí por la cadena de respondedores desde el WKWebView (o la ventana, si no hay primer
+// respondedor), así que basta con escucharlo en la ventana.
 extension UIWindow {
     open override func motionEnded(_ motion: UIEvent.EventSubtype, with event: UIEvent?) {
         if motion == .motionShake {
@@ -123,6 +147,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         Avisos.registraTareaFondo()
+        // los sonidos de la web (Web Audio) respetan el interruptor de silencio y se mezclan con la música
+        Sonido.ambiente()
         Red.shared.empieza()
         if Almacen.defaults.bool(forKey: "salud") { Salud.activaSegundoPlano() }
         return true

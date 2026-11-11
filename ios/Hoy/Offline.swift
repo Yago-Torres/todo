@@ -373,7 +373,7 @@ final class PuenteLocal: NSObject, WKScriptMessageHandlerWithReply {
         },
         conflicto: function (d) {
           window.dispatchEvent(new CustomEvent("tom-conflicto", {detail: d}));
-          pastilla("Un cambio no se ha podido guardar · agita el iPhone para verlo", 8000);
+          pastilla("Un cambio no se ha podido guardar · míralo en Ajustes › Ajustes de la app", 8000);
         }
       };
     })();

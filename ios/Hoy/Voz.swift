@@ -193,6 +193,7 @@ final class Conversacion: NSObject, AVSpeechSynthesizerDelegate {
         paraEscucha()
         if sintetizador.isSpeaking { sintetizador.stopSpeaking(at: .immediate) }
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        Sonido.ambiente()   // de vuelta a la web: sus sonidos otra vez discretos
         cerrada = true
     }
 
@@ -385,6 +386,15 @@ final class Conversacion: NSObject, AVSpeechSynthesizerDelegate {
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, willSpeakRangeOfSpeechString characterRange: NSRange,
                                        utterance: AVSpeechUtterance) {
         Task { @MainActor in self.ultimoPulso = Date.timeIntervalSinceReferenceDate }
+    }
+}
+
+/// La sesión de audio de la app fuera del modo voz.
+enum Sonido {
+    /// .ambient: respeta el interruptor de silencio y se mezcla con la música que suene. El modo voz pone
+    /// .playAndRecord mientras escucha y habla, y vuelve aquí al cerrarse.
+    static func ambiente() {
+        try? AVAudioSession.sharedInstance().setCategory(.ambient, mode: .default, options: [])
     }
 }
 
