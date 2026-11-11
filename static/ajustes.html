@@ -16,11 +16,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<link rel="stylesheet" href="/calma.css?v=1fc40cef">
-<script src="/calma.js?v=1fc40cef"></script>
+<link rel="stylesheet" href="/calma.css?v=36c64bfb">
+<script src="/calma.js?v=36c64bfb"></script>
 <script src="/mascota.js?v=4"></script>
 <script src="/anime-4.5.0.min.js"></script>
-<script src="/anima.js?v=1fc40cef"></script>
+<script src="/anima.js?v=36c64bfb"></script>
 <style>
   /* Estilo Calma: tokens y componentes en /calma.css (fuente: ~/estilo). Aquí solo lo de esta página. */
   body { padding: 16px; padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px)); }
@@ -42,6 +42,10 @@
   #modulos .cab { font-size: 12px; color: var(--suave); text-align: center; }
   #modulos .nom { font-weight: 500; display: flex; align-items: center; gap: 8px; }
   #modulos input { justify-self: center; }
+  #limites { display: grid; gap: 8px; }
+  .limite { display: grid; grid-template-columns: minmax(0, 1fr) 96px auto; align-items: center; gap: 10px; font-weight: 500; }
+  .limite .c-campo { text-align: right; }
+  .limite small { font-size: 13px; color: var(--suave); font-weight: 400; }
   .escenario { display: grid; place-items: center; padding: 18px 0 14px; margin-bottom: 12px; border-radius: 12px; background: var(--carta-2); }
   #sitio-fantasma { width: min(100%, 320px); height: 180px; position: relative; }
   #sitio-fantasma #fantasma { position: static; width: 100%; height: 100%; }
@@ -85,6 +89,12 @@
       <p class="pista">Lo que no esté activo desaparece también de Hoy. Lo activo puede estar fuera de la barra de abajo: sigue en Hoy, pero no ocupa sitio.</p>
       <div id="modulos"></div>
     </section>
+
+    <section class="carta c-carta" aria-labelledby="t-movil">
+      <h2 id="t-movil">Móvil: límite al día</h2>
+      <p class="pista">Al abrir la app, el aviso del atajo te dice cuánto te queda; al pasarte, te escribo por Telegram. Vacío, sin límite.</p>
+      <div id="limites"></div>
+    </section>
   </div>
 
   <div class="col">
@@ -108,7 +118,7 @@
 <script>
 const $ = s => document.querySelector(s);
 const el = (t, cls, txt) => { const e = document.createElement(t); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
-const NOMBRES = {habitos: "Hábitos", pendientes: "Pendientes", entreno: "Entreno", salud: "Salud", comida: "Comida", gastos: "Gastos"};
+const NOMBRES = {habitos: "Hábitos", pendientes: "Pendientes", entreno: "Entreno", salud: "Salud", comida: "Comida", gastos: "Gastos", documentos: "Documentos"};
 const CONTROLES = [["ancho", "Ancho", 20, 36, 1], ["alto", "Alto", 50, 90, 1], ["pera", "Forma de pera", 0, 1, .05], ["cola", "Cola de lado", -24, 24, 1],
   ["flecos", "Flecos", 2, 6, 1], ["fleco", "Largo de flecos", 2, 14, 1], ["grumos", "Grumos", 0, .5, .01], ["ojoI", "Ojo izquierdo", 2, 8, .5],
   ["ojoD", "Ojo derecho", 2, 8, .5], ["sep", "Separación de ojos", 8, 26, 1], ["ojosY", "Altura de ojos", .15, .6, .01]];
@@ -160,6 +170,21 @@ function modulos() {
   }
 }
 
+// las apps con límite y las que ya ha visto el atajo esta semana
+async function limites() {
+  let vistas = [];
+  try { vistas = (await api("/api/pantalla")).semana.apps.map(a => a.app); } catch (e) { /* sin datos del móvil */ }
+  const caja = $("#limites"), todas = [...new Set([...Object.keys(A.limites), ...vistas])];
+  if (!todas.length) return caja.replaceChildren(el("p", "pista", "Aún no ha llegado ningún aviso del atajo de Atajos."));
+  caja.replaceChildren(...todas.map(n => {
+    const l = el("label", "limite"), i = Object.assign(el("input", "c-campo"), {type: "number", min: 1, max: 600, inputMode: "numeric",
+                                                                              value: A.limites[n] ?? "", placeholder: "sin límite"});
+    i.oninput = () => { const v = parseInt(i.value, 10); if (v > 0) A.limites[n] = v; else delete A.limites[n]; guardar(); };
+    l.append(el("span", null, n), i, el("small", null, "min"));
+    return l;
+  }));
+}
+
 function fantasmita() {
   const m = A.mascota, caja = $("#controles");
   caja.replaceChildren(...CONTROLES.map(([k, n, lo, hi, paso]) => {
@@ -192,6 +217,7 @@ async function cargar() {
     $("#nombre").value = A.nombre;
     modulos();
     fantasmita();
+    limites();
   } catch (e) {
     if (e.message !== "401") $("#estado").textContent = `Sin conexión: ${e.message}`;
   }

@@ -18,13 +18,13 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<link rel="stylesheet" href="/calma.css?v=1fc40cef">
-<script src="/calma.js?v=1fc40cef"></script>
+<link rel="stylesheet" href="/calma.css?v=36c64bfb">
+<script src="/calma.js?v=36c64bfb"></script>
 <script src="/anime-4.5.0.min.js"></script>
-<script src="/anima.js?v=1fc40cef"></script>
+<script src="/anima.js?v=36c64bfb"></script>
 <script src="/mascota.js?v=4"></script>
 <script src="/sinred.js?v=1"></script>
-<script src="/hoja.js?v=1fc40cef"></script>
+<script src="/hoja.js?v=36c64bfb"></script>
 <style>
   /* Estilo Calma: tokens y componentes en /calma.css (fuente: ~/estilo). Aquí solo lo de la portada.
      Bento: lo del día en grande (anillos), cifras pequeñas alrededor, y el resto en piezas de 2 o 1. */
@@ -85,6 +85,8 @@
   .spark { width: 100%; height: 28px; margin-top: 8px; overflow: visible; }
   .spark polyline { fill: none; stroke: var(--acento); stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
   .spark circle { fill: var(--acento); }
+  .pieza .apps { margin: 6px 0 0; padding: 0; list-style: none; font-size: 12px; color: var(--suave); }
+  .pieza .apps li { display: flex; gap: 8px; } .pieza .apps li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* hábitos: como en index.html, el círculo se rellena con el color del hábito */
   .fila { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: none; border: 0;
@@ -213,6 +215,7 @@
   <a data-mod="salud" class="carta c-carta c-foco pieza" href="/salud.html"><span class="c-eti">Pasos ayer</span><span class="cifra" id="pasos">—</span><span class="bajo" id="pasos-sub"></span><svg class="spark" id="sp-pasos" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true"></svg></a>
   <a data-mod="salud" class="carta c-carta c-foco pieza" href="/salud.html"><span class="c-eti">Peso</span><span class="cifra" id="peso">—</span><span class="bajo" id="peso-sub"></span><svg class="spark" id="sp-peso" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true"></svg></a>
   <a data-mod="pendientes" class="carta c-carta c-foco pieza" href="/pendientes.html"><span class="c-eti">Leer luego</span><span class="cifra" id="leer">—</span><span class="bajo">guardados</span></a>
+  <div class="carta c-carta c-foco pieza" id="c-pantalla" hidden><span class="c-eti">Móvil hoy</span><span class="cifra" id="pantalla">—</span><span class="bajo" id="pantalla-sub"></span><ul class="apps" id="pantalla-apps"></ul><svg class="spark" id="sp-pantalla" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true"></svg></div>
 
   <section data-mod="habitos" class="carta c-carta c-foco s2" aria-labelledby="t-hab">
     <h2 id="t-hab">Hábitos <span class="c-chip" id="n-hab"></span><a href="/habitos.html">Abrir</a></h2>
@@ -595,6 +598,19 @@ function piezas() {
     $("#peso-sub").textContent = "sin pesarte esta semana";
   }
   $("#leer").textContent = typeof H.leer === "number" ? H.leer : "—";
+  // el móvil: lo que avisa Atajos al abrir y cerrar las apps que vigilas. Sin avisos aún, la tarjeta no sale
+  const pa = H.pantalla, rato = s => s < 3600 ? `${Math.round(s / 60)} min` : `${Math.floor(s / 3600)} h ${String(Math.round(s % 3600 / 60)).padStart(2, "0")}`;
+  $("#c-pantalla").hidden = !pa || !pa.semana.n;
+  if (pa && pa.semana.n) {
+    $("#pantalla").textContent = rato(pa.hoy.s);
+    $("#pantalla-sub").textContent = `${pa.hoy.n} ${pa.hoy.n === 1 ? "vez" : "veces"} hoy` + (pa.hoy.no ? ` · ${pa.hoy.no} sin entrar` : "") + ` · 7 días ${rato(pa.semana.s)}`;
+    $("#pantalla-apps").replaceChildren(...pa.hoy.apps.filter(a => a.s || a.n).slice(0, 3).map(a => {
+      const li = el("li");
+      li.append(el("span", null, a.app), el("b", null, rato(a.s)));
+      return li;
+    }));
+    linea("#sp-pantalla", pa.serie.map(s => s / 60));
+  }
   for (const [k, fmt] of [["sueno", hm], ["pasos", miles]]) {
     const x = H.salud[k];
     if (x.ultimo) calma.cuenta($("#" + k), x.ultimo, fmt, 700);

@@ -286,8 +286,15 @@ def nombre_seguro(titulo):
     return " ".join(limpio.split())[:80].strip(" .") or "Enlace"
 
 
+def de_leer(rel):
+    """La ruta de una nota de Leer luego que existe, o None: lo de fuera de esa carpeta no se toca."""
+    p = (VAULT / str(rel or "")).resolve()
+    return p if p.parent == (VAULT / LEER).resolve() and p.suffix == ".md" and p.exists() else None
+
+
 def nueva_lectura(d):
-    """Nota de «leer luego» a partir de lo que manda el bot (ya resumido por Claude)."""
+    """Nota de «leer luego» a partir de lo que manda el bot (ya resumido por Claude).
+    Con `reemplaza` (la ruta de la nota provisional que dejó el iPhone) la nota buena ocupa su sitio."""
     url = str(d.get("url") or "").strip()
     if not url.startswith(("http://", "https://")) or len(url) > 1000:
         raise ValueError("url no válida")
@@ -295,6 +302,9 @@ def nueva_lectura(d):
     titulo = nombre_seguro(d.get("titulo") or url)
     carpeta = VAULT / LEER
     carpeta.mkdir(parents=True, exist_ok=True)
+    vieja = de_leer(d.get("reemplaza")) if d.get("reemplaza") else None
+    if vieja:
+        vieja.unlink()
     p, n = carpeta / f"{titulo}.md", 2
     while p.exists():
         p, n = carpeta / f"{titulo} {n}.md", n + 1
@@ -307,7 +317,7 @@ def nueva_lectura(d):
     relacionadas = [nombre_seguro(x) for x in d.get("enlaces") or []][:4]
     cuerpo = [
         "---", "type: recurso", f"tags: [leer-luego{''.join(', ' + t for t in etiquetas if t)}]",
-        f"created: {hoy}", "source: telegram", f"url: {url}", f"tipo: {str(d.get('tipo') or 'articulo')[:20]}",
+        f"created: {hoy}", f"source: {'iphone' if d.get('source') == 'iphone' else 'telegram'}", f"url: {url}", f"tipo: {str(d.get('tipo') or 'articulo')[:20]}",
         f"minutos: {int(d.get('minutos') or 0)}", "leido: false", f"review: {review}",
         f'resumen: "{resumen.replace(chr(34), chr(39))}"', "---", f"# {titulo}", "", f"[Abrir el original]({url})", "",
         "## Resumen", resumen, "",
@@ -338,8 +348,8 @@ def lecturas():
 
 def leido(rel):
     """Solo dentro de Leer luego: leido: true y fuera el review, para que no vuelva a avisar."""
-    p = (VAULT / rel).resolve()
-    if p.parent != (VAULT / LEER).resolve() or p.suffix != ".md" or not p.exists():
+    p = de_leer(rel)
+    if not p:
         raise ValueError("no es una nota de leer luego")
     texto = p.read_text("utf-8")
     texto = re.sub(r"^leido:.*$", "leido: true", texto, count=1, flags=re.M)

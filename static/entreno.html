@@ -17,13 +17,13 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<link rel="stylesheet" href="/calma.css?v=1fc40cef">
+<link rel="stylesheet" href="/calma.css?v=36c64bfb">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="/calma.js?v=1fc40cef"></script>
+<script src="/calma.js?v=36c64bfb"></script>
 <script src="/mascota.js?v=4"></script>
 <script src="/anime-4.5.0.min.js"></script>
 <script src="/monigotes.js?v=1"></script>
-<script src="/anima.js?v=1fc40cef"></script>
+<script src="/anima.js?v=36c64bfb"></script>
 <style>
   /* Estilo Calma: tokens y componentes en /calma.css (fuente: ~/estilo). Aquí solo lo de entreno. */
   body { padding: 16px; padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px)); }
@@ -204,6 +204,28 @@
 
   .puerta input { width: 100%; }
   .puerta button { width: 100%; }
+  /* escalada (la tarjeta de abajo a la derecha): todo con esc- para no chocar con lo del gimnasio */
+  .esc-caja { display: grid; gap: 8px; padding: 12px; background: var(--carta-2); border-radius: var(--r-s); margin-bottom: 12px; }
+  .esc-caja .c-campo { background: var(--carta); min-width: 0; }
+  .esc-pista { margin: 0; font-size: 13px; color: var(--suave); line-height: 1.45; }
+  .esc-campo { display: grid; grid-template-columns: 4.2em minmax(0, 1fr); align-items: center; gap: 8px; font-size: 13px; color: var(--suave); }
+  .esc-comp { display: flex; gap: 8px; align-items: center; justify-content: space-between; font-size: 13px; padding-top: 6px; border-top: 1px solid var(--linea); }
+  .esc-comp small { color: var(--suave); }
+  .esc-bloque { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 14px 0 4px; }
+  .esc-bloque .c-chip, .esc-t .c-chip { font-size: 12px; padding: 1px 8px; font-weight: 500; }
+  .esc-punto { width: 12px; height: 12px; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 1px var(--linea); }
+  .esc-item { border-bottom: 1px solid var(--linea); }
+  .esc-t { width: 100%; display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 10px 2px; background: none;
+           border: 0; font: inherit; font-size: 14px; color: inherit; text-align: left; cursor: pointer; }
+  .esc-det { display: grid; gap: 10px; padding-bottom: 12px; }
+  .esc-det video { width: 100%; max-height: 72vh; background: #000; border-radius: var(--r-s); display: block; }
+  .esc-vid { display: flex; gap: 6px; flex-wrap: wrap; }
+  .esc-vid .c-btn[aria-pressed="true"] { background: var(--acento); color: var(--acento-texto); }
+  .esc-coach { display: grid; gap: 6px; font-size: 14px; line-height: 1.5; }
+  .esc-coach p { margin: 0; }
+  .esc-coach ul { margin: 0; padding-left: 20px; }
+  .esc-coach h3 { margin: 4px 0 0; font-size: 13px; font-weight: 600; color: var(--suave); }
+  .esc-fila { display: grid; grid-template-columns: minmax(0, 1fr) 6.5em auto; gap: 8px; }
 </style>
 <body>
 
@@ -297,6 +319,12 @@
       <h2 id="t-car">Carrera esta semana <a href="/carrera.html">Plan y gráficas →</a></h2>
       <ul class="ses" id="carrera"></ul>
       <div id="auto"></div>
+    </section>
+
+    <section class="carta c-carta" aria-labelledby="t-esc" id="c-esc" hidden>
+      <h2 id="t-esc">Escalada</h2>
+      <div id="esc-competir"></div>
+      <div id="esc"></div>
     </section>
 
     <section class="carta c-carta" aria-labelledby="t-av">
@@ -521,7 +549,8 @@ function ficha(h, r) {
   if (viva) cab.append(el("span", "c-chip ojo", "a medias"));
   f.append(el("div", "tit", r.n));
   const n = r.bloques.length;
-  f.append(el("div", "sub", r.tipo === "movilidad" ? `${n} pasos · ${Math.round(r.bloques.reduce((a, b) => a + b.seg, 0) / 60)} min`
+  const dura = r.bloques.reduce((a, b) => a + b.seg, 0) + (r.pausa || 0) * Math.max(0, n - 1);
+  f.append(el("div", "sub", r.tipo === "movilidad" ? `${n} pasos · ${Math.round(dura / 60)} min`
     : hecha ? resumen(hecha) : `${n} ejercicio${n === 1 ? "" : "s"}`));
   const acc = el("div", "acc");
   if (r.tipo === "pesas" || r.tipo === "movilidad") {
@@ -715,6 +744,7 @@ function pintaSesion() {
     return caja;
   }), pieSesion());
   c.scrollTop = y;
+  avisaApp();
 }
 
 function fila(b, e, i, sg, r, seg) {
@@ -727,6 +757,7 @@ function fila(b, e, i, sg, r, seg) {
   const ok = el("button", "ok");
   ok.innerHTML = CHECK;
   ok.setAttribute("aria-label", hecha ? `Deshacer serie ${i + 1}` : `Serie ${i + 1} hecha`);
+  Object.assign(ok.dataset, {ej: b.ej, i});
   // en orden: la siguiente por hacer, o deshacer la última hecha
   ok.disabled = !(i === e.series.length || i === e.series.length - 1);
   const lee = () => [Math.min(500, Math.max(0, parseFloat(kg.value.replace(",", ".")) || 0)), Math.min(600, parseInt(n.value || n.placeholder) || 0)];
@@ -753,10 +784,11 @@ function descansa(seg) {
   desc = {fin: Date.now() + seg * 1000, total: seg};
   $("#descanso").toggleAttribute("data-on", true);
   tic();
+  avisaApp();
 }
-$("#ds-menos").onclick = () => { if (desc) { desc.fin -= 15000; desc.total = Math.max(15, desc.total - 15); tic(); } };
-$("#ds-mas").onclick = () => { if (desc) { desc.fin += 15000; desc.total += 15; tic(); } };
-$("#ds-fin").onclick = () => { desc = null; $("#descanso").removeAttribute("data-on"); };
+$("#ds-menos").onclick = () => { if (desc) { desc.fin -= 15000; desc.total = Math.max(15, desc.total - 15); tic(); avisaApp(); } };
+$("#ds-mas").onclick = () => { if (desc) { desc.fin += 15000; desc.total += 15; tic(); avisaApp(); } };
+$("#ds-fin").onclick = () => { desc = null; $("#descanso").removeAttribute("data-on"); avisaApp(); };
 
 function tic() {
   if (!A) return;
@@ -768,6 +800,7 @@ function tic() {
     desc = null;
     $("#descanso").removeAttribute("data-on");
     pip(880); setTimeout(() => pip(1175), 180);
+    avisaApp();
     return;
   }
   if (q <= 3) pip(520);
@@ -783,6 +816,7 @@ function cierraSesion() {
   $("#descanso").removeAttribute("data-on");
   $("#hoja-sesion").removeAttribute("data-on");
   A = null;
+  avisaApp();
   pinta();
 }
 $("#hs-cerrar").onclick = cierraSesion;   // la sesión sigue abierta: «Seguir» la retoma
@@ -806,6 +840,43 @@ $("#hs-fin").onclick = () => {
   cierraSesion();
   guardar();
 };
+
+// ---------- dentro de la app de iPhone (window.HoyApp) ----------
+// la serie y el descanso van a la isla dinámica y a la pantalla de bloqueo; en el navegador no pasa nada de esto
+function estadoApp() {
+  for (const b of bloquesHoy()) {
+    const e = A.s.ej.find(e => e.ej === b.ej), n = e ? e.series.length : 0;
+    const total = Math.max(b.series, n) + (A.extra[b.ej] || 0);
+    if (n >= total) continue;
+    const seg = !!b.seg && !b.repes, kg = n ? e.series[n - 1][0] : sugerencia(b, A.s).kg;
+    const detalle = [kg ? `${num(kg)} kg` : "", b.repes ? `${b.repes} rep` : seg ? `${b.seg} s` : ""].filter(Boolean).join(" · ");
+    return {ejercicio: b.ej, serie: n + 1, total, detalle, descanso: seg ? 60 : 90, hecho: false};
+  }
+  return {ejercicio: "Todo hecho", serie: 0, total: 0, detalle: "", descanso: 0, hecho: true};
+}
+let alApp = "";
+function avisaApp(forzar) {
+  if (!window.HoyApp) return;
+  const m = A ? {accion: "entreno", estado: {nombre: A.s.n, ...estadoApp(), finDescanso: desc ? desc.fin : 0}} : {accion: "entrenoFin"};
+  const txt = JSON.stringify(m);
+  if (txt === alApp && !forzar) return;
+  alApp = txt;
+  try { window.webkit.messageHandlers.hoy.postMessage(m); } catch (e) {}
+}
+if (window.HoyApp) {
+  // el botón «Serie hecha» de la isla: true si la marcó, false si no se pudo (faltan las repes), null sin sesión abierta
+  window.HoyEntreno = {
+    serieHecha() {
+      if (!A) return null;
+      const st = estadoApp(), cuenta = () => A.s.ej.reduce((a, e) => a + e.series.length, 0), antes = cuenta();
+      if (!st.hecho) [...document.querySelectorAll("#hs-lista .serie .ok")].find(b => b.dataset.ej === st.ejercicio && +b.dataset.i === st.serie - 1)?.click();
+      const hecha = !!A && cuenta() > antes;
+      avisaApp(true);
+      return hecha;
+    }
+  };
+  addEventListener("pagehide", () => { if (A) { alApp = ""; try { window.webkit.messageHandlers.hoy.postMessage({accion: "entrenoFin"}); } catch (e) {} } });
+}
 
 // ---------- progreso ----------
 function pintaProgreso() {
@@ -990,7 +1061,7 @@ function empiezaGuia(r, previo) {
   ticGuia();
 }
 // caduca a los 20 min del último paso: una rutina abandonada a medias no se da por hecha horas después
-const guardaGuia = () => recuerda({guia: g.r.id, i: g.i, fin: g.fin, pausa: g.pausa, queda: g.queda}, 20);
+const guardaGuia = () => recuerda({guia: g.r.id, i: g.i, fin: g.fin, pausa: g.pausa, queda: g.queda, cambio: g.cambio}, 20);
 function ticGuia() {
   if (!g) return;
   if (!g.pausa) {
@@ -1004,6 +1075,16 @@ function ticGuia() {
   pintaGuia();
 }
 function pasoGuia(n, desde = Date.now()) {
+  // entre paso y paso, la pausa de la rutina (r.pausa s) para colocarse: «Prepárate» con el siguiente a la vista.
+  // Saltar durante la pausa empieza ya el siguiente
+  if (n > 0 && !g.cambio && g.r.pausa && g.i + 1 < g.r.bloques.length) {
+    g.cambio = true;
+    g.fin = desde + g.r.pausa * 1000;
+    g.queda = g.r.pausa;
+    guardaGuia();
+    return pintaGuia();
+  }
+  g.cambio = false;
   g.i += n;
   if (g.i >= g.r.bloques.length) return acabaGuia();
   g.fin = desde + (g.r.bloques[g.i].seg || 30) * 1000;
@@ -1012,14 +1093,14 @@ function pasoGuia(n, desde = Date.now()) {
   pintaGuia();
 }
 function pintaGuia() {
-  const b = g.r.bloques[g.i], total = b.seg || 30;
-  $("#hg-paso").textContent = `Paso ${g.i + 1} de ${g.r.bloques.length}`;
+  const i = g.i + (g.cambio ? 1 : 0), b = g.r.bloques[i], total = g.cambio ? g.r.pausa : b.seg || 30;
+  $("#hg-paso").textContent = `${g.cambio ? "Prepárate · " : ""}Paso ${i + 1} de ${g.r.bloques.length}`;
   $("#hg-ahora").textContent = b.ej;
-  if (g.conFoto !== g.i) { g.conFoto = g.i; const f = foto(b.ej); $("#hg-foto").replaceChildren(...(f ? [f] : [])); }
+  if (g.conFoto !== i) { g.conFoto = i; const f = foto(b.ej); $("#hg-foto").replaceChildren(...(f ? [f] : [])); }
   $("#hg-resto").textContent = g.queda;
   $("#hg-barra").style.width = Math.round((1 - g.queda / total) * 100) + "%";
   $("#hg-como").textContent = b.nota || "";
-  const sig = g.r.bloques[g.i + 1];
+  const sig = g.r.bloques[i + 1];
   $("#hg-luego").textContent = sig ? "Luego: " + sig.ej : "Último";
 }
 function acabaGuia() {
@@ -1157,6 +1238,184 @@ $("#f-clave").onsubmit = async e => {
   else puerta(true, r && r.status === 401 ? "Contraseña incorrecta" : "No se pudo conectar");
 };
 cargar();
+</script>
+<script>
+/* Escalada: los intentos que analiza escalada.service (llegan con el atajo «Analizar escalada») y Competir, que
+   monta el intento de otro encima del tuyo (fantasma.py en ~/escalada). Va aparte del entreno de gimnasio: lee
+   /api/escalada y no toca S ni nada de arriba. */
+(() => {
+  const $ = s => document.querySelector(s);
+  const el = (t, cls, txt) => { const e = document.createElement(t); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+  const DIAS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"], MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+  const COLOR = {amarillo: "#F2C230", naranja: "#F08A2C", rojo: "#E04848", rosa: "#F08AB4", morado: "#9466D8", azul: "#3A7FE0",
+                 verde: "#3BA55C", blanco: "#F4F4F0", negro: "#222"};
+  const RESULTADO = {hecho: ["ok", "Hecho"], caida: ["mal", "Me caí"], probando: ["", "Probando"]};
+  const quien = x => (x.quien || "").toLowerCase() === "yago" ? "Tú" : x.quien;
+  // 20261105-152708 -> jue 5 nov · 15:27, o 5/11 15:27 en corto
+  const cuando = i => { const d = new Date(+i.slice(0, 4), +i.slice(4, 6) - 1, +i.slice(6, 8));
+                        return `${DIAS[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]} · ${i.slice(9, 11)}:${i.slice(11, 13)}`; };
+  const corto = i => `${+i.slice(6, 8)}/${+i.slice(4, 6)} ${i.slice(9, 11)}:${i.slice(11, 13)}`;
+  const bloque = x => x.nombre || `Bloque ${x.color}`;
+  let E = null, abierto = null, viendo = {}, sondeo = null;
+
+  async function api(url, cuerpo) {
+    const r = await fetch(url, cuerpo === undefined ? {} : {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(cuerpo)});
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.status);
+    return r.json();
+  }
+  const aviso = t => { const a = $("#esc-aviso"); if (a) a.textContent = t; };
+
+  function opcion(x) {
+    return new Option(`${quien(x)} · ${corto(x.intento)} · ${bloque(x)}${x.dificultad ? ` · nivel ${x.dificultad}` : ""}`, x.intento);
+  }
+
+  function competir() {
+    const caja = el("form", "esc-caja"), con = E.intentos.filter(x => x.fantasma);
+    caja.append(el("b", null, "⚔️ Competir"),
+      el("p", "esc-pista", "Tu intento contra el de otro (o uno tuyo de otro día) en el mismo bloque: lo ves en azul encima de tu vídeo, salís a la vez y en cada presa sale quién llega antes."));
+    if (con.length < 2) caja.append(el("p", "esc-pista", "Hacen falta dos intentos del mismo bloque grabados desde el 5 de noviembre."));
+    else {
+      const a = el("select", "c-campo"), b = el("select", "c-campo");
+      a.append(...con.map(opcion));
+      a.value = (con.find(x => quien(x) === "Tú") || con[0]).intento;
+      const rellena = () => {
+        const x = con.find(y => y.intento === a.value);
+        b.replaceChildren(...con.filter(y => y.intento !== x.intento)
+          .sort((p, q) => (bloque(q) === bloque(x)) - (bloque(p) === bloque(x)) || q.intento.localeCompare(p.intento)).map(opcion));
+      };
+      a.onchange = rellena;
+      rellena();
+      const etiqueta = (t, s) => { const l = el("label", "esc-campo"); l.append(el("span", null, t), s); return l; };
+      const ir = el("button", "c-btn pri", "Competir");
+      caja.append(etiqueta("Tú", a), etiqueta("Contra", b), ir, el("p", "esc-pista", ""));
+      caja.lastChild.id = "esc-aviso";
+      caja.onsubmit = async e => {
+        e.preventDefault();
+        ir.disabled = true;
+        try { await api("/api/escalada/fantasma", {yo: a.value, otro: b.value}); await cargar(); aviso("Montándolo: en un minuto está aquí debajo y en Telegram."); }
+        catch (err) { aviso(`No se ha podido: ${err.message}`); }
+        finally { ir.disabled = false; }
+      };
+    }
+    // las que ya hay (o se están montando)
+    for (const x of E.intentos) for (const [otro, est] of Object.entries(x.fantasmas)) {
+      const o = E.intentos.find(y => y.intento === otro), f = el("div", "esc-comp");
+      f.append(el("span", null, `${quien(x)} (${corto(x.intento)}) contra ${o ? quien(o) : "?"} (${corto(otro)})`));
+      if (est === "listo") {
+        const v = el("button", "c-btn mini", "Ver");
+        v.type = "button";
+        v.onclick = () => { abierto = x.intento; viendo[x.intento] = `fantasma-${otro}`; pinta(true);
+                            document.getElementById(`esc-${x.intento}`)?.scrollIntoView({behavior: "smooth", block: "start"}); };
+        f.append(v);
+      } else f.append(el("small", null, est === "preparando" ? "montándolo…" : est));
+      caja.append(f);
+    }
+    return caja;
+  }
+
+  function detalle(x) {
+    const caja = el("div", "esc-det"), fuentes = [];
+    if (x.hay.includes("anotado")) fuentes.push(["Tu intento", "anotado"]);
+    if (x.hay.includes("beta")) fuentes.push(["Beta esperada", "beta"]);
+    for (const [otro, est] of Object.entries(x.fantasmas)) {
+      const o = E.intentos.find(y => y.intento === otro);
+      if (est === "listo") fuentes.push([`⚔️ contra ${o ? quien(o) : otro}`, `fantasma-${otro}`]);
+    }
+    if (fuentes.length) {
+      const actual = fuentes.some(f => f[1] === viendo[x.intento]) ? viendo[x.intento] : fuentes[0][1];
+      const bs = el("div", "esc-vid");
+      bs.append(...fuentes.map(([n, k]) => {
+        const b = el("button", "c-btn mini", n);
+        b.type = "button";
+        b.setAttribute("aria-pressed", k === actual);
+        b.onclick = () => { viendo[x.intento] = k; pinta(true); };
+        return b;
+      }));
+      caja.append(bs, Object.assign(el("video"), {controls: true, playsInline: true, preload: "metadata", src: `/api/escalada/${x.intento}/${actual}`}));
+    }
+    const c = el("div", "esc-coach"), lista = (t, xs) => {
+      if (!xs.length) return [];
+      const ul = el("ul");
+      ul.append(...xs.map(s => el("li", null, s)));
+      return [el("h3", null, t), ul];
+    };
+    if (x.resumen) c.append(el("p", null, x.resumen));
+    c.append(...lista("✅ Bien", x.bien), ...lista("⚠️ A mejorar", x.mal));
+    if (x.caida) c.append(el("h3", null, "💥 La caída"), el("p", null, x.caida));
+    c.append(...lista("👉 Para el próximo", x.consejos));
+    caja.append(c);
+
+    // qué bloque es y su nivel: con el mismo nombre, los intentos van juntos
+    const f = el("form", "esc-caja"), fila = el("div", "esc-fila");
+    const nombre = Object.assign(el("input", "c-campo"), {value: x.nombre, maxLength: 60, placeholder: "Nombre del bloque"});
+    nombre.setAttribute("list", "esc-nombres");
+    nombre.setAttribute("aria-label", "Nombre del bloque");
+    const nivel = el("select", "c-campo esc-nivel");
+    nivel.setAttribute("aria-label", "Nivel del 1 al 10");
+    nivel.append(new Option("Nivel", ""), ...Array.from({length: 10}, (_, i) => new Option(i + 1, i + 1)));
+    nivel.value = x.dificultad || "";
+    fila.append(nombre, nivel, el("button", "c-btn mini", "Guardar"));
+    f.append(fila);
+    f.onsubmit = async e => {
+      e.preventDefault();
+      try { await api(`/api/escalada/${x.intento}/bloque`, {nombre: nombre.value, nivel: nivel.value}); await cargar(); }
+      catch (err) { aviso(`No se ha guardado: ${err.message}`); }
+    };
+    caja.append(f);
+    return caja;
+  }
+
+  function pinta(forzar) {
+    const c = $("#esc");
+    // repintar corta el vídeo: si hay uno empezado (sonando o en pausa a medias), se espera, salvo que lo pida él
+    if (!forzar && [...c.querySelectorAll("video")].some(v => !v.paused || v.currentTime > 0)) return;
+    $("#esc-competir").replaceChildren(competir());
+    c.replaceChildren();
+    if (!E.intentos.length) return c.append(el("p", "vacio", "Aún no hay intentos: graba uno y compártelo con el atajo «Analizar escalada»."));
+    const grupos = new Map();
+    for (const x of E.intentos) grupos.set(bloque(x), [...(grupos.get(bloque(x)) || []), x]);
+    for (const [n, xs] of grupos) {
+      const h = el("div", "esc-bloque"), punto = el("span", "esc-punto"), nivel = xs.find(x => x.dificultad);
+      punto.style.background = COLOR[xs[0].color] || "var(--tenue)";
+      h.append(punto, el("b", null, n));
+      if (nivel) h.append(el("span", "c-chip", `nivel ${nivel.dificultad}`));
+      h.append(el("span", "c-chip", `${xs.length} ${xs.length === 1 ? "intento" : "intentos"}`));
+      if (xs.some(x => x.resultado === "hecho")) h.append(el("span", "c-chip ok", "encadenado"));
+      c.append(h);
+      for (const x of xs) {
+        const it = el("div", "esc-item"), t = el("button", "esc-t"), [cls, res] = RESULTADO[x.resultado] || ["", x.resultado];
+        it.id = `esc-${x.intento}`;
+        t.type = "button";
+        t.setAttribute("aria-expanded", abierto === x.intento);
+        t.append(el("span", null, `${cuando(x.intento)} · ${quien(x)}`), el("span", `c-chip ${cls}`, res));
+        t.onclick = () => { abierto = abierto === x.intento ? null : x.intento; pinta(true); };
+        it.append(t);
+        if (abierto === x.intento) it.append(detalle(x));
+        c.append(it);
+      }
+    }
+    const dl = Object.assign(el("datalist"), {id: "esc-nombres"});
+    dl.append(...[...new Set(E.intentos.map(x => x.nombre).filter(Boolean))].map(n => new Option(n)));
+    c.append(dl);
+  }
+
+  async function cargar() {
+    try {
+      E = await api("/api/escalada");
+    } catch (e) {
+      return;   // sin sesión o sin red: la puerta y el estado ya los pone el entreno
+    }
+    $("#c-esc").hidden = !E.activa;
+    if (!E.activa) return;
+    pinta();
+    clearTimeout(sondeo);   // mientras se monta una competición, se mira cada 10 s si ya está
+    if (E.intentos.some(x => Object.values(x.fantasmas).includes("preparando"))) sondeo = setTimeout(cargar, 10000);
+  }
+
+  addEventListener("visibilitychange", () => document.visibilityState === "visible" && cargar());
+  $("#f-clave").addEventListener("submit", () => setTimeout(cargar, 1500));   // tras entrar con la contraseña
+  cargar();
+})();
 </script>
 </body>
 </html>

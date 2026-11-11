@@ -38,11 +38,23 @@ const calma = (() => {
 
   /* Cambio de pestaña o de mes con fundido. View Transitions es nativo (Safari 18, Chrome):
      donde no existe, se ejecuta tal cual. */
+  let animando = 0;   // transiciones en marcha: mientras tanto el fondo no se repinta (se lo come el fundido)
   function transicion(fn) {
     // con la pestaña oculta Chrome aborta la transición (InvalidStateError) y fn no llega a pintar
     if (quieto() || !document.startViewTransition || document.visibilityState !== "visible") return fn();
-    document.startViewTransition(fn).ready.catch(() => {});
+    const vt = document.startViewTransition(fn);
+    animando++;
+    vt.ready.catch(() => {});
+    vt.finished.catch(() => {}).finally(() => animando--);
   }
+
+  /* El service worker da los datos de su copia si la red tarda, y avisa si luego llegan distintos: se
+     recargan con la función de la página (refresca, la de hábitos y entreno, respeta lo que esté a medias). */
+  navigator.serviceWorker?.addEventListener("message", e => {
+    if (e.data?.tipo !== "fresco") return;
+    const f = window.refresca || window.cargar;
+    if (typeof f === "function") f();
+  });
 
   /* Un número que sube hasta su valor: 0 → 1.234,56 €. fmt convierte el número en texto. */
   function cuenta(el, valor, fmt = String, ms = 650) {
@@ -93,6 +105,7 @@ const calma = (() => {
     ["/salud.html", "Salud", I('<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>')],
     ["/comida.html", "Comida", I('<path d="M3 11h18a9 9 0 0 1-18 0zM8 7c0-1.5 1-2 1-3.5M12 7c0-1.5 1-2 1-3.5M16 7c0-1.5 1-2 1-3.5"/>')],
     ["/gastos.html", "Gastos", I('<rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18M16 15h2"/>')],
+    ["/documentos.html", "Docs", I('<path d="M7 3h7l4 4v14H7zM14 3v4h4M10 12h5M10 16h5"/>')],
   ];
   /* Lo que cada usuario ha elegido en Ajustes: mascota.js lo deja aquí al llegar del servidor, y así la
      barra y el saludo salen bien desde el primer momento en la página siguiente. */
@@ -161,7 +174,9 @@ const calma = (() => {
   }
   /* Fondo: un «shader» de caracteres ASCII. Un plasma de senos decide en cada celda qué carácter
      toca (de « » a «@»); se mueve despacio y se aviva alrededor del dedo. Canvas 2D, una llamada
-     por fila, a 12 fotogramas por segundo; parado con la pestaña oculta y quieto con «reducir movimiento». */
+     por fila, a 12 fotogramas por segundo; parado con la pestaña oculta y quieto con «reducir movimiento».
+     Tampoco se repinta mientras haces scroll, hay una transición, una hoja de cristal (su desenfoque se
+     recalcularía con cada fotograma de debajo) o la página se va; y sin tocar nada en 8 s, va a 6 por segundo. */
   const RAMPA = " .·:-=+*#%@";
   const ondas = [];   // {x, y, t0}: una onda que sale de donde has marcado algo
   function onda(x, y) { if (!quieto()) ondas.push({x, y, t0: performance.now()}); }
@@ -171,6 +186,9 @@ const calma = (() => {
     document.body.prepend(cv);
     const cx = cv.getContext("2d");
     let W, H, cw, ch, cols, filas, tinta, vivo, px = -9999, py = -9999, ultimo = 0, pedido = false;
+    let calla = performance.now() + 900, toque = performance.now();   // calla: hasta cuándo no repintar (la entrada, el scroll)
+    const ocupado = ms => ms < calla || animando || document.querySelector(".c-velo.on, .c-hoja.on")
+                          || document.documentElement.classList.contains("c-saliendo");
     const medir = () => {
       const r = Math.min(devicePixelRatio || 1, 2), C = innerWidth < 600 ? 12 : 14;
       W = innerWidth; H = innerHeight;
@@ -211,7 +229,8 @@ const calma = (() => {
     };
     const bucle = ms => {
       if (document.visibilityState !== "visible") { pedido = false; return; }
-      if (ms - ultimo > (ondas.length ? 33 : 83)) { ultimo = ms; pinta(ms); }   // con onda, más fluido
+      const cada = ondas.length ? 33 : ms - toque > 8000 ? 166 : 83;   // con onda, más fluido; sin tocar nada, más calma
+      if (ms - ultimo > cada && (ondas.length || !ocupado(ms))) { ultimo = ms; pinta(ms); }
       requestAnimationFrame(bucle);
     };
     const arranca = () => { if (!pedido && !quieto()) { pedido = true; requestAnimationFrame(bucle); } };
@@ -222,11 +241,39 @@ const calma = (() => {
     addEventListener("resize", () => { clearTimeout(tm); tm = setTimeout(() => { medir(); pinta(performance.now()); }, 120); });
     matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { medir(); pinta(performance.now()); });
     document.addEventListener("visibilitychange", arranca);
-    addEventListener("pointermove", e => { px = e.clientX; py = e.clientY; }, {passive: true});
+    addEventListener("pointermove", e => { px = e.clientX; py = e.clientY; toque = performance.now(); }, {passive: true});
+    addEventListener("pointerdown", () => { toque = performance.now(); }, {passive: true});
+    // en captura: también el scroll de dentro de una carta o una hoja
+    addEventListener("scroll", () => { calla = toque = performance.now(); calla += 250; }, {passive: true, capture: true});
     addEventListener("pointerup", () => setTimeout(() => { px = py = -9999; }, 600));
   }
 
-  const listo = () => { menu(); islaReal(); fondo(); };
+  /* ?medir=1 (hasta ?medir=0): arriba a la izquierda, fotogramas por segundo, tirones (fotogramas de más de
+     50 ms desde que abriste la página) y cuánto tardó en estar lista. Para medir en el iPhone sin un Mac. */
+  try { const m = new URLSearchParams(location.search).get("medir"); if (m) localStorage.setItem("calma-medir", m); } catch {}
+  function medidor() {
+    try { if (localStorage.getItem("calma-medir") !== "1") return; } catch { return; }
+    const d = document.createElement("div");
+    d.style.cssText = "position:fixed;left:6px;top:calc(env(safe-area-inset-top,0px) + 4px);z-index:999;pointer-events:none;" +
+                      "font:600 11px ui-monospace,monospace;background:rgba(0,0,0,.7);color:#CDE77F;padding:3px 7px;border-radius:6px";
+    document.body.append(d);
+    let n = 0, tirones = 0, antes = performance.now(), t0 = antes;
+    document.addEventListener("visibilitychange", () => { antes = t0 = performance.now(); n = 0; });
+    const vuelta = ahora => {
+      n++;
+      if (ahora - antes > 50) tirones++;
+      antes = ahora;
+      if (ahora - t0 >= 1000) {
+        const nav = performance.getEntriesByType("navigation")[0];
+        d.textContent = `${Math.round(n * 1000 / (ahora - t0))} fps · ${tirones} tirones` + (nav ? ` · lista en ${Math.round(nav.domContentLoadedEventEnd)} ms` : "");
+        n = 0;
+        t0 = ahora;
+      }
+      requestAnimationFrame(vuelta);
+    };
+    requestAnimationFrame(vuelta);
+  }
+  const listo = () => { menu(); islaReal(); fondo(); medidor(); };
   document.readyState === "loading" ? addEventListener("DOMContentLoaded", listo) : listo();
 
   /* Al irse a otra página: el contenido baja un poco mientras se desvanece (.c-saliendo en calma.css)

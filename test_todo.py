@@ -200,6 +200,17 @@ def test_vault():
     assert [r["titulo"] for r in vault.revisar(date(2030, 1, 1))] == ["Qué es RAG"]
     vault.leido(l["ruta"])
     assert vault.lecturas() == [] and vault.revisar(date(2030, 1, 1)) == []
+    # compartido desde el iPhone: nota provisional al momento y en cola; la del bot la sustituye y sale de la cola
+    main.LEER_COLA = vault.VAULT.parent / "leer_cola.json"
+    x = main.leer_pendiente({"url": "https://ejemplo.com/post", "titulo": "https://ejemplo.com/post"})
+    assert x["ruta"] == "Recursos/Leer luego/ejemplo.com.md" and x["texto"] == "Guardado en Leer luego", x
+    assert [c["ruta"] for c in main.cola_leer()] == [x["ruta"]] and "source: iphone" in (vault.VAULT / x["ruta"]).read_text("utf-8")
+    nueva = vault.nueva_lectura({"url": "https://ejemplo.com/post", "titulo": "Un post", "resumen": "bien", "reemplaza": x["ruta"]})
+    main.quita_de_cola(x["ruta"])
+    assert [r["titulo"] for r in vault.lecturas()] == ["Un post"] and main.cola_leer() == [], vault.lecturas()
+    assert vault.nueva_lectura({"url": "https://a.b", "reemplaza": "Proyectos/Pi.md"}) and (vault.VAULT / "Proyectos" / "Pi.md").exists()
+    vault.leido(nueva["ruta"])
+    vault.leido("Recursos/Leer luego/https a.b.md")
     assert vault.plano("![[a.jpg]] Hola **[[Raspberry Pi|la Pi]]** y [web](https://x.y) `code`\n- [ ] tarea") \
         == "Hola la Pi y web code tarea"
     try:
@@ -346,6 +357,15 @@ def test_portada():
     # el año en puntos: un nivel por día desde el 1 de enero, según la parte de los hábitos hecha
     anio = main.hoy_anio(s, "2026-10-26")
     assert len(anio) == 299 and anio[-3:] == [1, 2, 1] and anio.count(3) == 0 and anio[0] == 0, anio[-3:]
+    # el entreno de hoy: la rutina de la sesión; sin sesión, la única rutina del hábito; sin rutina, nada
+    e = clean({"habits": [{"id": "g", "n": "Gym"}, {"id": "r", "n": "Correr"}, {"id": "x", "n": "Agua"}, {"id": "e", "n": "Escalar"}],
+               "rutinas": [{"id": "pa", "n": "Push A", "tipo": "pesas", "hab": "g"}, {"id": "pb", "n": "Pull B", "tipo": "pesas", "hab": "g"},
+                           {"id": "rs", "n": "Rodaje", "tipo": "carrera", "hab": "r"}, {"id": "es", "n": "Bloque", "tipo": "otro", "hab": "e"}],
+               "plan": {"2026-10-26": ["g", "r", "x"]}, "sesion": {"2026-10-26": {"g": "pb"}}, "log": {"2026-10-26": ["r"]}})
+    assert main.hoy_entreno(e, "2026-10-26") == [
+        {"id": "g", "n": "Pull B", "tipo": "pesas", "rutina": "pb", "hecho": False},
+        {"id": "r", "n": "Rodaje", "tipo": "carrera", "rutina": "rs", "hecho": True}], main.hoy_entreno(e, "2026-10-26")
+    assert main.hoy_entreno(e, "2026-10-27") == []
     # una app caída no tumba la portada: su tarjeta trae el error
     main.OTRAS = {**main.OTRAS, "gastos": ("http://127.0.0.1:9", None, "X", "")}
     assert "error" in main.trozo(main.hoy_gastos)
@@ -463,6 +483,122 @@ def test_quita():
     assert main.sesion_gym({"id": "s"})["quita"] == []
 
 
+def test_pesos():
+    assert main.lee_pesos("81.19999694824219", "2026-11-03") == {"2026-11-03": 81.2}
+    # la báscula pasa a Salud tarde: cada peso a su día, y del mismo día el último
+    l = "01.11.26, 08:10|80,9\n03.11.26, 07:55|81,4\n03.11.26, 21:00|81,2\n02.11.26|nada"
+    assert main.lee_pesos(l, "2026-11-03") == {"2026-11-01": 80.9, "2026-11-03": 81.2}
+    assert main.lee_pesos("", "2026-11-03") == {} and main.lee_pesos("3|4", "2026-11-03") == {}
+
+
+def test_documentos():
+    import asyncio
+    import json
+    import tempfile
+    import urllib.parse
+    from pathlib import Path
+    main.PASS, main.SECRET = "x", b"s"
+    main.DOCS = Path(tempfile.mkdtemp()) / "documentos"
+    main.vault.VAULT = Path(tempfile.mkdtemp())
+
+    class Pide:   # lo justo de una Request: el cuerpo
+        def __init__(self, b): self.b = b
+        async def body(self): return self.b
+
+    meta = urllib.parse.quote(json.dumps({"nombre": "pasaporte.JPG", "n": "Pasaporte", "cat": "identidad", "titular": "Ana Prueba",
+                                          "caduca": "2031-03-12", "notas": "x" * 400}))
+    d = asyncio.run(main.sube_documento(Pide(b"foto"), meta, None, "Bearer x"))
+    assert (d["n"], d["cat"], d["caduca"], d["aviso"], len(d["notas"])) == ("Pasaporte", "identidad", "2031-03-12", "2031-02-10", 300), d
+    assert (main.DOCS / d["fichero"]).read_bytes() == b"foto" and d["fichero"].endswith(".jpg")
+    assert "Renovar Pasaporte (caduca el 12/03/2031) 📅 2031-02-10" in (main.vault.VAULT / main.vault.PENDIENTES).read_text()
+    # una garantía no se renueva; y un tipo de fichero raro no entra
+    g = asyncio.run(main.sube_documento(Pide(b"t"), urllib.parse.quote('{"nombre": "t.pdf", "cat": "garantias", "caduca": "2029-11-03"}'), None, "Bearer x"))
+    assert g["aviso"] == "" and g["n"] == "t"
+    try:
+        asyncio.run(main.sube_documento(Pide(b"x"), urllib.parse.quote('{"nombre": "x.exe"}'), None, "Bearer x"))
+        assert False
+    except main.HTTPException as e:
+        assert e.status_code == 400
+    # editar, borrar (a la papelera) y deshacer
+    assert main.edita_documento(d["id"], {"titular": "", "cat": "nada"}, None, "Bearer x")["cat"] == "otros"
+    main.borra_documento(d["id"], None, "Bearer x")
+    assert [x["id"] for x in main.lee_docs()] == [g["id"]] and (main.DOCS / "papelera" / d["fichero"]).exists()
+    main.restaura_documento(d["id"], None, "Bearer x")
+    assert {x["id"] for x in main.lee_docs()} == {d["id"], g["id"]} and (main.DOCS / d["fichero"]).exists()
+
+
+def test_pantalla():
+    from datetime import datetime
+    p = {"dias": {}, "abierta": None}
+    t0 = datetime(2026, 11, 4, 22, 0).timestamp()
+    main.apunta_pantalla(p, "Instagram", "abre", t0)
+    main.apunta_pantalla(p, "Instagram", "cierra", t0 + 600)                # 10 min
+    main.apunta_pantalla(p, "YouTube", "abre", t0 + 700)
+    main.apunta_pantalla(p, "Instagram", "abre", t0 + 1000)                 # sin cierre de YouTube: se cierra aquí
+    main.apunta_pantalla(p, "Instagram", "cierra", t0 + 1000 + 3 * 3600)    # se quedó abierta: como mucho 2 h
+    main.apunta_pantalla(p, "TikTok", "vuelve", t0 + 20000)                 # de madrugada: la abrió y se fue
+    main.apunta_pantalla(p, "TikTok", "cierra", t0 + 20001)                 # un cierre sin abrir no cuenta
+    assert p["dias"]["2026-11-04"]["Instagram"] == {"n": 2, "s": 600 + 7200, "no": 0}, p
+    assert p["dias"]["2026-11-04"]["YouTube"] == {"n": 1, "s": 300, "no": 0} and p["abierta"] is None
+    assert p["dias"]["2026-11-05"]["TikTok"] == {"n": 0, "s": 0, "no": 1}
+    r = main.resumen_pantalla(p, "2026-11-05")
+    assert (r["ayer"]["s"], r["ayer"]["n"], r["hoy"]["no"]) == (8100, 3, 1) and r["semana"]["apps"][0]["app"] == "Instagram"
+    assert r["serie"][-2:] == [8100, 0] and main.rato(8100) == "2 h 15 min" and main.rato(300) == "5 min"
+    # con la pregunta «¿Entrar?», iOS manda «cierra» al abrir: se alterna, sin fiarse del evento
+    p = {"dias": {}, "abierta": None}
+    main.apunta_pantalla(p, "Instagram", "cierra", t0)          # abre (el aviso de cerrar que salta con la pregunta)
+    main.apunta_pantalla(p, "Instagram", "abre", t0 + 3)        # si el de abrir llega a terminar: la misma visita
+    main.apunta_pantalla(p, "Instagram", "cierra", t0 + 300)    # el cierre de verdad
+    main.apunta_pantalla(p, "Instagram", "cierra", t0 + 1000)   # otra visita
+    main.apunta_pantalla(p, "Instagram", "vuelve", t0 + 1005)   # «Volver»: esa no cuenta
+    main.apunta_pantalla(p, "Instagram", "cierra", t0 + 1008)   # y el cierre de irse no abre nada
+    assert p["dias"]["2026-11-04"]["Instagram"] == {"n": 1, "s": 300, "no": 1} and p["abierta"] is None, p
+    # abrir y cerrar al momento (el 6/11 a las 7:52 contó 25 min hasta la siguiente apertura), en los dos órdenes
+    p = {"dias": {}, "abierta": None}
+    for t, e in [(0, "cierra"), (0, "abre"), (2, "cierra"),            # la pareja, y el cierre a los 2 s
+                 (100, "abre"), (100, "cierra"), (101, "cierra"),      # la pareja al revés, y a 1 s
+                 (200, "abre"), (200, "cierra"), (200, "cierra"),      # en el mismo segundo
+                 (300, "cierra"), (900, "cierra"),                     # cierres repetidos sin nada abierto
+                 (1500, "cierra"), (1500, "abre"), (1510, "cierra")]:
+        main.apunta_pantalla(p, "Instagram", e, t0 + t)
+    assert p["dias"]["2026-11-04"]["Instagram"] == {"n": 4, "s": 13, "no": 0} and p["abierta"] is None, p
+    # el aviso al abrir, con límite: lo que queda, y al pasarse, cuánto
+    x = {"n": 3, "s": 20 * 60}
+    assert main.texto_pantalla("Instagram", x, 30) == "Instagram hoy: 3 veces, 20 min. Te quedan 10 min de 30 min"
+    assert main.texto_pantalla("Instagram", {"n": 3, "s": 40 * 60}, 30).endswith("te has pasado 10 min de tu límite (30 min)")
+    assert main.texto_pantalla("Instagram", x, None) == "Instagram hoy: 3 veces, 20 min"
+    assert main.limpia_ajustes({})["limites"] == main.LIMITES and main.limpia_ajustes({"limites": {}})["limites"] == {}
+    assert main.limpia_ajustes({"limites": {"Instagram": "25", "X": 0}})["limites"] == {"Instagram": 25}
+    # el hábito del móvil se marca solo: hecho los días cerrados por debajo; hoy solo se pierde; sin medir, nada
+    assert [main.dificultad(x) for x in ("7", "", "11", "6,5", None)] == [7, None, None, 6, None]
+    hs = [{"id": "m", "n": "> 2 horas de móvil inútil"}, {"id": "y", "n": "Yoga"}]
+    assert main.habitos_movil(hs) == {"m": ("> 2 horas de móvil inútil", 7200.0)}
+    assert main.habitos_movil([{"id": "x", "n": "Móvil: menos de 90 min"}])["x"][1] == 5400
+    p = {"dias": {"2026-11-03": {"Instagram": {"s": 9000}}, "2026-11-04": {"Instagram": {"s": 3000}},
+                  "2026-11-05": {"Instagram": {"s": 600}}}}
+    s = {"habits": hs, "log": {"2026-11-03": ["m"]}}
+    assert main.revisa_movil(s, p, "2026-11-05") == [("2026-11-04", "m", True), ("2026-11-03", "m", False)]
+    p["dias"]["2026-11-05"]["Instagram"]["s"] = 8000   # hoy se ha pasado
+    s["log"]["2026-11-05"] = ["m"]
+    assert ("2026-11-05", "m", False) in main.revisa_movil(s, p, "2026-11-05")
+    # el 2, antes de que funcionara el atajo, no se toca aunque no llegue a 2 horas; un día sin avisos entre dos
+    # días con avisos sí (no usó esas apps)
+    assert not [c for c in main.revisa_movil(s, p, "2026-11-05") if c[0] == "2026-11-02"]
+    p["dias"]["2026-11-05"] = p["dias"].pop("2026-11-04")
+    p["dias"]["2026-11-06"] = {"Instagram": {"s": 60}}
+    assert ("2026-11-04", "m", True) in main.revisa_movil({"habits": hs, "log": {}}, p, "2026-11-06")
+    # de Instagram a Brawl: el cierre de Instagram llega tarde y no es una visita nueva
+    p = {"dias": {}, "abierta": None}
+    main.apunta_pantalla(p, "Instagram", "abre", t0)
+    main.apunta_pantalla(p, "BrawlStars", "abre", t0 + 100)
+    main.apunta_pantalla(p, "Instagram", "cierra", t0 + 101)
+    main.apunta_pantalla(p, "BrawlStars", "cierra", t0 + 101.5)   # el que salta a la vez que el «abre»
+    main.apunta_pantalla(p, "BrawlStars", "cierra", t0 + 160)
+    assert p["dias"]["2026-11-04"] == {"Instagram": {"n": 1, "s": 100, "no": 0},
+                                       "BrawlStars": {"n": 1, "s": 60, "no": 0}} and p["abierta"] is None, p
+    assert len(p["eventos"]) == 5
+
+
 if __name__ == "__main__":
     test_sueno()
     test_salud()
@@ -477,4 +613,7 @@ if __name__ == "__main__":
     test_version()
     test_marca()
     test_quita()
+    test_pesos()
+    test_documentos()
+    test_pantalla()
     print("ok")

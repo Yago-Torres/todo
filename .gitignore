@@ -12,6 +12,9 @@ data.json.*
 *.viejo
 *.log
 subs.json
+documentos/
+pantalla.json
+leer_cola.json
 # lo que se regenera o es de cada máquina
 .venv/
 __pycache__/

@@ -3,7 +3,9 @@ import hmac
 import json
 import os
 import re
+import threading
 import time
+import urllib.parse
 import unicodedata
 import urllib.error
 import urllib.request
@@ -182,6 +184,9 @@ def clean(state):
             # qué hábito marca al completarse. "" = no marca nada
             "hab": h if (h := str(r.get("hab") or "")[:24]) in ids else "",
             "bloques": [b for x in lst(r.get("bloques"))[:30] if isinstance(x, dict) and (b := bloque(x))["ej"]],
+            # segundos para colocarse entre paso y paso de una rutina guiada; solo si la hay, para que las demás
+            # rutinas sigan siendo iguales a las que genera carrera.py (las compara para no reescribirlas)
+            **({"pausa": p} if (p := entero(r.get("pausa"), 0, 60, 0)) else {}),
         }
         for r in lst(state.get("rutinas"))
         if isinstance(r, dict) and r.get("id") and str(r.get("n") or "").strip()
@@ -316,7 +321,9 @@ def logout(response: Response):
 # ---------- ajustes de cada usuario (ajustes.json, junto a su data.json) ----------
 # Fuera de data.json a propósito: las páginas guardan el estado entero y aquí no tienen nada que pisar.
 AJUSTES = DB.with_name("ajustes.json")
-MODULOS = ("habitos", "pendientes", "entreno", "salud", "comida", "gastos")
+MODULOS = ("habitos", "pendientes", "entreno", "salud", "comida", "gastos", "documentos")
+# minutos al día por app (Ajustes los cambia): al abrirla dice cuánto queda y al pasarse avisa por Telegram
+LIMITES = {"Instagram": 30, "YouTube": 45, "TikTok": 30, "Reddit": 20, "BrawlStars": 30}
 MASCOTA = {"semilla": (1, 9999, 14), "grumos": (0, .5, .2), "pera": (0, 1, .35), "cola": (-24, 24, -12), "flecos": (2, 6, 4),
            "fleco": (2, 14, 10), "ancho": (20, 36, 26), "alto": (50, 90, 73), "ojoI": (2, 8, 4.5), "ojoD": (2, 8, 4.5),
            "sep": (8, 26, 14), "ojosY": (.15, .6, .38)}
@@ -336,7 +343,10 @@ def limpia_ajustes(v):
                         "tipo": "flor" if mas.get("tipo") == "flor" else "fantasma",
                         "color": color if re.fullmatch(r"#[0-9a-fA-F]{6}", color) else "#CDE77F",
                         "extra": mas.get("extra") if mas.get("extra") in ("lazo", "gorro", "gafas") else "",
-                        "rubor": mas.get("rubor") is True, "paseo": mas.get("paseo") is not False}}
+                        "rubor": mas.get("rubor") is True, "paseo": mas.get("paseo") is not False},
+            # sin la clave, los de siempre; con ella aunque esté vacía (es que no quiere ninguno)
+            "limites": {" ".join(str(k).split())[:30]: int(n) for k, x in list(dct(v.get("limites")).items())[:30]
+                        if (n := real(x, 1, 600)) is not None} if isinstance(v.get("limites"), dict) else dict(LIMITES)}
 
 
 def lee_ajustes():
@@ -401,6 +411,523 @@ def marca_habito(a: dict, response: Response, todo_sesion: str = Cookie(None), a
     # con «antes» la página sabe si nadie más escribió entre medias y puede quedarse la versión nueva
     response.headers["X-Version"] = version()
     return {"dia": dia, "hechos": estado["log"].get(dia, []), "antes": antes, "version": version()}
+
+
+# ---------- el móvil: cuánto rato en cada app ----------
+# Atajos avisa al abrir y al cerrar cada app que quieres vigilar (Instagram, YouTube, TikTok...): de un aviso al
+# otro es el rato dentro, porque Tiempo de uso no se puede leer desde Atajos. Va en su propio fichero, junto a
+# data.json: son muchos avisos al día y no deben chocar (409) con lo que guardes en la web. Si se abre una app con
+# otra aún abierta (se perdió su cierre), la otra se cierra ahí; y un rato se corta a las 2 h, por si falla un cierre.
+PANTALLA = DB.with_name("pantalla.json")
+MAX_RATO = 2 * 3600
+PAREJA = 3   # s entre el «abre» y el «cierra» de una misma apertura (en los avisos reales, 0 o 1)
+cerrojo_pantalla = threading.Lock()
+
+
+def lee_pantalla():
+    try:
+        p = dct(json.loads(PANTALLA.read_text("utf-8")))
+    except (OSError, ValueError):
+        p = {}
+    return {"dias": dct(p.get("dias")), "abierta": p.get("abierta") if isinstance(p.get("abierta"), dict) else None,
+            "calla": p.get("calla") if isinstance(p.get("calla"), dict) else None,
+            "eventos": p.get("eventos") if isinstance(p.get("eventos"), list) else []}
+
+
+def apunta_pantalla(p, app_, evento, ahora):
+    """abre / cierra / vuelve (la abrió y eligió no entrar). ahora: segundos, como time.time().
+    Con la pregunta «¿Entrar?» en el atajo, cada apertura llega como una pareja «abre» + «cierra» en el mismo
+    segundo, en cualquier orden (la pregunta tapa la app y salta su automatización de cerrar). Así que:
+    - una visita solo empieza con «abre»; su pareja «cierra» (justo antes o justo después, PAREJA s) no cuenta;
+    - cualquier otro «cierra» de la app abierta la cierra, aunque sea al segundo (abrir y cerrar al momento);
+    - un «cierra» sin nada abierto (iOS repite el cierre al bloquear o al pasar por la multitarea) o de otra app (al
+      pasar de A a B, el de A llega tarde) no es nada. Antes empezaban visitas que contaban hasta el siguiente aviso.
+    Los últimos avisos quedan en p["eventos"], para ver qué ha mandado el iPhone si algo no cuadra."""
+    p["eventos"] = (p.get("eventos") or [])[-199:] + [[round(ahora), app_, evento]]
+    def suma(dia, app__, k, v):
+        x = p["dias"].setdefault(dia, {}).setdefault(app__, {"n": 0, "s": 0, "no": 0})
+        x[k] += v
+
+    def cierra(hasta):
+        ab = p["abierta"]
+        suma(date.fromtimestamp(ab["desde"]).isoformat(), ab["app"], "s", round(min(max(0, hasta - ab["desde"]), MAX_RATO)))
+        p["abierta"] = None
+
+    hoy, ab, cerro = date.fromtimestamp(ahora).isoformat(), p["abierta"], p.get("cerro") or {}
+    p.pop("calla", None)   # de la regla de antes
+    misma = bool(ab) and ab["app"] == app_
+    if evento == "vuelve":   # eligió no entrar: la visita que acababa de empezar no cuenta
+        if misma and ahora - ab["desde"] < 120:
+            p["abierta"] = None
+            suma(date.fromtimestamp(ab["desde"]).isoformat(), app_, "n", -1)
+        suma(hoy, app_, "no", 1)
+    elif evento == "cierra":
+        if misma and not ab.get("par") and ahora - ab["desde"] <= PAREJA:
+            ab["par"] = True   # la pareja del «abre» que acaba de llegar
+        elif misma:
+            cierra(ahora)
+        p["cerro"] = {"app": app_, "t": ahora}
+    elif misma and ahora - ab["desde"] <= MAX_RATO:
+        pass   # un «abre» con ella abierta: la misma visita
+    else:
+        if ab:
+            cierra(ahora)
+        par = cerro.get("app") == app_ and 0 <= ahora - cerro.get("t", 0) <= PAREJA   # su «cierra» llegó antes
+        p["abierta"] = {"app": app_, "desde": cerro["t"] if par else ahora, "par": par}
+        suma(hoy, app_, "n", 1)
+    for d in sorted(p["dias"])[:-90]:   # tres meses bastan
+        del p["dias"][d]
+
+
+def resumen_pantalla(p, hoy):
+    """Hoy, ayer y los últimos 7 días: segundos en total y por app (de más a menos), y la serie diaria."""
+    dias = [(date.fromisoformat(hoy) - timedelta(days=i)).isoformat() for i in range(6, -1, -1)]
+
+    def por_app(ds):
+        apps = {}
+        for d in ds:
+            for a, x in dct(p["dias"].get(d)).items():
+                y = apps.setdefault(a, {"app": a, "s": 0, "n": 0, "no": 0})
+                for k in ("s", "n", "no"):
+                    y[k] += x.get(k, 0)
+        return sorted(apps.values(), key=lambda y: (-y["s"], -y["n"]))
+
+    def total(ds):
+        apps = por_app(ds)
+        return {"s": sum(a["s"] for a in apps), "n": sum(a["n"] for a in apps), "no": sum(a["no"] for a in apps), "apps": apps}
+    pasada = [(date.fromisoformat(hoy) - timedelta(days=i)).isoformat() for i in range(13, 6, -1)]
+    return {"hoy": total([hoy]), "ayer": total([dias[-2]]), "semana": total(dias), "pasada": total(pasada),
+            "serie": [total([d])["s"] for d in dias]}
+
+
+def rato(s):
+    m = round(s / 60)
+    return f"{m} min" if m < 60 else f"{m // 60} h {m % 60:02d} min"
+
+
+@app.post("/api/pantalla")
+def pantalla(a: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    # el iPhone pone mayúscula al escribir («Abre») y a veces un espacio tras la barra: da igual
+    app_, evento = " ".join(str(a.get("app") or "").split())[:30], str(a.get("evento") or "").strip().lower()
+    if not app_ or evento not in ("abre", "cierra", "vuelve"):
+        raise HTTPException(400, "Falta la app, o el evento no es abre, cierra o vuelve")
+    hoy = date.today().isoformat()
+    with cerrojo_pantalla:
+        p = lee_pantalla()
+        antes, antes_total = dct(dct(p["dias"].get(hoy)).get(app_)).get("s", 0), segundos_dia(p, hoy)
+        apunta_pantalla(p, app_, evento, time.time())
+        guarda(PANTALLA, json.dumps(p, ensure_ascii=False))
+    try:   # el hábito del móvil: si hoy se acaba de pasar, se pierde y avisa; los días cerrados se marcan
+        for h, lim in aplica_movil(p, hoy)["pasado"].items():
+            if antes_total <= lim < segundos_dia(p, hoy):
+                telegram_todo(f"📵 Hoy ya llevas {rato(segundos_dia(p, hoy))} de móvil inútil: «{h}» de hoy no sale.")
+    except Exception as e:
+        print("hábito del móvil:", e, flush=True)
+    x = next((y for y in resumen_pantalla(p, hoy)["hoy"]["apps"] if y["app"] == app_), None)
+    lim = limite(app_)
+    if lim and x and antes < lim * 60 <= x["s"]:   # se acaba de pasar (al cerrar la app): una vez al día
+        telegram_todo(f"⛔ Hoy ya llevas {rato(x['s'])} de {app_}: tu límite es de {lim} min.")
+    return {"texto": texto_pantalla(app_, x, lim)}
+
+
+# ---------- el hábito del móvil, solo ----------
+# Un hábito con «móvil» y un tiempo en el nombre («> 2 horas de móvil inútil») se marca con lo que cuenta
+# pantalla.json, que son las apps que vigila el atajo: hecho el día que no se pasó de ese tiempo. Hoy solo se puede
+# perder (al pasarse); los días ya cerrados se marcan o desmarcan según lo que hubo, aunque se tocaran a mano. Sin
+# ningún aviso del atajo ese día ni el siguiente no se toca: puede que el atajo no funcionara, y no se da por bueno.
+def habitos_movil(habits):
+    """id -> (nombre, segundos) de los hábitos del móvil."""
+    out = {}
+    for h in habits:
+        n = h["n"].lower()
+        m = re.search(r"(\d+(?:[.,]\d+)?)\s*(h\b|horas?|min)", n)
+        if m and re.search(r"m[oó]vil", n):
+            out[h["id"]] = (h["n"], float(m[1].replace(",", ".")) * (60 if m[2] == "min" else 3600))
+    return out
+
+
+def segundos_dia(p, d):
+    return sum(x.get("s", 0) for x in dct(p["dias"].get(d)).values())
+
+
+def revisa_movil(s, p, hoy, dias=8):
+    """Lo que hay que cambiar en el log: [(día, id, hecho)], de hoy hacia atrás."""
+    cambios = []
+    for i in range(dias):
+        d = (date.fromisoformat(hoy) - timedelta(days=i)).isoformat()
+        ant, sig = ((date.fromisoformat(d) + timedelta(days=k)).isoformat() for k in (-1, 1))
+        # medido: con avisos ese día, o sin ninguno pero con el atajo funcionando el día antes y el siguiente
+        medido = d in p["dias"] or (ant in p["dias"] and sig in p["dias"])
+        for hid, (_, lim) in habitos_movil(s["habits"]).items():
+            if segundos_dia(p, d) > lim:
+                hecho = False
+            elif i == 0 or not medido:
+                continue
+            else:
+                hecho = True
+            if (hid in s["log"].get(d, [])) != hecho:
+                cambios.append((d, hid, hecho))
+    return cambios
+
+
+cerrojo_movil = threading.Lock()
+
+
+def aplica_movil(p, hoy):
+    """Revisa y guarda. Devuelve los cambios y, de cada hábito del móvil, su límite en segundos."""
+    with cerrojo_movil:
+        if not DB.exists():
+            return {"cambios": [], "pasado": {}}
+        s = clean(dct(json.loads(DB.read_text("utf-8"))))
+        cambios = revisa_movil(s, p, hoy)
+        for d, hid, hecho in cambios:
+            l = set(s["log"].get(d, [])) - {hid}
+            s["log"][d] = sorted(l | {hid} if hecho else l)
+        if cambios:
+            guarda(DB, json.dumps(clean(s), ensure_ascii=False))
+    return {"cambios": cambios, "pasado": {n: lim for n, lim in habitos_movil(s["habits"]).values()}}
+
+
+@app.post("/api/movil/revisa")
+def revisa_habito_movil(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """Para el resumen de la mañana: cierra el día de ayer aunque hoy aún no haya llegado ningún aviso del atajo."""
+    exige(todo_sesion, authorization)
+    p, hoy = lee_pantalla(), date.today().isoformat()
+    r = aplica_movil(p, hoy)
+    ayer = (date.fromisoformat(hoy) - timedelta(days=1)).isoformat()
+    return {"cambios": r["cambios"], "ayer": {"s": segundos_dia(p, ayer), "medido": ayer in p["dias"] or hoy in p["dias"],
+                                              "habitos": [{"n": n, "lim": lim} for n, lim in r["pasado"].items()]}}
+
+
+def limite(app_):
+    return {k.lower(): n for k, n in lee_ajustes()["limites"].items()}.get(app_.lower())
+
+
+def texto_pantalla(app_, x, lim):
+    """El aviso al abrir una app (lo enseña el atajo): cuánto lleva hoy y, si tiene límite, cuánto le queda."""
+    if not x:
+        return app_
+    t = f"{app_} hoy: {x['n']} {'vez' if x['n'] == 1 else 'veces'}, {rato(x['s'])}"
+    if not lim:
+        return t
+    queda = lim * 60 - x["s"]
+    if queda >= 60:
+        return f"{t}. Te quedan {rato(queda)} de {lim} min"
+    if queda > 0:
+        return f"{t}. Te queda menos de 1 min de {lim}"
+    return f"⛔ {t}: " + ("has llegado a tu límite" if -queda < 60 else f"te has pasado {rato(-queda)} de tu límite") + f" ({lim} min)"
+
+
+TELEGRAM_ENV = os.getenv("TODO_TELEGRAM_ENV")   # el .env del bot de Telegram (solo en la app de Yago)
+
+
+def telegram_todo(texto):
+    """Un aviso por el bot, en un hilo para no frenar la respuesta. Sin TODO_TELEGRAM_ENV, nada."""
+    if not TELEGRAM_ENV:
+        return
+
+    def manda():
+        try:
+            e = {k.strip(): v.strip().strip('"') for k, v in
+                 (l.split("=", 1) for l in Path(TELEGRAM_ENV).read_text().splitlines() if "=" in l)}
+            req = urllib.request.Request(f"https://api.telegram.org/bot{e['TELEGRAM_TOKEN']}/sendMessage",
+                                         json.dumps({"chat_id": e["TELEGRAM_USER_ID"], "text": texto}).encode(),
+                                         {"Content-Type": "application/json"})
+            urllib.request.urlopen(req, timeout=20).close()
+        except Exception as ex:
+            print("telegram:", ex, flush=True)
+    threading.Thread(target=manda, daemon=True).start()
+
+
+@app.get("/api/pantalla")
+def get_pantalla(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    p, hoy = lee_pantalla(), date.today().isoformat()
+    r, lims = resumen_pantalla(p, hoy), lee_ajustes()["limites"]
+    dias = [(date.fromisoformat(hoy) - timedelta(days=i)).isoformat() for i in range(1, 8)]   # sin hoy: está a medias
+    # cuántos de los últimos 7 días se pasó de cada límite
+    r["excesos"] = {a: sum(dct(dct(p["dias"].get(d)).get(a)).get("s", 0) > n * 60 for d in dias) for a, n in lims.items()}
+    r["limites"] = lims
+    return r
+
+
+# ---------- escalada: los vídeos que se analizan ----------
+# El atajo «Analizar escalada» (Compartir desde Fotos) sube aquí cada vídeo, en crudo, con lo demás en la URL: no es
+# nada sensible y en Atajos es lo más fácil de montar. Va a ~/escalada/entrada/<intento>/ y lo coge escalada.service
+# (~/escalada/worker.py), que lo analiza y manda el resultado por Telegram. Solo la instancia con TODO_ESCALADA.
+ESCALADA = Path(os.getenv("TODO_ESCALADA") or "/no/existe")
+COLORES_PRESA = {"amarillo", "naranja", "rojo", "rosa", "morado", "azul", "verde", "blanco", "negro"}
+# el atajo puede ir en inglés (el iPhone lo está): se aceptan los dos
+EN_INGLES = {"yellow": "amarillo", "orange": "naranja", "red": "rojo", "pink": "rosa", "purple": "morado",
+             "blue": "azul", "green": "verde", "white": "blanco", "black": "negro"}
+COMO_FUE = {"hecho": "hecho", "me cai": "caida", "caida": "caida", "probando": "probando",
+            "sent": "hecho", "topped": "hecho", "fell": "caida", "trying": "probando", "projecting": "probando"}
+
+
+def llano(s):
+    return unicodedata.normalize("NFD", str(s or "").lower()).encode("ascii", "ignore").decode().strip()
+
+
+@app.post("/api/escalada")
+async def sube_escalada(request: Request, intento: str = "", angulo: int = 1, quien: str = "Yago", color: str = "",
+                        nombre: str = "", resultado: str = "probando", nivel: str = "", todo_sesion: str = Cookie(None),
+                        authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    if not ESCALADA.exists():
+        raise HTTPException(503, "Esta app no analiza vídeos de escalada")
+    intento, color = re.sub(r"[^\w-]", "", intento)[:40], EN_INGLES.get(llano(color), llano(color))
+    if len(intento) < 6:
+        raise HTTPException(400, "Falta el intento: en el atajo, la fecha y hora (por ejemplo 20261105-111356)")
+    if color not in COLORES_PRESA:
+        raise HTTPException(400, f"«{color}» no es un color de presa: {', '.join(sorted(COLORES_PRESA))}")
+    tipo = request.headers.get("content-type", "")
+    ext = ".mov" if "quicktime" in tipo else ".m4v" if "m4v" in tipo else ".mp4"
+    d = ESCALADA / "entrada" / intento
+    d.mkdir(parents=True, exist_ok=True)
+    destino, tmp, total = d / f"{max(1, min(angulo, 4))}{ext}", d / f".{angulo}.tmp", 0
+    with open(tmp, "wb") as f:   # a disco según llega: un vídeo de 100 MB no pasa entero por la memoria
+        async for trozo in request.stream():
+            total += len(trozo)
+            if total > 300 * 2**20:
+                f.close()
+                tmp.unlink()
+                raise HTTPException(413, "Más de 300 MB: en el atajo, codifícalo a 1080p")
+            f.write(trozo)
+    if not total:
+        tmp.unlink()
+        raise HTTPException(400, "Falta el vídeo: en el atajo, el cuerpo de la petición tiene que ser el archivo")
+    os.replace(tmp, destino)
+    guarda(d / "intento.json", json.dumps({"intento": intento, "quien": " ".join(quien.split())[:30] or "Yago", "color": color,
+                                           "nombre": " ".join(nombre.split())[:60],
+                                           "resultado": COMO_FUE.get(llano(resultado), "probando"),
+                                           "dificultad": dificultad(nivel)}, ensure_ascii=False))
+    return {"texto": f"Recibido ({total // 2**20} MB). Te aviso por Telegram cuando esté analizado, en unos minutos."}
+
+
+# ---------- escalada: la sección de la app ----------
+# Lee lo que guarda escalada.service de cada intento (historial/<intento>/, archiva en ~/escalada/worker.py). Los
+# fantasmas se piden aquí (fantasmas/<yo>__<otro>.pide) y los monta el servicio, que también los manda por Telegram.
+ID_INTENTO = re.compile(r"\d{8}-\d{6}")
+FICHEROS_ESCALADA = {"anotado": ("1-anotado-sub.mp4", "1-anotado.mp4"), "beta": ("1-beta.mp4",), "pared": ("1-pared-numerada.jpg",)}
+
+
+def dificultad(v):
+    """El nivel de la ruta, del 1 al 10, o None."""
+    n = real(str(v or "").replace(",", "."), 1, 10)
+    return None if n is None else round(n)
+
+
+def dir_intento(i):
+    d = ESCALADA / "historial" / i
+    if not ID_INTENTO.fullmatch(i) or not (d / "intento.json").exists():
+        raise HTTPException(404, "No hay ese intento")
+    return d
+
+
+def ficha_intento(d):
+    m = json.loads((d / "intento.json").read_text("utf-8"))
+    c, cifras = dct(m.get("coach")), dct((m.get("angulos") or [{}])[0].get("cifras"))
+    fantasmas = {f.stem.removeprefix("fantasma-"): "listo" for f in d.glob("fantasma-*.mp4")}
+    for f in (ESCALADA / "fantasmas").glob(f"{d.name}__*"):
+        otro = f.stem.split("__")[1]
+        if f.suffix == ".pide":
+            fantasmas[otro] = "preparando"
+        elif f.suffix == ".error" and otro not in fantasmas:
+            fantasmas[otro] = "no se ha podido: " + f.read_text("utf-8")[:200]
+    return {"intento": d.name, **{k: m.get(k) or "" for k in ("quien", "color", "nombre", "resultado")},
+            "dificultad": m.get("dificultad"), "resumen": c.get("resumen") or "", "caida": c.get("caida") or "",
+            **{k: [str(x) for x in c.get(k) or []] for k in ("bien", "mal", "consejos")},
+            "cifras": {k: cifras.get(k) for k in ("duracion_s", "movimientos_mano", "brazo_estirado_colgado_pct", "fluidez")},
+            "hay": [k for k, fs in FICHEROS_ESCALADA.items() if any((d / f).exists() for f in fs)],
+            "fantasma": (d / "1-pared.jpg").exists(), "fantasmas": fantasmas}
+
+
+@app.get("/api/escalada")
+def lista_escalada(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    h = ESCALADA / "historial"
+    ds = sorted((d for d in h.iterdir() if (d / "intento.json").exists()), reverse=True) if h.exists() else []
+    return {"activa": ESCALADA.exists(), "intentos": [ficha_intento(d) for d in ds]}
+
+
+@app.get("/api/escalada/{intento}/{que}")
+def fichero_escalada(intento: str, que: str, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """Un vídeo o la pared de un intento. FileResponse sirve por trozos (Range): Safari lo necesita para el vídeo."""
+    exige(todo_sesion, authorization)
+    d = dir_intento(intento)
+    fs = (f"{que}.mp4",) if que.startswith("fantasma-") and ID_INTENTO.fullmatch(que[9:]) else FICHEROS_ESCALADA.get(que, ())
+    f = next((d / x for x in fs if (d / x).exists()), None)
+    if not f:
+        raise HTTPException(404, "No está")
+    return FileResponse(f)
+
+
+@app.post("/api/escalada/{intento}/bloque")
+def bloque_escalada(intento: str, a: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """Cómo se llama el bloque (los intentos con el mismo nombre van juntos) y su nivel."""
+    exige(todo_sesion, authorization)
+    d = dir_intento(intento)
+    m = json.loads((d / "intento.json").read_text("utf-8"))
+    m["nombre"] = " ".join(str(a.get("nombre") or "").split())[:60]
+    if "nivel" in a:
+        m["dificultad"] = dificultad(a["nivel"])
+    guarda(d / "intento.json", json.dumps(m, ensure_ascii=False))
+    return ficha_intento(d)
+
+
+@app.post("/api/escalada/fantasma")
+def pide_fantasma(a: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    yo, otro = dir_intento(str(a.get("yo") or "")), dir_intento(str(a.get("otro") or ""))
+    if yo == otro:
+        raise HTTPException(400, "Elige otro intento")
+    if not (yo / "1-pared.jpg").exists() or not (otro / "1-pared.jpg").exists():
+        raise HTTPException(400, "Ese intento es de antes del fantasma: no tiene la pared guardada")
+    cola = ESCALADA / "fantasmas"
+    cola.mkdir(exist_ok=True)
+    (cola / f"{yo.name}__{otro.name}.error").unlink(missing_ok=True)
+    (cola / f"{yo.name}__{otro.name}.pide").touch()
+    return ficha_intento(yo)
+
+
+# ---------- documentos ----------
+# DNI, pasaporte, seguros, contratos, títulos, garantías: el fichero y lo que importa de él, sobre todo hasta
+# cuándo vale. Fuera de data.json (el PUT del estado entero no los toca) y del repo; la copia del pendrive se
+# lleva la carpeta. Nunca se guarda el número de un documento: solo qué es, de quién y hasta cuándo vale.
+DOCS = Path(os.getenv("TODO_DOCS") or DB.with_name("documentos"))
+CATS_DOC = {"identidad": "Identidad", "coche": "Coche", "casa": "Casa", "trabajo": "Trabajo", "estudios": "Títulos",
+            "salud": "Salud", "seguros": "Seguros", "garantias": "Garantías", "otros": "Otros"}
+TIPOS_DOC = {".pdf", ".jpg", ".jpeg", ".png", ".heic", ".webp"}
+AVISO_DOC = 30   # días antes de caducar: la tarea de renovarlo
+cerrojo_docs = threading.Lock()
+
+
+def limpia_doc(d):
+    d = dct(d)
+    return {"id": str(d.get("id") or "")[:24], "n": " ".join(str(d.get("n") or "").split())[:80] or "Documento",
+            "cat": c if (c := str(d.get("cat") or "")) in CATS_DOC else "otros",
+            "titular": " ".join(str(d.get("titular") or "").split())[:60],
+            "caduca": day(d.get("caduca")), "notas": str(d.get("notas") or "").strip()[:300],
+            "fichero": f if re.fullmatch(r"[\w-]+\.[a-z0-9]{2,5}", f := str(d.get("fichero") or "")) else "",
+            "subido": day(d.get("subido")) or date.today().isoformat()}
+
+
+def lee_docs(carpeta=None):
+    try:
+        l = json.loads(((carpeta or DOCS) / "indice.json").read_text("utf-8"))
+    except (OSError, ValueError):
+        l = []
+    return [x for x in map(limpia_doc, lst(l)) if x["id"] and x["fichero"]]
+
+
+def guarda_docs(l, carpeta=None):
+    (carpeta or DOCS).mkdir(parents=True, exist_ok=True)
+    guarda((carpeta or DOCS) / "indice.json", json.dumps(l, ensure_ascii=False))
+
+
+def tarea_doc(d):
+    """La tarea de renovarlo en Pendientes, AVISO_DOC días antes (hoy, si queda menos): así sale en Hoy y en el
+    resumen de la mañana sin inventar otro aviso. Las garantías no se renuevan: esas no."""
+    if not d["caduca"] or d["cat"] == "garantias":
+        return ""
+    aviso = max(date.fromisoformat(d["caduca"]) - timedelta(days=AVISO_DOC), date.today()).isoformat()
+    try:
+        vault.nueva_tarea(f"Renovar {d['n']} (caduca el {d['caduca'][8:]}/{d['caduca'][5:7]}/{d['caduca'][:4]})", aviso)
+    except Exception as e:   # sin vault el documento se guarda igual
+        print("documentos: sin tarea:", e, flush=True)
+        return ""
+    return aviso
+
+
+def doc_de(i):
+    x = next((d for d in lee_docs() if d["id"] == i), None)
+    if not x:
+        raise HTTPException(404, "No existe ese documento")
+    return x
+
+
+@app.get("/api/documentos")
+def documentos(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    return {"docs": lee_docs(), "cats": CATS_DOC}
+
+
+@app.post("/api/documentos")
+async def sube_documento(request: Request, x_doc: str = Header(""), todo_sesion: str = Cookie(None),
+                         authorization: str = Header(None)):
+    """El fichero va tal cual en el cuerpo y lo demás en la cabecera X-Doc (JSON con encodeURIComponent):
+    sin formularios multipart, y sin que el nombre del titular acabe en la URL ni en los registros."""
+    exige(todo_sesion, authorization)
+    try:
+        meta = dct(json.loads(urllib.parse.unquote(x_doc) or "{}"))
+    except ValueError:
+        raise HTTPException(400, "X-Doc no es JSON")
+    datos = await request.body()
+    if not datos:
+        raise HTTPException(400, "Falta el fichero")
+    if len(datos) > 25 * 2**20:
+        raise HTTPException(413, "Más de 25 MB: mándalo en PDF o una foto más pequeña")
+    ext = Path(str(meta.get("nombre") or "")).suffix.lower() or ".jpg"
+    if ext not in TIPOS_DOC:
+        raise HTTPException(400, f"«{ext}» no: PDF o foto (jpg, png, heic, webp)")
+    i = f"d{time.time_ns() % 10**10}"
+    d = limpia_doc({**meta, "id": i, "fichero": i + ext, "n": meta.get("n") or Path(str(meta.get("nombre") or "")).stem})
+    with cerrojo_docs:
+        DOCS.mkdir(parents=True, exist_ok=True)
+        tmp = DOCS / (d["fichero"] + ".tmp")
+        tmp.write_bytes(datos)
+        os.replace(tmp, DOCS / d["fichero"])
+        guarda_docs(lee_docs() + [d])
+    return {**d, "aviso": tarea_doc(d)}
+
+
+@app.post("/api/documentos/{i}")
+def edita_documento(i: str, cambios: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    with cerrojo_docs:
+        l, x = lee_docs(), doc_de(i)
+        nuevo = limpia_doc({**x, **{k: cambios[k] for k in ("n", "cat", "titular", "caduca", "notas") if k in cambios}})
+        guarda_docs([nuevo if d["id"] == i else d for d in l])
+    # ponytail: cambiar la fecha apunta otra tarea y la vieja se queda en Pendientes; borrarla a mano
+    return {**nuevo, "aviso": tarea_doc(nuevo) if nuevo["caduca"] != x["caduca"] else ""}
+
+
+@app.post("/api/documentos/{i}/borra")
+def borra_documento(i: str, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """A la papelera (documentos/papelera), no fuera: el «Deshacer» lo devuelve."""
+    exige(todo_sesion, authorization)
+    with cerrojo_docs:
+        x, papelera = doc_de(i), DOCS / "papelera"
+        papelera.mkdir(exist_ok=True)
+        if (DOCS / x["fichero"]).exists():
+            os.replace(DOCS / x["fichero"], papelera / x["fichero"])
+        guarda_docs(lee_docs(papelera) + [x], papelera)
+        guarda_docs([d for d in lee_docs() if d["id"] != i])
+    return {"ok": True}
+
+
+@app.post("/api/documentos/{i}/restaura")
+def restaura_documento(i: str, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    with cerrojo_docs:
+        papelera = DOCS / "papelera"
+        x = next((d for d in lee_docs(papelera) if d["id"] == i), None)
+        if not x:
+            raise HTTPException(404, "No está en la papelera")
+        if (papelera / x["fichero"]).exists():
+            os.replace(papelera / x["fichero"], DOCS / x["fichero"])
+        guarda_docs([d for d in lee_docs(papelera) if d["id"] != i], papelera)
+        guarda_docs(lee_docs() + [x])
+    return x
+
+
+@app.get("/api/documentos/{i}/fichero")
+def fichero_documento(i: str, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    x = doc_de(i)
+    return FileResponse(DOCS / x["fichero"], filename=x["n"] + Path(x["fichero"]).suffix, content_disposition_type="inline",
+                        headers={"Cache-Control": "private, no-store"})
 
 
 # ---------- registrar un entreno de una sola llamada ----------
@@ -544,6 +1071,20 @@ def lee_pasos(v, ayer):
     return out
 
 
+def lee_pesos(v, hoy):
+    """Un número es el peso de hoy. Un peso por línea, «03.11.26, 07:55|81,2», va a su día (el último de ese
+    día): la báscula pasa el peso a Salud cuando se abre su app, a veces días después de pesarte."""
+    if "|" not in str(v):
+        p = real(numero(v), 20, 400)
+        return {hoy: round(p, 1)} if p else {}
+    out = {}
+    for x in (v if isinstance(v, list) else re.split(r"[;\n]", str(v)))[:60]:
+        partes = str(x).split("|")
+        if len(partes) == 2 and (dia := day((inicio(partes[0] + " 0:00") or "")[:10])) and (p := real(numero(partes[1]), 20, 400)):
+            out[dia] = round(p, 1)
+    return out
+
+
 def desde_mediodia(inicio):
     """Minutos desde el mediodía anterior: las 23:30 y las 00:30 quedan seguidas."""
     return (int(inicio[11:13]) * 60 + int(inicio[14:16]) - 720) % 1440
@@ -603,7 +1144,8 @@ def cuerpo(s, hoy, n=120):
 @app.post("/api/salud")
 def registra_salud(a: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
     """{"fases": los tramos de sueño, "pasos": por día o los de ayer, "peso": kilos de hoy}, cualquiera de ellos.
-    Cada noche va al día en que acabó, por sus fechas y no por cuándo corra el atajo; el peso, a hoy (o a "dia")."""
+    Cada noche va al día en que acabó, por sus fechas y no por cuándo corra el atajo; el peso, a hoy (o a "dia"),
+    o cada uno a su día si llegan como «fecha|kilos» por línea (ver lee_pesos)."""
     exige(todo_sesion, authorization)
     # lo que manda el atajo, tal cual (journalctl -u todo): para afinarlo sin adivinar
     print("salud recibido:", json.dumps({k: str(a.get(k))[:200] for k in ("sueno", "pasos", "fases", "peso", "grasa", "magra", "imc", "dia") if k in a},
@@ -636,10 +1178,13 @@ def registra_salud(a: dict, todo_sesion: str = Cookie(None), authorization: str 
         trozos.append(f"dormido {mins // 60} h {mins % 60:02d}" + (f" en {len(camas[-1][2])} tramos" if camas[-1][2] else "")
                       + (f" ({len(camas)} noches)" if len(camas) > 1 else ""))
     # la báscula: Salud lo da en kg con coma decimal y a veces con la unidad («70,4 kg»)
-    peso = real(numero(a.get("peso")), 20, 400)
-    if peso:
-        estado["peso"][hoy] = round(peso, 1)
-        trozos.append(f"{peso:.1f} kg".replace(".", ","))
+    pesos = lee_pesos(a.get("peso"), hoy)
+    estado["peso"].update(pesos)
+    peso = bool(pesos)
+    if pesos:
+        u = max(pesos)
+        trozos.append(f"{pesos[u]:.1f} kg".replace(".", ",") + ("" if u == hoy else f" del {int(u[8:])}/{int(u[5:7])}")
+                      + (f" (y {len(pesos) - 1} día{'s' if len(pesos) > 2 else ''} más)" if len(pesos) > 1 else ""))
     comp = {}
     for c, lo, hi in COMPOSICION:
         n = numero(a.get(c))
@@ -772,6 +1317,20 @@ def hoy_carrera(s, hoy):
             "hoy_hecho": any(a["dia"] == hoy and a["hecho"] for a in c["agenda"])}
 
 
+def hoy_entreno(s, hoy):
+    """Lo que toca entrenar hoy, para el widget del iPhone: la rutina de la sesión de cada hábito planificado
+    (o la única rutina del hábito, si no tiene sesión) y si ya está hecho."""
+    rutinas, sesion = {r["id"]: r for r in s["rutinas"]}, s["sesion"].get(hoy, {})
+    hecho, out = set(s["log"].get(hoy, [])), []
+    for h in s["habits"]:
+        suyas = [r for r in s["rutinas"] if r["hab"] == h["id"]]
+        r = rutinas.get(sesion.get(h["id"])) or (suyas[0] if len(suyas) == 1 else None)
+        if (h["id"] in s["plan"].get(hoy, []) or h["id"] in sesion) and (r or suyas):
+            out.append({"id": h["id"], "n": r["n"] if r else h["n"], "tipo": (r or suyas[0])["tipo"],
+                        "rutina": r["id"] if r else "", "hecho": h["id"] in hecho})
+    return out
+
+
 def hoy_comida(hoy):
     e, lista = de_otra("comida", "estado"), de_otra("comida", "lista")
     recetas = {r["id"]: r for r in e["recetas"]}
@@ -801,8 +1360,10 @@ def portada(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
         **hoy_habitos(s, hoy),
         **olvidos(s, hoy),
         "salud": hoy_salud(s, hoy),
+        "pantalla": resumen_pantalla(lee_pantalla(), hoy),
         "anio": hoy_anio(s, hoy),
         "carrera": trozo(lambda: hoy_carrera(s, hoy)),
+        "entreno": hoy_entreno(s, hoy),
         # lo que vence hoy o ya venció; lo sin fecha se queda en pendientes.html
         "tareas": trozo(lambda: [t for t in vault.tareas() if t["due"] and t["due"] <= hoy]),
         "leer": trozo(lambda: len(vault.lecturas())),
@@ -876,7 +1437,59 @@ def tarea_hecha(t: dict, todo_sesion: str = Cookie(None), authorization: str = H
 @app.post("/api/leer")
 def nueva_lectura(d: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
     exige(todo_sesion, authorization)
-    return _valida(vault.nueva_lectura, d)
+    x = _valida(vault.nueva_lectura, d)
+    if d.get("reemplaza"):
+        quita_de_cola(str(d["reemplaza"]))
+    return x
+
+
+# Lo que se comparte desde el iPhone (hoja de compartir de Safari): la nota se guarda al momento con lo mínimo, para
+# que no se pierda aunque el bot esté parado, y queda en cola. El bot la resume con Claude en su siguiente vuelta
+# (igual que un enlace por Telegram) y la nota buena sustituye a la provisional (`reemplaza` en /api/leer).
+LEER_COLA = DB.parent / "leer_cola.json"
+cerrojo_leer = threading.Lock()
+
+
+def cola_leer():
+    try:
+        return [x for x in json.loads(LEER_COLA.read_text("utf-8")) if isinstance(x, dict)]
+    except (OSError, json.JSONDecodeError):
+        return []
+
+
+def leer_pendiente(d):
+    url = str(d.get("url") or "").strip()
+    titulo = " ".join(str(d.get("titulo") or "").split())[:200]
+    if titulo.startswith(("http://", "https://")):
+        titulo = ""
+    nota = " ".join(str(d.get("nota") or "").split())[:500]
+    x = vault.nueva_lectura({"url": url, "titulo": titulo or urllib.parse.urlsplit(url).netloc or url, "nota": nota,
+                             "source": "iphone", "resumen": "Sin resumir todavía: guardado desde el iPhone."})
+    with cerrojo_leer:
+        guarda(LEER_COLA, json.dumps([*cola_leer(), {"url": url, "titulo": titulo, "nota": nota, "ruta": x["ruta"],
+                                                    "t": datetime.now().isoformat(timespec="seconds")}][-50:],
+                                     ensure_ascii=False, indent=1))
+    return {**x, "texto": "Guardado en Leer luego"}
+
+
+def quita_de_cola(ruta):
+    with cerrojo_leer:
+        cola = cola_leer()
+        if any(x.get("ruta") == ruta for x in cola):
+            guarda(LEER_COLA, json.dumps([x for x in cola if x.get("ruta") != ruta], ensure_ascii=False, indent=1))
+
+
+@app.post("/api/leer/pendiente")
+def nueva_lectura_pendiente(d: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    return _valida(leer_pendiente, d)
+
+
+@app.get("/api/leer/pendiente")
+def lecturas_pendientes(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """Para el bot: lo compartido que falta por resumir (la nota provisional sigue en el vault)."""
+    exige(todo_sesion, authorization)
+    return {"cola": [x for x in cola_leer() if vault.de_leer(x.get("ruta"))]}
 
 
 @app.post("/api/leido")
@@ -1024,6 +1637,12 @@ async def otra_app(ruta: str, request: Request, todo_sesion: str = Cookie(None),
 @app.get("/", include_in_schema=False)
 def portada_html():
     return FileResponse(HERE / "static" / "hoy.html")
+
+
+@app.get("/escalada.html", include_in_schema=False)
+def escalada_vieja():
+    """Fue una sección aparte un día; ahora es la tarjeta Escalada de Entreno."""
+    return RedirectResponse("/entreno.html#c-esc")
 
 
 @app.get("/sueno.html", include_in_schema=False)

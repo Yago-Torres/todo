@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="es">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="calma-datos" content="/api/documentos">
+<meta name="calma-entrada" content="espera">
+<meta name="theme-color" content="#F4F5F0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#171A16" media="(prefers-color-scheme: dark)">
+<title>Documentos</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.json" crossorigin="use-credentials">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Documentos">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="/calma.css?v=36c64bfb">
+<script src="/calma.js?v=36c64bfb"></script>
+<script src="/mascota.js?v=4"></script>
+<script src="/anime-4.5.0.min.js"></script>
+<script src="/anima.js?v=36c64bfb"></script>
+<style>
+  /* Estilo Calma: tokens y componentes en /calma.css (fuente: ~/estilo). Aquí solo lo de documentos. */
+  body { padding: 16px; padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px)); }
+  .app { max-width: 1120px; margin: 0 auto; display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+  .col { display: grid; gap: 14px; align-content: start; min-width: 0; }
+  @media (min-width: 920px) { .app { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); } }
+  .top { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 4px 2px 0; }
+  h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -.02em; }
+  .top nav { margin-left: auto; display: flex; gap: 6px; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .top nav a { text-decoration: none; }
+  #estado { font-size: 13px; color: var(--suave); }
+  .carta { padding: 16px; min-width: 0; }
+  .carta h2 { margin: 0 0 10px; font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .vacio { margin: 0; padding: 6px 2px; font-size: 14px; color: var(--suave); }
+  .pista { margin: 2px 2px 0; font-size: 13px; color: var(--suave); line-height: 1.45; }
+
+  form.doc { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  form.doc > .c-campo, form.doc > .ancho { grid-column: 1 / -1; }
+  form.doc label { display: grid; gap: 4px; font-size: 13px; color: var(--suave); min-width: 0; }
+  form.doc textarea { min-height: 60px; resize: vertical; font: inherit; }
+  .fichero { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 14px; border: 1px dashed var(--linea);
+             border-radius: var(--r-s); cursor: pointer; color: var(--suave); overflow: hidden; }
+  .fichero input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .fichero span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fichero:focus-within { border-color: var(--acento); }
+  .acciones { display: flex; gap: 8px; justify-content: flex-end; }
+
+  .grupo { margin: 14px 4px 4px; font-size: 13px; font-weight: 600; color: var(--suave); }
+  .grupo:first-child { margin-top: 0; }
+  .item { padding: 10px 4px; border-bottom: 1px solid var(--linea); }
+  .item:last-child { border-bottom: 0; }
+  .item .fila { display: flex; gap: 10px; align-items: flex-start; }
+  .item .t { flex: 1; min-width: 0; background: none; border: 0; padding: 0; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+  .item .t b { display: block; font-weight: 600; overflow-wrap: anywhere; }
+  .item .t small { display: block; font-size: 12px; color: var(--suave); margin-top: 2px; }
+  .item .ver { flex: none; text-decoration: none; }
+  .item .c-chip { font-size: 12px; padding: 1px 8px; }
+  .item form.doc { margin-top: 10px; padding: 12px; background: var(--carta-2); border-radius: var(--r-s); }
+  .item form.doc .c-campo { background: var(--carta); }
+  .puerta input, .puerta button { width: 100%; }
+</style>
+<body>
+
+<div class="puerta c-puerta" id="puerta">
+  <form id="f-clave">
+    <h2>Documentos</h2>
+    <p id="puerta-msg">Contraseña de todo</p>
+    <input class="c-campo" type="password" name="pass" required autocomplete="current-password" aria-label="Contraseña">
+    <button class="c-btn pri" type="submit">Entrar</button>
+  </form>
+</div>
+
+<div class="c-toast" id="toast" role="status"><b id="toast-txt"></b><button id="toast-btn">Deshacer</button></div>
+
+<div class="app">
+  <header class="top">
+    <h1>Documentos</h1>
+    <span id="estado">Cargando…</span>
+    <nav><a class="c-btn mini" href="/">Hoy</a><a class="c-btn mini" href="/habitos.html">Hábitos</a><a class="c-btn mini" href="/pendientes.html">Pendientes</a><a class="c-btn mini" href="/entreno.html">Entreno</a><a class="c-btn mini" href="/salud.html">Salud</a><a class="c-btn mini" href="/gastos.html">Gastos</a></nav>
+  </header>
+
+  <div class="col">
+    <section class="carta c-carta" aria-labelledby="t-pronto" id="c-pronto">
+      <h2 id="t-pronto">Caducan pronto</h2>
+      <div id="pronto"></div>
+    </section>
+
+    <section class="carta c-carta" aria-labelledby="t-nuevo">
+      <h2 id="t-nuevo">Guardar uno</h2>
+      <form class="doc" id="f-nuevo"></form>
+      <p class="pista">También por Telegram: manda la foto o el PDF al bot con «documento» en el pie y saca él qué es y cuándo caduca.
+        Las garantías de lo que compras salen solas de los tickets. Con fecha de caducidad, te apunto en Pendientes renovarlo un mes antes.</p>
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="carta c-carta" aria-labelledby="t-todos">
+      <h2 id="t-todos">Todos <span class="c-chip" id="n-todos"></span></h2>
+      <div id="todos"></div>
+    </section>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const el = (t, cls, txt) => { const e = document.createElement(t); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+const fecha = s => new Date(s.slice(0, 10) + "T12:00:00");
+const HOY = new Date().toLocaleDateString("sv");
+const entre = (a, b) => Math.round((fecha(b) - fecha(a)) / 864e5);
+const larga = s => `${fecha(s).getDate()} ${MESES[fecha(s).getMonth()]} ${fecha(s).getFullYear()}`;
+let D = null, abierto = null;
+
+function puerta(mostrar, msg) {
+  $("#puerta").toggleAttribute("data-on", mostrar);
+  $("#puerta-msg").textContent = msg || "Contraseña de todo";
+  $("#puerta-msg").classList.toggle("mal", !!msg);
+  if (mostrar) $("#puerta input").focus();
+}
+
+async function api(url, cuerpo) {
+  const r = await fetch(url, cuerpo === undefined ? {} : {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(cuerpo)});
+  if (r.status === 401) { puerta(true); throw new Error("401"); }
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.status);
+  return r.json();
+}
+
+let deshacer = null, reloj;
+function toast(txt, fn) {
+  deshacer = fn;
+  $("#toast-txt").textContent = txt;
+  $("#toast-btn").hidden = !fn;
+  $("#toast").toggleAttribute("data-on", true);
+  clearTimeout(reloj);
+  reloj = setTimeout(() => $("#toast").removeAttribute("data-on"), 5000);
+}
+$("#toast-btn").onclick = () => { $("#toast").removeAttribute("data-on"); if (deshacer) deshacer(); };
+
+// cómo está de vigente: [nivel del chip, texto]
+function vigencia(d) {
+  if (!d.caduca) return ["", ""];
+  const n = entre(HOY, d.caduca), garantia = d.cat === "garantias";
+  if (n < 0) return [garantia ? "" : "mal", `${garantia ? "garantía hasta" : "caducó el"} ${larga(d.caduca)}`];
+  if (n <= 30 && !garantia) return ["mal", n === 0 ? "caduca hoy" : `caduca en ${n} día${n === 1 ? "" : "s"}`];
+  if (n <= 90 && !garantia) return ["ojo", `caduca el ${larga(d.caduca)}`];
+  return ["", `${garantia ? "garantía hasta" : "vale hasta"} ${larga(d.caduca)}`];
+}
+
+// el mismo formulario para guardar uno nuevo y para cambiar uno que ya está
+function campos(f, d) {
+  f.innerHTML = `
+    ${d ? "" : `<label class="fichero ancho"><input type="file" name="fichero" accept="image/*,application/pdf" required><span>Elige una foto o un PDF</span></label>`}
+    <input class="c-campo" name="n" maxlength="80" placeholder="Qué es: Pasaporte, Seguro del coche…" aria-label="Qué es" ${d ? "required" : ""}>
+    <label>Tipo<select class="c-campo" name="cat"></select></label>
+    <label>Caduca<input class="c-campo" type="date" name="caduca"></label>
+    <input class="c-campo" name="titular" maxlength="60" placeholder="A nombre de (opcional)" aria-label="Titular">
+    <textarea class="c-campo" name="notas" maxlength="300" placeholder="Notas: aseguradora, teléfono de asistencia… (sin números de documento)" aria-label="Notas"></textarea>
+    <div class="acciones ancho">${d ? '<button type="button" class="c-btn peligro" name="borrar">Borrar</button>' : ""}
+      <button class="c-btn pri">${d ? "Guardar" : "Guardar documento"}</button></div>`;
+  f.cat.append(...Object.entries(D.cats).map(([k, n]) => new Option(n, k, false, k === (d ? d.cat : "identidad"))));
+  if (d) { f.n.value = d.n; f.caduca.value = d.caduca; f.titular.value = d.titular; f.notas.value = d.notas; }
+  else f.fichero.onchange = () => {
+    const x = f.fichero.files[0];
+    f.querySelector(".fichero span").textContent = x ? x.name : "Elige una foto o un PDF";
+    if (x && !f.n.value) f.n.value = x.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ");
+  };
+  const datos = () => ({n: f.n.value.trim(), cat: f.cat.value, caduca: f.caduca.value, titular: f.titular.value.trim(), notas: f.notas.value.trim()});
+  f.onsubmit = async e => {
+    e.preventDefault();
+    const btn = f.querySelector("button.pri");
+    btn.disabled = true;
+    try {
+      let r;
+      if (d) r = await api(`/api/documentos/${d.id}`, datos());
+      else {
+        const x = f.fichero.files[0];
+        if (x.size > 25 * 2 ** 20) throw new Error("más de 25 MB");
+        // el fichero en crudo y lo demás en una cabecera: fuera de la URL (y de los registros)
+        const res = await fetch("/api/documentos", {method: "POST", body: x, headers: {
+          "Content-Type": x.type || "application/octet-stream", "X-Doc": encodeURIComponent(JSON.stringify({...datos(), nombre: x.name}))}});
+        if (res.status === 401) { puerta(true); throw new Error("401"); }
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.status);
+        r = await res.json();
+        campos(f);
+      }
+      abierto = null;
+      toast(r.aviso ? `Guardado. Te recuerdo renovarlo el ${larga(r.aviso)}` : "Guardado");
+      cargar();
+    } catch (err) {
+      if (err.message !== "401") toast(`No se ha guardado: ${err.message}`);
+    } finally {
+      btn.disabled = false;
+    }
+  };
+  if (d) f.borrar.onclick = async () => {
+    await api(`/api/documentos/${d.id}/borra`, {});
+    abierto = null;
+    toast(`Borrado: ${d.n}`, async () => { await api(`/api/documentos/${d.id}/restaura`, {}); cargar(); });
+    cargar();
+  };
+}
+
+function fila(d) {
+  const it = el("div", "item"), f = el("div", "fila"), t = el("button", "t"), [nivel, txt] = vigencia(d);
+  t.type = "button";
+  t.setAttribute("aria-expanded", abierto === d.id);
+  t.append(el("b", null, d.n));
+  const meta = el("small", null, [d.titular, d.notas].filter(Boolean).join(" · "));
+  if (txt) meta.prepend(nivel ? el("span", `c-chip ${nivel}`, txt) : txt, d.titular || d.notas ? " · " : "");
+  if (meta.textContent) t.append(meta);
+  t.onclick = () => { abierto = abierto === d.id ? null : d.id; pinta(); };
+  const ver = Object.assign(el("a", "c-btn mini ver", "Ver"), {href: `/api/documentos/${d.id}/fichero`, target: "_blank", rel: "noopener"});
+  f.append(t, ver);
+  it.append(f);
+  if (abierto === d.id) { const ed = el("form", "doc"); campos(ed, d); it.append(ed); }
+  return it;
+}
+
+function pinta() {
+  // lo que caduca en 90 días (o ya caducó), sin las garantías: lo que hay que renovar
+  const pronto = D.docs.filter(d => d.caduca && d.cat !== "garantias" && entre(HOY, d.caduca) <= 90).sort((a, b) => a.caduca.localeCompare(b.caduca));
+  $("#pronto").replaceChildren(...(pronto.length ? pronto.map(fila) : [el("p", "vacio", "Nada caduca en los próximos tres meses.")]));
+  $("#n-todos").textContent = D.docs.length || "";
+  const c = $("#todos");
+  c.replaceChildren();
+  if (!D.docs.length) return c.append(el("p", "vacio", "Aún no hay nada. Empieza por el DNI, el pasaporte y los seguros."));
+  for (const [k, n] of Object.entries(D.cats)) {
+    const l = D.docs.filter(d => d.cat === k).sort((a, b) => a.n.localeCompare(b.n, "es"));
+    if (!l.length) continue;
+    c.append(el("div", "grupo", n), ...l.map(fila));
+  }
+}
+
+async function cargar() {
+  try {
+    const habia = !!D;
+    D = await api("/api/documentos");
+    puerta(false);
+    $("#estado").textContent = "";
+    if (!habia) campos($("#f-nuevo"));
+    if (habia) return calma.transicion(pinta);
+    pinta();
+    anima.entrada();
+  } catch (e) {
+    if (e.message !== "401") $("#estado").textContent = "Sin conexión";
+  }
+}
+
+$("#f-clave").onsubmit = async e => {
+  e.preventDefault();
+  const inp = e.target.pass;
+  const r = await fetch("/api/login", {method: "POST", headers: {"Content-Type": "application/json"},
+                                       body: JSON.stringify({pass: inp.value})}).catch(() => null);
+  if (r && r.ok) { inp.value = ""; await cargar(); }
+  else puerta(true, r && r.status === 401 ? "Contraseña incorrecta" : "No se pudo conectar");
+};
+addEventListener("visibilitychange", () => document.visibilityState === "visible" && D && !abierto && cargar());
+cargar();
+</script>
+</body>
+</html>
