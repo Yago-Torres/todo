@@ -73,6 +73,7 @@ final class Coordinador: NSObject, WKNavigationDelegate, WKUIDelegate {
         vista = v
         inclinacion.vista = v
         Entreno.shared.web = v
+        Escalada.shared.web = v
 
         suscripcion = Navegador.shared.$ruta
             .compactMap { $0 }
@@ -313,6 +314,8 @@ final class Coordinador: NSObject, WKNavigationDelegate, WKUIDelegate {
             if let estado = datos["estado"] as? [String: Any] { Entreno.shared.recibe(estado) }
         case "entrenoFin":
             Entreno.shared.termina()
+        case "escalada-subir":
+            Escalada.shared.hojaVisible = true
         default:
             break
         }

@@ -77,6 +77,12 @@ struct Raiz: View {
                 set: { navegador.voz = $0 })
     }
 
+    /// La hoja de subir un intento de escalada ({accion:"escalada-subir"} de la web), tampoco por encima del bloqueo.
+    private var escaladaVisible: Binding<Bool> {
+        Binding(get: { Escalada.shared.hojaVisible && !estado.bloqueado },
+                set: { Escalada.shared.hojaVisible = $0 })
+    }
+
     /// Igual con Configurar: lo pedido con la app bloqueada sale después de desbloquear.
     private var configurarVisible: Binding<Bool> {
         Binding(get: { estado.configurando && !estado.bloqueado },
@@ -87,6 +93,8 @@ struct Raiz: View {
         ZStack {
             Color("Fondo").ignoresSafeArea()
             if let claves = estado.claves {
+                // leído aquí, en body, para que Observation repinte al pedir la hoja (el get del Binding va fuera de body)
+                let _ = Escalada.shared.hojaVisible
                 // la web sigue viva debajo del bloqueo: al desbloquear no se recarga ni pierde lo que tenías a medias
                 Web(claves: claves)
                     .ignoresSafeArea()
@@ -104,6 +112,9 @@ struct Raiz: View {
                         NavigationStack {
                             Configurar { estado.claves = $0 }
                         }
+                    }
+                    .sheet(isPresented: escaladaVisible) {
+                        HojaEscalada()
                     }
                     .fullScreenCover(isPresented: vozVisible) {
                         Voz()
@@ -150,8 +161,22 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         // los sonidos de la web (Web Audio) respetan el interruptor de silencio y se mezclan con la música
         Sonido.ambiente()
         Red.shared.empieza()
+        // las subidas de escalada que acabaron con la app cerrada avisan en cuanto existe su sesión
+        Subidas.shared.arranca()
         if Almacen.defaults.bool(forKey: "salud") { Salud.activaSegundoPlano() }
         return true
+    }
+
+    /// iOS despierta la app cuando acaba una subida en segundo plano (Escalada.swift): se reabre la sesión, que
+    /// recibe los eventos, y se llama a completionHandler cuando ya se ha avisado (urlSessionDidFinishEvents).
+    func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String,
+                     completionHandler: @escaping () -> Void) {
+        guard identifier == Subidas.identificador else {
+            completionHandler()
+            return
+        }
+        Subidas.shared.alAcabar = completionHandler
+        Subidas.shared.arranca()
     }
 
     // con escenas, el acceso del icono que lanza la app en frío llega aquí y no en launchOptions

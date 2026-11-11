@@ -732,6 +732,60 @@ def test_movimiento():
     assert r.returncode == 0, r.stderr
 
 
+def test_escalada():
+    import asyncio
+    import json
+    import tempfile
+    from pathlib import Path
+    main.PASS, main.SECRET = "x", b"s"
+    main.ESCALADA = Path(tempfile.mkdtemp())
+
+    class Pide:   # lo justo de una Request: cabeceras y el cuerpo por trozos
+        def __init__(self, b, tipo="application/json"): self.b, self.headers = b, {"content-type": tipo}
+        async def stream(self):
+            for i in range(0, len(self.b), 1000):
+                yield self.b[i:i + 1000]
+
+    def falla(f, codigo):
+        try:
+            f()
+            assert False, "tenía que fallar"
+        except main.HTTPException as e:
+            assert e.status_code == codigo, (e.status_code, e.detail)
+
+    punto = [0.5, 0.25, 0.9]
+    previa = {"fps": 5, "ancho": 1080, "alto": 1920, "meta": {"color": "Blue", "nombre": "  El  techo ", "quien": "Yago"},
+              "fotogramas": [[0, 0.5, 0.6, [punto] * 19], [0.2, None, None, [[0, 0, 0]] * 19]], "primero": "data:image/jpeg;base64,AAAA"}
+    sube = lambda i, d: asyncio.run(main.sube_previa(i, Pide(json.dumps(d).encode()), None, "Bearer x"))
+    assert "2 fotogramas" in sube("20261111-183000", previa)["texto"]
+    guardada = json.loads(main.lee_previa("20261111-183000", None, "Bearer x").path.read_text())
+    assert guardada["meta"] == {"color": "azul", "nombre": "El techo", "quien": "Yago", "resultado": "probando"}, guardada["meta"]
+    assert guardada["fotogramas"][1][:3] == [0.2, None, None] and guardada["fotogramas"][0][3][0] == punto and guardada["primero"]
+    # sin la forma de siempre, de más de 2 MB, sin intento o sin sesión: fuera
+    falla(lambda: sube("20261111-183000", {**previa, "fotogramas": [[0, 0.5, 0.5, [punto] * 18]]}), 400)
+    falla(lambda: sube("20261111-183000", {**previa, "fps": "rápido"}), 400)
+    falla(lambda: asyncio.run(main.sube_previa("20261111-183000", Pide(b"[" * (3 * 2**20)), None, "Bearer x")), 413)
+    falla(lambda: sube("../..", previa), 400)
+    falla(lambda: asyncio.run(main.sube_previa("20261111-183000", Pide(b"{}"), None, "Bearer mala")), 401)
+    falla(lambda: main.lee_previa("20261111-190000", None, "Bearer x"), 404)
+    # en la lista: subiendo (solo la previa), analizando (ya está el vídeo en entrada/) y, ya en historial/, fuera
+    lista = lambda: main.lista_escalada(None, "Bearer x")
+    r = lista()
+    assert r["colores"][0] == "amarillo" and len(r["colores"]) == 9 and r["quien"]
+    assert [(x["intento"], x["estado"], x["previa"], x["color"]) for x in r["pendientes"]] == [("20261111-183000", "subiendo", True, "azul")]
+    t = asyncio.run(main.sube_escalada(Pide(b"video" * 10, "video/quicktime"), "20261111-183000", 1, "Yago", "azul", "", "hecho", "", None, "Bearer x"))
+    assert "Recibido" in t["texto"] and (main.ESCALADA / "entrada" / "20261111-183000" / "1.mov").exists()
+    assert [(x["estado"], x["previa"], x["resultado"]) for x in lista()["pendientes"]] == [("analizando", True, "hecho")]
+    (main.ESCALADA / "entrada" / "20261111-183000" / "error").write_text("sin escalador")
+    assert lista()["pendientes"][0]["estado"] == "error" and lista()["pendientes"][0]["error"] == "sin escalador"
+    h = main.ESCALADA / "historial" / "20261111-183000"
+    h.mkdir(parents=True)
+    (h / "intento.json").write_text(json.dumps({"quien": "Yago", "color": "azul", "nombre": "", "resultado": "hecho"}))
+    r = lista()
+    assert r["pendientes"] == [] and [x["intento"] for x in r["intentos"]] == ["20261111-183000"]
+    assert main.lee_previa("20261111-183000", None, "Bearer x")   # la previa sigue ahí, por si se quiere
+
+
 if __name__ == "__main__":
     test_movimiento()
     test_sueno()
@@ -751,4 +805,5 @@ if __name__ == "__main__":
     test_documentos()
     test_pantalla()
     test_tom()
+    test_escalada()
     print("ok")

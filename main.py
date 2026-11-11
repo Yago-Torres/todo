@@ -659,7 +659,8 @@ def get_pantalla(todo_sesion: str = Cookie(None), authorization: str = Header(No
 # nada sensible y en Atajos es lo más fácil de montar. Va a ~/escalada/entrada/<intento>/ y lo coge escalada.service
 # (~/escalada/worker.py), que lo analiza y manda el resultado por Telegram. Solo la instancia con TODO_ESCALADA.
 ESCALADA = Path(os.getenv("TODO_ESCALADA") or "/no/existe")
-COLORES_PRESA = {"amarillo", "naranja", "rojo", "rosa", "morado", "azul", "verde", "blanco", "negro"}
+# en orden: así salen en la app y en la web
+COLORES_PRESA = ("amarillo", "naranja", "rojo", "rosa", "morado", "azul", "verde", "blanco", "negro")
 # el atajo puede ir en inglés (el iPhone lo está): se aceptan los dos
 EN_INGLES = {"yellow": "amarillo", "orange": "naranja", "red": "rojo", "pink": "rosa", "purple": "morado",
              "blue": "azul", "green": "verde", "white": "blanco", "black": "negro"}
@@ -671,6 +672,14 @@ def llano(s):
     return unicodedata.normalize("NFD", str(s or "").lower()).encode("ascii", "ignore").decode().strip()
 
 
+def id_subida(intento):
+    """El intento tal como llega en la URL, sin nada que pueda salirse de su carpeta."""
+    intento = re.sub(r"[^\w-]", "", str(intento or ""))[:40]
+    if len(intento) < 6:
+        raise HTTPException(400, "Falta el intento: en el atajo, la fecha y hora (por ejemplo 20261105-111356)")
+    return intento
+
+
 @app.post("/api/escalada")
 async def sube_escalada(request: Request, intento: str = "", angulo: int = 1, quien: str = "Yago", color: str = "",
                         nombre: str = "", resultado: str = "probando", nivel: str = "", todo_sesion: str = Cookie(None),
@@ -678,9 +687,7 @@ async def sube_escalada(request: Request, intento: str = "", angulo: int = 1, qu
     exige(todo_sesion, authorization)
     if not ESCALADA.exists():
         raise HTTPException(503, "Esta app no analiza vídeos de escalada")
-    intento, color = re.sub(r"[^\w-]", "", intento)[:40], EN_INGLES.get(llano(color), llano(color))
-    if len(intento) < 6:
-        raise HTTPException(400, "Falta el intento: en el atajo, la fecha y hora (por ejemplo 20261105-111356)")
+    intento, color = id_subida(intento), EN_INGLES.get(llano(color), llano(color))
     if color not in COLORES_PRESA:
         raise HTTPException(400, f"«{color}» no es un color de presa: {', '.join(sorted(COLORES_PRESA))}")
     tipo = request.headers.get("content-type", "")
@@ -750,7 +757,121 @@ def lista_escalada(todo_sesion: str = Cookie(None), authorization: str = Header(
     exige(todo_sesion, authorization)
     h = ESCALADA / "historial"
     ds = sorted((d for d in h.iterdir() if (d / "intento.json").exists()), reverse=True) if h.exists() else []
-    return {"activa": ESCALADA.exists(), "intentos": [ficha_intento(d) for d in ds]}
+    return {"activa": ESCALADA.exists(), "intentos": [ficha_intento(d) for d in ds], "pendientes": pendientes_escalada(ds),
+            "colores": list(COLORES_PRESA), "quien": "Yago"}   # no el nombre de Ajustes («Yago!»): el worker compara con «yago»
+
+
+# ---------- escalada: la vista previa del iPhone ----------
+# Mientras el vídeo sube, la app de iPhone (Tom) saca el esqueleto con Vision y lo manda aquí: unos cientos de KB que
+# la web dibuja hasta que llega el análisis bueno (RTMPose en el PC o MediaPipe en la Pi). Va aparte, en previas/, y
+# no en entrada/<intento>/: el worker mira las horas de esa carpeta para saber si ha acabado de llegar y la borra a las 4.
+MAX_PREVIA = 2 * 2**20
+PUNTOS_PREVIA = 19   # los de VNHumanBodyPoseObservation, en el orden de Escalada.swift
+
+
+def dir_previas():
+    return ESCALADA / "previas"
+
+
+def cifra(v):
+    """Un número JSON de verdad (no bool, no NaN), redondeado, o None."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or v != v or abs(v) > 1e6:
+        return None
+    return round(float(v), 4)
+
+
+def limpia_previa(d):
+    """La previa con su forma fija: {fps, ancho, alto, fotogramas: [[t, cx, cy, [[x, y, c] × 19]]], meta, primero?}.
+    Coordenadas normalizadas (0-1, y hacia abajo); cx, cy None si no se vio el cuerpo."""
+    mal = HTTPException(400, "La vista previa no tiene la forma esperada")
+    if not isinstance(d, dict):
+        raise mal
+    fps, ancho, alto, fs = real(d.get("fps"), 0.1, 60), real(d.get("ancho"), 1, 10000), real(d.get("alto"), 1, 10000), d.get("fotogramas")
+    if None in (fps, ancho, alto) or not isinstance(fs, list) or not 0 < len(fs) <= 600:
+        raise mal
+    fotos = []
+    for f in fs:
+        if not isinstance(f, list) or len(f) != 4 or not isinstance(f[3], list) or len(f[3]) != PUNTOS_PREVIA:
+            raise mal
+        if cifra(f[0]) is None or any(not isinstance(p, list) or len(p) != 3 for p in f[3]):
+            raise mal
+        fotos.append([max(0, cifra(f[0])), cifra(f[1]), cifra(f[2]), [[cifra(x) or 0 for x in p] for p in f[3]]])
+    m = dct(d.get("meta"))
+    color = EN_INGLES.get(llano(m.get("color")), llano(m.get("color")))
+    r = {"fps": fps, "ancho": round(ancho), "alto": round(alto), "fotogramas": fotos,
+         "meta": {"color": color if color in COLORES_PRESA else "", "nombre": " ".join(str(m.get("nombre") or "").split())[:60],
+                  "quien": " ".join(str(m.get("quien") or "").split())[:30],
+                  "resultado": COMO_FUE.get(llano(m.get("resultado")), "probando")}}
+    primero = d.get("primero")   # el primer fotograma, pequeño, para dibujar encima
+    if isinstance(primero, str) and primero.startswith("data:image/jpeg;base64,") and len(primero) < 400_000:
+        r["primero"] = primero
+    return r
+
+
+def pendientes_escalada(hechos):
+    """Lo que aún no está en historial/: subiendo (solo ha llegado la vista previa), analizando o con error."""
+    hechos, r = {d.name for d in hechos}, {}
+    e = ESCALADA / "entrada"
+    for d in e.iterdir() if e.exists() else []:
+        if d.name in hechos or not ID_INTENTO.fullmatch(d.name) or not (d / "intento.json").exists():
+            continue
+        try:
+            m = json.loads((d / "intento.json").read_text("utf-8"))
+        except ValueError:
+            continue
+        error = (d / "error").read_text("utf-8")[:200] if (d / "error").exists() else ""
+        r[d.name] = {"intento": d.name, **{k: m.get(k) or "" for k in ("quien", "color", "nombre", "resultado")},
+                     "dificultad": m.get("dificultad"), "estado": "error" if error else "analizando", "error": error}
+    for p in dir_previas().glob("*.json") if dir_previas().exists() else []:
+        if p.stem in hechos or not ID_INTENTO.fullmatch(p.stem):
+            continue
+        if p.stem not in r:
+            if time.time() - p.stat().st_mtime > 6 * 3600:   # el vídeo nunca llegó
+                continue
+            try:
+                m = dct(json.loads(p.read_text("utf-8")).get("meta"))
+            except ValueError:
+                continue
+            r[p.stem] = {"intento": p.stem, **{k: m.get(k) or "" for k in ("quien", "color", "nombre", "resultado")},
+                         "dificultad": None, "estado": "subiendo", "error": ""}
+        r[p.stem]["previa"] = True
+    return [{"previa": False, **x} for _, x in sorted(r.items(), reverse=True)]
+
+
+@app.post("/api/escalada/{intento}/previa")
+async def sube_previa(intento: str, request: Request, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    if not ESCALADA.exists():
+        raise HTTPException(503, "Esta app no analiza vídeos de escalada")
+    intento = id_subida(intento)
+    if int(request.headers.get("content-length") or 0) > MAX_PREVIA:
+        raise HTTPException(413, "La vista previa pasa de 2 MB")
+    cuerpo = b""
+    async for trozo in request.stream():
+        cuerpo += trozo
+        if len(cuerpo) > MAX_PREVIA:
+            raise HTTPException(413, "La vista previa pasa de 2 MB")
+    try:
+        d = json.loads(cuerpo)
+    except ValueError:
+        raise HTTPException(400, "La vista previa no es JSON")
+    previa = limpia_previa(d)
+    dir_previas().mkdir(exist_ok=True)
+    for p in dir_previas().glob("*.json"):   # las viejas sobran: para entonces ya está el análisis bueno
+        if time.time() - p.stat().st_mtime > 60 * 86400:
+            p.unlink(missing_ok=True)
+    guarda(dir_previas() / f"{intento}.json", json.dumps(previa, ensure_ascii=False, separators=(",", ":")))
+    return {"texto": f"Vista previa guardada ({len(previa['fotogramas'])} fotogramas)"}
+
+
+@app.get("/api/escalada/{intento}/previa")
+def lee_previa(intento: str, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """Antes que /api/escalada/{intento}/{que}: si no, «previa» acabaría allí como un fichero que no existe."""
+    exige(todo_sesion, authorization)
+    p = dir_previas() / f"{id_subida(intento)}.json"
+    if not p.exists():
+        raise HTTPException(404, "No hay vista previa de ese intento")
+    return FileResponse(p, media_type="application/json")
 
 
 @app.get("/api/escalada/{intento}/{que}")

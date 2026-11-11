@@ -244,6 +244,17 @@
   .esc-coach ul { margin: 0; padding-left: 20px; }
   .esc-coach h3 { margin: 4px 0 0; font-size: 13px; font-weight: 600; color: var(--suave); }
   .esc-fila { display: grid; grid-template-columns: minmax(0, 1fr) 6.5em auto; gap: 8px; }
+  /* subir un intento y los que van de camino (subiendo, analizando) con la vista previa del iPhone */
+  .esc-subir { margin-bottom: 12px; }
+  .esc-subir > .c-btn { width: 100%; }
+  .esc-subir input[type=file] { font: inherit; font-size: 13px; color: var(--suave); min-width: 0; }
+  .esc-dos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .esc-curso { border-bottom: 1px solid var(--linea); padding: 10px 2px; display: grid; gap: 8px; }
+  .esc-curso .esc-t { padding: 0; cursor: default; }
+  .esc-curso .c-barra { margin: 0; }
+  .esc-previa { display: grid; gap: 6px; justify-items: center; }
+  .esc-previa canvas { max-width: 100%; max-height: 60vh; border-radius: var(--r-s); background: var(--carta-2); display: block; }
+  .esc-previa small { font-size: 12px; color: var(--suave); text-align: center; }
 </style>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><filter id="derrite"><feTurbulence type="fractalNoise" baseFrequency="0.02 0.09" numOctaves="2" seed="3"/><feDisplacementMap id="d-map" in="SourceGraphic" scale="0" xChannelSelector="R" yChannelSelector="G"/></filter></svg>
@@ -344,6 +355,7 @@
 
     <section class="carta c-carta" aria-labelledby="t-esc" id="c-esc" hidden>
       <h2 id="t-esc">Escalada</h2>
+      <div id="esc-subir" class="esc-subir"></div>
       <div id="esc-competir"></div>
       <div id="esc"></div>
     </section>
@@ -1335,6 +1347,9 @@ cargar();
   const corto = i => `${+i.slice(6, 8)}/${+i.slice(4, 6)} ${i.slice(9, 11)}:${i.slice(11, 13)}`;
   const bloque = x => x.nombre || `Bloque ${x.color}`;
   let E = null, abierto = null, viendo = {}, sondeo = null;
+  // los que van de camino: lo que cuenta la app de iPhone (evento tom-escalada) o la subida desde Safari
+  const vivos = {}, previas = {};
+  const FASE = {comprimiendo: "comprimiendo", subiendo: "subiendo", previa: "subiendo", listo: "analizando…", error: "no se ha podido"};
 
   async function api(url, cuerpo) {
     const r = await fetch(url, cuerpo === undefined ? {} : {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(cuerpo)});
@@ -1448,8 +1463,11 @@ cargar();
     // repintar corta el vídeo: si hay uno empezado (sonando o en pausa a medias), se espera, salvo que lo pida él
     if (!forzar && [...c.querySelectorAll("video")].some(v => !v.paused || v.currentTime > 0)) return;
     $("#esc-competir").replaceChildren(competir());
-    c.replaceChildren();
-    if (!E.intentos.length) return c.append(el("p", "vacio", "Aún no hay intentos: graba uno y compártelo con el atajo «Analizar escalada»."));
+    c.replaceChildren(...enCurso());
+    if (!E.intentos.length) {
+      if (!c.firstChild) c.append(el("p", "vacio", "Aún no hay intentos: graba uno y súbelo con «Subir intento» o el atajo «Analizar escalada»."));
+      return;
+    }
     const grupos = new Map();
     for (const x of E.intentos) grupos.set(bloque(x), [...(grupos.get(bloque(x)) || []), x]);
     for (const [n, xs] of grupos) {
@@ -1485,9 +1503,208 @@ cargar();
     }
     $("#c-esc").hidden = !E.activa;
     if (!E.activa) return;
+    for (const x of E.intentos) delete vivos[x.intento];   // ya analizado: fuera la previa y el «subiendo»
+    if (!$("#esc-subir").firstChild) $("#esc-subir").append(subir());
     pinta();
-    clearTimeout(sondeo);   // mientras se monta una competición, se mira cada 10 s si ya está
-    if (E.intentos.some(x => Object.values(x.fantasmas).includes("preparando"))) sondeo = setTimeout(cargar, 10000);
+    clearTimeout(sondeo);   // mientras se monta una competición o hay uno de camino, se mira cada 10 s
+    if (E.intentos.some(x => Object.values(x.fantasmas).includes("preparando")) || E.pendientes.some(x => x.estado !== "error")
+        || Object.values(vivos).some(v => v.fase !== "error" && v.fase !== "listo")) sondeo = setTimeout(cargar, 10000);
+  }
+
+  // ---------- subir un intento ----------
+  // En la app de iPhone lo hace ella (comprime, sube en segundo plano y saca la vista previa con Vision). En Safari, un
+  // formulario que sube el fichero tal cual: Cloudflare corta lo que pase de 100 MB.
+  const MAX_SAFARI = 95 * 2**20;
+  const dos = n => String(n).padStart(2, "0");
+  const sello = d => `${d.getFullYear()}${dos(d.getMonth() + 1)}${dos(d.getDate())}-${dos(d.getHours())}${dos(d.getMinutes())}${dos(d.getSeconds())}`;
+  const selector = (etiqueta, opciones, valor) => {
+    const s = el("select", "c-campo");
+    s.setAttribute("aria-label", etiqueta);
+    s.append(...opciones.map(([v, t]) => new Option(t, v)));
+    s.value = valor;
+    return s;
+  };
+
+  function subir() {
+    const caja = el("div"), boton = el("button", "c-btn pri", "Subir intento");
+    boton.type = "button";
+    caja.append(boton);
+    if (window.HoyApp) {
+      boton.onclick = () => { try { window.webkit.messageHandlers.hoy.postMessage({accion: "escalada-subir"}); } catch (e) {} };
+      return caja;
+    }
+    const f = el("form", "esc-caja"), fichero = Object.assign(el("input"), {type: "file", accept: "video/*", required: true});
+    fichero.setAttribute("aria-label", "Vídeo del intento");
+    const color = selector("Color de las presas", (E.colores || []).map(c => [c, c[0].toUpperCase() + c.slice(1)]), "");
+    color.prepend(new Option("Color de las presas", ""));
+    color.value = "";
+    color.required = true;
+    const resultado = selector("Cómo fue", Object.entries(RESULTADO).map(([k, [, t]]) => [k, t]), "probando");
+    const angulo = selector("Ángulo", [1, 2, 3, 4].map(n => [n, `Ángulo ${n}`]), "1");
+    const nombre = Object.assign(el("input", "c-campo"), {maxLength: 60, placeholder: "Nombre del bloque (opcional)"});
+    nombre.setAttribute("list", "esc-nombres");
+    nombre.setAttribute("aria-label", "Nombre del bloque");
+    const nivel = selector("Nivel del 1 al 10", [["", "Nivel (opcional)"], ...Array.from({length: 10}, (_, i) => [i + 1, i + 1])], "");
+    const ir = el("button", "c-btn pri", "Subir"), msg = el("p", "esc-pista", "");
+    const fila = (a, b) => { const d = el("div", "esc-dos"); d.append(a, b); return d; };
+    f.append(fichero, fila(color, resultado), fila(angulo, nivel), nombre, ir, msg);
+    f.hidden = true;
+    boton.onclick = () => { f.hidden = !f.hidden; };
+    fichero.onchange = () => {
+      const v = fichero.files[0];
+      msg.textContent = v && v.size > MAX_SAFARI ? `Pesa ${Math.round(v.size / 2**20)} MB y por aquí no pasa de 95 MB: súbelo con la app Tom (lo comprime) o con el atajo «Analizar escalada».` : "";
+    };
+    f.onsubmit = e => {
+      e.preventDefault();
+      const v = fichero.files[0];
+      if (!v) return;
+      if (v.size > MAX_SAFARI) return fichero.onchange();
+      const intento = sello(new Date(v.lastModified || Date.now()));
+      const q = new URLSearchParams({intento, angulo: angulo.value, quien: E.quien || "Yago", color: color.value,
+                                     resultado: resultado.value, nombre: nombre.value, nivel: nivel.value});
+      const x = new XMLHttpRequest();
+      const avisa = d => recibe({intento, color: color.value, nombre: nombre.value, ...d});
+      x.open("POST", `/api/escalada?${q}`);
+      x.setRequestHeader("Content-Type", v.type || "video/mp4");
+      x.upload.onprogress = ev => ev.lengthComputable && avisa({fase: "subiendo", progreso: ev.loaded / ev.total});
+      x.onload = () => {
+        let r = {};
+        try { r = JSON.parse(x.responseText); } catch (err) {}
+        if (x.status >= 200 && x.status < 300) { avisa({fase: "listo", texto: r.texto || ""}); f.reset(); f.hidden = true; msg.textContent = ""; }
+        else { avisa({fase: "error", texto: r.detail || `Error ${x.status}`}); tom.avisa("error"); }
+        ir.disabled = false;
+      };
+      x.onerror = () => { avisa({fase: "error", texto: "Sin conexión con el servidor"}); ir.disabled = false; tom.avisa("error"); };
+      ir.disabled = true;
+      avisa({fase: "subiendo", progreso: 0});
+      x.send(v);
+    };
+    caja.append(f);
+    return caja;
+  }
+
+  // lo que manda la app ({intento, fase, progreso, texto}) o la subida de Safari
+  function recibe(d) {
+    if (!d || !/^\d{8}-\d{6}$/.test(d.intento || "")) return;
+    const antes = vivos[d.intento];
+    vivos[d.intento] = {...antes, ...d};
+    if (antes && antes.fase === d.fase && (d.fase === "comprimiendo" || d.fase === "subiendo")) {
+      const b = document.querySelector(`#curso-${d.intento} .c-barra i`), t = document.querySelector(`#curso-${d.intento} .c-chip`);
+      if (b) b.style.width = `${Math.round((d.progreso || 0) * 100)}%`;
+      if (t) t.textContent = estadoTexto(vivos[d.intento]);
+      return;
+    }
+    if (d.fase === "previa" || d.fase === "listo") { delete previas[d.intento]; cargar(); }
+    else if (E) pinta();
+  }
+  addEventListener("tom-escalada", e => recibe(e.detail));
+
+  const estadoTexto = v => (FASE[v.fase] || v.fase) + (v.progreso != null && (v.fase === "comprimiendo" || v.fase === "subiendo")
+                                                       ? ` ${Math.round(v.progreso * 100)} %` : "");
+
+  // los de camino: los que conoce el servidor (E.pendientes) y los que aún no le han llegado (vivos)
+  function enCurso() {
+    const lista = new Map(E.pendientes.map(x => [x.intento, {...x}]));
+    for (const [i, v] of Object.entries(vivos)) {
+      if (E.intentos.some(x => x.intento === i)) continue;
+      const x = lista.get(i) || {intento: i, color: v.color || "", nombre: v.nombre || "", quien: "", estado: "subiendo", previa: false};
+      // si el análisis ha fallado, eso es lo que cuenta, no que la subida acabó bien
+      if (!(x.estado === "error" && (v.fase === "listo" || v.fase === "previa"))) x.vivo = v;
+      lista.set(i, x);
+    }
+    return [...lista.values()].sort((a, b) => b.intento.localeCompare(a.intento)).map(x => {
+      const it = el("div", "esc-curso"), cab = el("div", "esc-t"), punto = el("span", "esc-punto"), izq = el("span", "esc-bloque");
+      it.id = `curso-${x.intento}`;
+      izq.style.margin = "0";
+      punto.style.background = COLOR[x.color] || "var(--tenue)";
+      izq.append(punto, el("span", null, `${x.nombre || (x.color ? `Bloque ${x.color}` : "Intento")} · ${cuando(x.intento)}`));
+      const v = x.vivo, fallo = (v && v.fase === "error") || x.estado === "error";
+      const texto = v && v.fase !== "listo" ? estadoTexto(v) : x.estado === "error" ? "no se ha podido" : x.estado === "subiendo" ? "subiendo" : "analizando…";
+      cab.append(izq, el("span", `c-chip ${fallo ? "mal" : ""}`, texto));
+      it.append(cab);
+      if (v && (v.fase === "comprimiendo" || v.fase === "subiendo")) {
+        const b = el("div", "c-barra"), i = el("i");
+        i.style.width = `${Math.round((v.progreso || 0) * 100)}%`;
+        b.append(i);
+        it.append(b);
+      }
+      const motivo = (v && v.fase === "error" && v.texto) || x.error;
+      if (fallo && motivo) it.append(el("p", "esc-pista", motivo + (window.HoyApp && v ? " · Reinténtalo desde «Subir intento»." : "")));
+      if (x.previa) it.append(vistaPrevia(x.intento));
+      return it;
+    });
+  }
+
+  // ---------- la vista previa: el esqueleto de Vision animado y la estela del centro de gravedad ----------
+  // 19 puntos en el orden de Escalada.swift: nariz, ojos, orejas, hombros, cuello, codos, muñecas, raíz, caderas, rodillas, tobillos
+  const HUESOS = [[5, 6], [5, 8], [8, 10], [6, 9], [9, 11], [5, 13], [6, 14], [13, 14], [13, 15], [15, 17], [14, 16], [16, 18], [0, 7]];
+  function vistaPrevia(intento) {
+    const caja = el("div", "esc-previa"), lienzo = el("canvas");
+    lienzo.setAttribute("role", "img");
+    lienzo.setAttribute("aria-label", "Esqueleto y centro de gravedad del intento, sacados en el iPhone");
+    caja.append(lienzo, el("small", null, "Vista previa del iPhone · el análisis completo llega en unos minutos"));
+    if (!previas[intento]) previas[intento] = fetch(`/api/escalada/${intento}/previa`).then(r => r.ok ? r.json() : null).catch(() => null);
+    previas[intento].then(p => p && p.fotogramas && p.fotogramas.length && anima(lienzo, p));
+    return caja;
+  }
+
+  function anima(lienzo, p) {
+    const ancho = Math.min(lienzo.parentElement.clientWidth || 320, 480), alto = Math.round(ancho * p.alto / p.ancho);
+    const r = devicePixelRatio || 1, ctx = lienzo.getContext("2d"), fs = p.fotogramas;
+    const estilo = getComputedStyle(document.documentElement), acento = estilo.getPropertyValue("--acento").trim() || "#5E7A1E";
+    lienzo.width = ancho * r;
+    lienzo.height = alto * r;
+    lienzo.style.maxWidth = `min(100%, ${ancho}px)`;   // alto y ancho automáticos: el max-height del CSS no lo deforma
+    ctx.scale(r, r);
+    let fondo = null;
+    if (p.primero) { fondo = new Image(); fondo.src = p.primero; }
+    const dura = Math.max(fs[fs.length - 1][0], 0.5), quieto = matchMedia("(prefers-reduced-motion: reduce)").matches, t0 = performance.now();
+    const dibuja = n => {
+      ctx.clearRect(0, 0, ancho, alto);
+      if (fondo && fondo.complete && fondo.naturalWidth) {
+        ctx.globalAlpha = .55;
+        ctx.drawImage(fondo, 0, 0, ancho, alto);
+        ctx.globalAlpha = 1;
+      }
+      // la estela: los últimos 3 s del centro de gravedad
+      ctx.lineWidth = 3;
+      ctx.lineCap = ctx.lineJoin = "round";
+      let antes = null;
+      for (let k = 0; k <= n; k++) {
+        const [t, cx, cy] = fs[k];
+        if (cx == null || fs[n][0] - t > 3) { antes = null; continue; }
+        if (antes) {
+          ctx.strokeStyle = "rgba(240,138,44," + (0.25 + 0.75 * (1 - (fs[n][0] - t) / 3)).toFixed(2) + ")";
+          ctx.beginPath(); ctx.moveTo(antes[0] * ancho, antes[1] * alto); ctx.lineTo(cx * ancho, cy * alto); ctx.stroke();
+        }
+        antes = [cx, cy];
+      }
+      const pts = fs[n][3];
+      ctx.strokeStyle = acento;
+      ctx.lineWidth = 3;
+      for (const [a, b] of HUESOS) {
+        if (pts[a][2] < .3 || pts[b][2] < .3) continue;
+        ctx.beginPath(); ctx.moveTo(pts[a][0] * ancho, pts[a][1] * alto); ctx.lineTo(pts[b][0] * ancho, pts[b][1] * alto); ctx.stroke();
+      }
+      ctx.fillStyle = acento;
+      for (const [x, y, c] of pts) if (c >= .3) { ctx.beginPath(); ctx.arc(x * ancho, y * alto, 3, 0, 7); ctx.fill(); }
+      if (fs[n][1] != null) {
+        ctx.fillStyle = "#F08A2C";
+        ctx.beginPath(); ctx.arc(fs[n][1] * ancho, fs[n][2] * alto, 6, 0, 7); ctx.fill();
+      }
+    };
+    const busca = t => { let n = 0; while (n + 1 < fs.length && fs[n + 1][0] <= t) n++; return n; };
+    if (quieto) {
+      const n = fs.reduce((m, f, k) => (f[1] != null ? k : m), 0);
+      if (fondo) fondo.onload = () => dibuja(n);
+      return dibuja(n);
+    }
+    const paso = ahora => {
+      if (!lienzo.isConnected) return;   // repintado: el lienzo nuevo lleva su propia animación
+      if (!document.hidden) dibuja(busca(((ahora - t0) / 1000) % (dura + 1)));
+      requestAnimationFrame(paso);
+    };
+    requestAnimationFrame(paso);
   }
 
   addEventListener("visibilitychange", () => document.visibilityState === "visible" && cargar());
