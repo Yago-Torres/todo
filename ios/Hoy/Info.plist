@@ -9,7 +9,16 @@
 		<string>es</string>
 	</array>
 	<key>CFBundleDisplayName</key>
-	<string>Hoy</string>
+	<string>Tom</string>
+	<key>INAlternativeAppNames</key>
+	<array>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>Tom</string>
+			<key>INAlternativeAppNamePronunciationHint</key>
+			<string>tom</string>
+		</dict>
+	</array>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -17,7 +26,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>$(PRODUCT_NAME)</string>
+	<string>Tom</string>
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
@@ -75,10 +84,14 @@
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>NSFaceIDUsageDescription</key>
-	<string>Hoy usa Face ID para que nadie más vea tus hábitos y tus datos al abrirla.</string>
+	<string>Tom usa Face ID para que nadie más vea tus hábitos y tus datos al abrirla.</string>
 	<key>NSHealthShareUsageDescription</key>
-	<string>Hoy lee tu sueño, pasos, peso y entrenos para apuntarlos en todo.yagotg.dev.</string>
+	<string>Tom lee tu sueño, pasos, peso y entrenos para apuntarlos en todo.yagotg.dev.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>Hoy no escribe nada en Salud; solo lee tus datos para apuntarlos en todo.yagotg.dev.</string>
+	<string>Tom no escribe nada en Salud; solo lee tus datos para apuntarlos en todo.yagotg.dev.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Tom escucha lo que le dices en el modo voz para contestarte.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Tom pasa tu voz a texto, en el iPhone si puede, para entender lo que le pides.</string>
 </dict>
 </plist>

@@ -47,17 +47,19 @@ jobs:
           ldid -SHoyWidget/HoyWidget.entitlements "$APP/PlugIns/HoyWidget.appex"
           ldid -SHoyCompartir/HoyCompartir.entitlements "$APP/PlugIns/HoyCompartir.appex"
           mkdir -p Payload && cp -R "$APP" Payload/
-          zip -qry Hoy.ipa Payload
-          ls -la Hoy.ipa
+          zip -qry Tom.ipa Payload
+          # copia con el nombre de antes, para que no se rompa el enlace viejo (unas semanas)
+          cp Tom.ipa Hoy.ipa
+          ls -la Tom.ipa
 
       - name: Publicar en la release «ios»
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           NOTAS="Compilada $(date -u '+%Y-%m-%d %H:%M') UTC desde ${GITHUB_SHA::7}. Instálala con SideStore (ios/README.md)."
-          gh release view ios >/dev/null 2>&1 || gh release create ios --title "Hoy para iPhone" --notes "$NOTAS" --prerelease
-          gh release edit ios --notes "$NOTAS"
-          gh release upload ios ios/Hoy.ipa --clobber
+          gh release view ios >/dev/null 2>&1 || gh release create ios --title "Tom para iPhone" --notes "$NOTAS" --prerelease
+          gh release edit ios --title "Tom para iPhone" --notes "$NOTAS"
+          gh release upload ios ios/Tom.ipa ios/Hoy.ipa --clobber
 
       # si falla, el registro queda descargable sin iniciar sesión (para arreglarlo desde la Pi)
       - name: Registro del fallo

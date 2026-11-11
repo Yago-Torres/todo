@@ -72,7 +72,7 @@ struct HoyWidget: Widget {
         StaticConfiguration(kind: "HoyWidget", provider: Proveedor()) { entrada in
             HoyWidgetVista(entrada: entrada)
         }
-        .configurationDisplayName("Hoy")
+        .configurationDisplayName("Tom")
         .description("Hábitos, pasos y sueño del día, y lo que vence hoy.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge,
                             .accessoryCircular, .accessoryRectangular, .accessoryInline])
@@ -85,5 +85,8 @@ struct HoyWidgets: WidgetBundle {
         HoyWidget()
         HoyDatoWidget()
         EntrenoLiveActivity()
+        if #available(iOS 18.0, *) {
+            HablaConTomControl()
+        }
     }
 }

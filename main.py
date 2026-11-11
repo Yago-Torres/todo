@@ -1372,6 +1372,176 @@ def portada(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
     }
 
 
+# ---------- Tom: Siri y el modo voz de la app de iPhone ----------
+# Las frases rápidas de Siri (sin Claude) van a /api/mueve, /api/toca y /api/presupuesto, que devuelven el texto ya
+# listo para leerlo en voz alta. Lo dicho en libre («Dile a Tom…») va a /api/tom, que lo reenvía al bot de Telegram
+# por 127.0.0.1: allí está la interpretación con Claude de los mensajes libres, y así hay una sola.
+TOM = os.getenv("TOM_URL", "http://127.0.0.1:8091/tom")
+SEMANA_ES = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+
+
+def cuando(dia, hoy):
+    """Un día dicho como se dice: hoy, mañana, el jueves, el jueves 20."""
+    n = (date.fromisoformat(dia) - date.fromisoformat(hoy)).days
+    if -1 <= n <= 2:
+        return {-1: "ayer", 0: "hoy", 1: "mañana", 2: "pasado mañana"}[n]
+    nombre = SEMANA_ES[date.fromisoformat(dia).weekday()]
+    return f"el {nombre}" if 0 < n < 7 else f"el {nombre} {int(dia[8:])}"
+
+
+def a_dia(dia, hoy):
+    """«a mañana», «al jueves»."""
+    t = cuando(dia, hoy)
+    return "al" + t[2:] if t.startswith("el ") else "a " + t
+
+
+def lista_es(xs):
+    xs = [x for x in xs if x]
+    return " y ".join([", ".join(xs[:-1]), xs[-1]]) if len(xs) > 1 else (xs[0] if xs else "")
+
+
+def resumido(xs, n=4):
+    """Hasta n en voz alta; del resto, cuántos."""
+    return lista_es(xs) if len(xs) <= n else ", ".join(xs[:n]) + f" y {len(xs) - n} más"
+
+
+def es_entreno(s, hid):
+    """Gimnasio, correr o escalar: lo que tiene rutinas que no son de movilidad (la activación y el core se quedan)."""
+    return any(r["hab"] == hid and r["tipo"] != "movilidad" for r in s["rutinas"])
+
+
+def nombre_sesion(s, hid, rid):
+    r = next((r for r in s["rutinas"] if r["id"] == rid), None)
+    if r:
+        return r["n"].split(" · ")[0]   # «Push A · Pecho hombro tríceps» -> «Push A»: se lee en voz alta
+    return next((h["n"] for h in s["habits"] if h["id"] == hid), hid)
+
+
+def mueve_entreno(s, de, a, hoy, hid=None):
+    """Pasa el entreno sin hacer de `de` a `a`, con su sesión. Si `a` ya tiene ese mismo hábito, se cambian los
+    dos días (nunca se pierde una sesión). Devuelve el texto para Siri; ValueError si no hay nada que mover."""
+    if de == a:
+        raise ValueError(f"El entreno ya es {cuando(a, hoy)}")
+    plan_de, hecho_de = s["plan"].get(de, []), set(s["log"].get(de, []))
+    candidatos = [h for h in plan_de if es_entreno(s, h) and h not in hecho_de and (not hid or h == hid)]
+    if not candidatos:
+        if any(es_entreno(s, h) and (not hid or h == hid) for h in hecho_de):
+            raise ValueError(f"El entreno de {cuando(de, hoy)} ya está hecho")
+        raise ValueError(f"No tienes entreno {cuando(de, hoy)}")
+    ses_de, ses_a = dict(s["sesion"].get(de, {})), dict(s["sesion"].get(a, {}))
+    plan_de, plan_a = list(plan_de), list(s["plan"].get(a, []))
+    trozos = []
+    for h in candidatos:
+        uno, otro = ses_de.pop(h, None), ses_a.pop(h, None)
+        if h in plan_a:
+            if otro:
+                ses_de[h] = otro
+            if uno:
+                ses_a[h] = uno
+            trozos.append(f"{nombre_sesion(s, h, uno)} pasa {a_dia(a, hoy)} y {nombre_sesion(s, h, otro)} {a_dia(de, hoy)}")
+        else:
+            plan_de.remove(h)
+            plan_a.append(h)
+            if uno:
+                ses_a[h] = uno
+            trozos.append(f"{nombre_sesion(s, h, uno)} pasa {a_dia(a, hoy)}")
+    s["plan"][de], s["plan"][a] = plan_de, plan_a
+    s["sesion"][de], s["sesion"][a] = ses_de, ses_a
+    texto = lista_es(trozos)
+    return clean(s), texto[:1].upper() + texto[1:]
+
+
+def texto_toca(s, dia, hoy, tareas):
+    """Qué toca un día, para leerlo en voz alta: el entreno, lo que falta por marcar (si es hoy) y lo que vence."""
+    dicho = cuando(dia, hoy).capitalize()
+    items = hoy_entreno(s, dia)
+    por_hacer = [x["n"].split(" · ")[0] for x in items if not x["hecho"]]
+    hechos = [x["n"].split(" · ")[0] for x in items if x["hecho"]]
+    frases = [f"{dicho} toca {lista_es(por_hacer)}." if por_hacer else
+              f"{dicho} ya has hecho {lista_es(hechos)}." if hechos else f"{dicho} no tienes entreno."]
+    if dia == hoy:
+        hecho, plan, ya = set(s["log"].get(dia, [])), set(s["plan"].get(dia, [])), {x["id"] for x in items}
+        faltan = [h["n"] for h in s["habits"] if h["id"] not in hecho | ya and (h["goal"] == 7 or h["id"] in plan)]
+        if faltan:
+            frases.append(f"Te falta {resumido(faltan)}.")
+    suyas = [t for t in tareas if t.get("due") == dia]
+    vencidas = [t for t in tareas if dia == hoy and t.get("due") and t["due"] < hoy]
+    if suyas:
+        frases.append("Pendiente: " + resumido([t["t"] + (f" a las {t['hora']}" if t.get("hora") else "") for t in suyas]) + ".")
+    if vencidas:
+        frases.append(f"Y {len(vencidas)} {'tarea vencida' if len(vencidas) == 1 else 'tareas vencidas'}.")
+    return " ".join(frases)
+
+
+def texto_presupuesto(g):
+    """g es hoy_gastos(): lo que llevas en el ciclo de cobro y lo que te queda al día."""
+    if not g["presu"]:
+        return f"Llevas {round(g['total'])} € este ciclo."
+    queda = round(g["presu"] - g["total"])
+    if queda < 0:
+        return f"Te has pasado {-queda} € del presupuesto de {round(g['presu'])} €."
+    texto = f"Te quedan {queda} € de {round(g['presu'])} €"
+    if g["quedan"]:
+        texto += f" para {g['quedan']} {'día' if g['quedan'] == 1 else 'días'}, unos {round(g['al_dia'])} € al día"
+    return texto + "."
+
+
+@app.post("/api/mueve")
+def mueve(a: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """{a, de?, id?}: «mueve el entreno a mañana». de = hoy si no viene; id, un hábito concreto."""
+    exige(todo_sesion, authorization)
+    hoy = date.today().isoformat()
+    destino, de = day(a.get("a")), day(a.get("de")) or hoy
+    if not destino:
+        raise HTTPException(400, "¿A qué día lo muevo?")
+    estado = clean(dct(json.loads(DB.read_text("utf-8")))) if DB.exists() else clean({})
+    try:
+        estado, texto = mueve_entreno(estado, de, destino, hoy, str(a.get("id") or "") or None)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    guarda(DB, json.dumps(estado, ensure_ascii=False))
+    return {"texto": texto}
+
+
+@app.get("/api/toca")
+def toca(dia: str = "", todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    hoy = date.today().isoformat()
+    s = clean(dct(json.loads(DB.read_text("utf-8")))) if DB.exists() else clean({})
+    try:
+        tareas = vault.tareas()
+    except Exception:
+        tareas = []   # sin el vault, lo de hábitos sale igual
+    return {"texto": texto_toca(s, day(dia) or hoy, hoy, tareas)}
+
+
+@app.get("/api/presupuesto")
+def presupuesto(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    try:
+        g = hoy_gastos()
+    except Exception as e:
+        raise HTTPException(502, f"Gastos no responde: {str(e)[:100]}")
+    return {"texto": texto_presupuesto(g), **g}
+
+
+@app.post("/api/tom")
+async def tom(a: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """{texto, conv?}: lo que le dices a Tom. El bot recuerda los últimos turnos de cada conv 10 minutos."""
+    exige(todo_sesion, authorization)
+    texto = str(a.get("texto") or "").strip()[:1000]
+    if not texto:
+        raise HTTPException(400, "¿Qué le digo a Tom?")
+    cuerpo = json.dumps({"texto": texto, "conv": str(a.get("conv") or "iphone")[:64]}).encode()
+    try:
+        estado, r = await run_in_threadpool(reenvia, TOM, "POST", cuerpo, PASS)
+    except Exception:
+        raise HTTPException(502, "Tom no responde: el bot de Telegram está parado")
+    if estado == 401:
+        raise HTTPException(502, "El bot no acepta la clave de todo (TODO_PASS distinta)")
+    return Response(r, status_code=estado, media_type="application/json")
+
+
 # ---------- pendientes: el vault de Obsidian (vault.py) ----------
 # Las tareas viven en el vault, no en data.json: así las ves en Obsidian junto a las
 # que crea el cerebro, y un PUT del cliente no se las puede llevar por delante.

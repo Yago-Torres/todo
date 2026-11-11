@@ -40,9 +40,9 @@ struct HoyWidgetVista: View {
     @ViewBuilder private var contenido: some View {
         switch entrada.estado {
         case .sinClaves:
-            mensaje("Abre Hoy para configurarlo", detalle: nil)
+            mensaje("Abre Tom para configurarlo", detalle: nil)
         case .sinDatos(let motivo):
-            mensaje("Hoy", detalle: "Sin datos: \(motivo)")
+            mensaje("Tom", detalle: "Sin datos: \(motivo)")
         case .datos(let h):
             let r = Resumen(h, ahora: entrada.date)
             switch familia {

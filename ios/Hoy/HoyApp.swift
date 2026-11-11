@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 import WidgetKit
 import Observation
+import AppIntents
 
 @main
 struct HoyApp: App {
@@ -19,6 +20,9 @@ struct HoyApp: App {
             case .active:
                 Accesos.instala()
                 guard estado.claves != nil else { return }
+                Navegador.shared.recogeVoz()
+                // los hábitos de hoy como valores de «Marca … en Tom»
+                AtajosHoy.updateAppShortcutParameters()
                 Task {
                     await Salud.sincroniza()
                     await Avisos.programa()
@@ -34,10 +38,14 @@ struct HoyApp: App {
         }
     }
 
-    /// hoy://ruta?r=/habitos.html (el widget): la web navega a esa ruta.
+    /// hoy://ruta?r=/habitos.html (el widget): la web navega a esa ruta. hoy://voz abre el modo voz.
     private func abre(_ url: URL) {
-        guard url.scheme == "hoy",
-              let r = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+        guard url.scheme == "hoy" else { return }
+        if url.host == "voz" {
+            Navegador.shared.voz = true
+            return
+        }
+        guard let r = URLComponents(url: url, resolvingAgainstBaseURL: false)?
                 .queryItems?.first(where: { $0.name == "r" })?.value,
               r.hasPrefix("/") else { return }
         Navegador.shared.abre(r)
@@ -53,6 +61,13 @@ final class EstadoApp {
 
 struct Raiz: View {
     @Bindable var estado: EstadoApp
+    @ObservedObject private var navegador = Navegador.shared
+
+    /// Con Face ID puesto, el modo voz espera a que se desbloquee: no puede saltarse el bloqueo.
+    private var vozVisible: Binding<Bool> {
+        Binding(get: { navegador.voz && !estado.bloqueado },
+                set: { navegador.voz = $0 })
+    }
 
     var body: some View {
         ZStack {
@@ -68,6 +83,9 @@ struct Raiz: View {
                         NavigationStack {
                             Configurar { estado.claves = $0 }
                         }
+                    }
+                    .fullScreenCover(isPresented: vozVisible) {
+                        Voz()
                     }
                 if estado.bloqueado {
                     Bloqueo { estado.bloqueado = false }

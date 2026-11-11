@@ -352,7 +352,7 @@ struct DatoVista: View {
     @ViewBuilder private var contenido: some View {
         switch entrada.estado {
         case .sinClaves:
-            aviso("Abre Hoy", detalle: "para configurarlo")
+            aviso("Abre Tom", detalle: "para configurarlo")
         case .sinDatos(let motivo):
             aviso("Sin datos", detalle: motivo)
         case .datos(let h):

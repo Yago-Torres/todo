@@ -45,7 +45,7 @@ struct CategoriaGastoConsulta: EntityStringQuery {
 
 // MARK: apuntar gasto
 
-/// Siri y Atajos: «Apunta un gasto en Hoy». Va al ciclo de cobro de gastos.yagotg.dev por el proxy de todo y
+/// Siri y Atajos: «Apunta un gasto en Tom». Va al ciclo de cobro de gastos.yagotg.dev por el proxy de todo y
 /// contesta con el texto que compone gastos (lo apuntado, cómo va el ciclo y los avisos de presupuesto).
 struct ApuntaGastoIntent: AppIntent {
     static var title: LocalizedStringResource = "Apuntar un gasto"

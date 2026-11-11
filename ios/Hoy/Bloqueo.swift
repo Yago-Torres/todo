@@ -21,7 +21,7 @@ struct Bloqueo: View {
                     .font(.system(size: 56))
                     .foregroundStyle(.tint)
                     .accessibilityHidden(true)
-                Text("Hoy está bloqueada")
+                Text("Tom está bloqueado")
                     .font(.title2.bold())
                 if let error {
                     Text(error)
@@ -61,7 +61,7 @@ struct Bloqueo: View {
             return
         }
         do {
-            if try await contexto.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Desbloquea Hoy") {
+            if try await contexto.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: "Desbloquea Tom") {
                 error = nil
                 alDesbloquear()
             }

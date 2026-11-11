@@ -113,7 +113,7 @@ struct Configurar: View {
         }
         .scrollContentBackground(.hidden)
         .background(Color("Fondo"))
-        .navigationTitle("Configurar Hoy")
+        .navigationTitle("Configurar Tom")
         .toolbar {
             if hayClaves {
                 ToolbarItem(placement: .confirmationAction) {
@@ -175,7 +175,7 @@ struct Configurar: View {
         aviso = nil
         if activo, !(await Avisos.pidePermiso()) {
             avisos = false
-            aviso = "Sin permiso para avisar. Actívalo en Ajustes > Notificaciones > Hoy."
+            aviso = "Sin permiso para avisar. Actívalo en Ajustes > Notificaciones > Tom."
             return
         }
         await Avisos.programa()   // apagados, borra los que hubiera

@@ -8,7 +8,7 @@ struct APIError: LocalizedError {
 /// Peticiones nativas: el service token pasa Cloudflare Access y el bearer, la contraseña de la app.
 enum API {
     static func peticion(_ ruta: String, metodo: String = "GET", json: Any? = nil) throws -> URLRequest {
-        guard let claves = Almacen.claves else { throw APIError(mensaje: "Faltan las claves: abre Hoy para configurarlo") }
+        guard let claves = Almacen.claves else { throw APIError(mensaje: "Faltan las claves: abre Tom para configurarlo") }
         return try peticion(ruta, metodo: metodo, json: json, claves: claves)
     }
 
@@ -139,6 +139,54 @@ enum API {
         return (objeto?["texto"] as? String) ?? "Guardado en Leer luego"
     }
 
+    // MARK: Tom (Siri y el modo voz): el servidor devuelve el texto ya listo para leerlo en voz alta
+
+    /// La misma conversación para Siri y el modo voz: «y el de pierna al sábado» sigue a lo de antes (10 min).
+    static let convTom = "iphone"
+
+    /// POST /api/tom: lo dicho en libre, interpretado por el bot con Claude. Tarda más que lo demás.
+    static func tom(_ dicho: String, conv: String = API.convTom) async throws -> RespuestaTom {
+        var p = try peticion("/api/tom", metodo: "POST", json: ["texto": dicho, "conv": conv])
+        p.timeoutInterval = 60
+        let crudo = try await manda(p)
+        let objeto = try? JSONSerialization.jsonObject(with: crudo) as? [String: Any]
+        return RespuestaTom(texto: (objeto?["texto"] as? String) ?? "Hecho",
+                            confirmar: (objeto?["confirmar"] as? Bool) ?? false)
+    }
+
+    /// POST /api/mueve: el entreno sin hacer de hoy (o de `de`) al día `a` ("yyyy-MM-dd").
+    static func mueveEntreno(a: String, de: String? = nil) async throws -> String {
+        var json: [String: Any] = ["a": a]
+        if let de { json["de"] = de }
+        let crudo = try await datos("/api/mueve", metodo: "POST", json: json)
+        return textoDe(crudo, "Entreno movido")
+    }
+
+    /// GET /api/toca: el entreno, lo que falta por marcar y lo que vence ese día.
+    static func toca(dia: String) async throws -> String {
+        let crudo = try await datos("/api/toca?dia=\(dia)")
+        return textoDe(crudo, "No sé qué toca")
+    }
+
+    /// GET /api/presupuesto: lo que queda del ciclo de gastos.
+    static func presupuesto() async throws -> String {
+        let crudo = try await datos("/api/presupuesto")
+        return textoDe(crudo, "No sé cómo va el presupuesto")
+    }
+
+    /// POST /api/salud {peso}: el peso de hoy, como el de la báscula.
+    static func peso(_ kilos: Double) async throws -> String {
+        guard kilos.isFinite, kilos >= 20, kilos <= 400 else { throw APIError(mensaje: "Ese peso no puede ser") }
+        let json: [String: Any] = ["peso": (kilos * 10).rounded() / 10]
+        let crudo = try await datos("/api/salud", metodo: "POST", json: json)
+        return textoDe(crudo, "Peso apuntado")
+    }
+
+    private static func textoDe(_ crudo: Data, _ porDefecto: String) -> String {
+        let objeto = try? JSONSerialization.jsonObject(with: crudo) as? [String: Any]
+        return (objeto?["texto"] as? String) ?? porDefecto
+    }
+
     static func estado() async throws -> [String: Any] {
         let crudo = try await datos("/api/state")
         guard let objeto = try JSONSerialization.jsonObject(with: crudo) as? [String: Any] else {
@@ -159,4 +207,10 @@ struct CategoriaGasto: Codable, Hashable {
         guard let datos = Almacen.defaults.data(forKey: clave) else { return [] }
         return (try? JSONDecoder().decode([CategoriaGasto].self, from: datos)) ?? []
     }
+}
+
+struct RespuestaTom {
+    var texto: String
+    /// Propone algo que reorganiza la semana: el siguiente «vale» lo aplica.
+    var confirmar: Bool
 }

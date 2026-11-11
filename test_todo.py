@@ -599,6 +599,61 @@ def test_pantalla():
     assert len(p["eventos"]) == 5
 
 
+def test_tom():
+    hoy = "2026-11-11"   # miércoles
+    assert [main.cuando(d, hoy) for d in ("2026-11-10", "2026-11-11", "2026-11-12", "2026-11-13", "2026-11-14", "2026-11-20")] == \
+        ["ayer", "hoy", "mañana", "pasado mañana", "el sábado", "el viernes 20"]
+    assert main.resumido(list("abcdef")) == "a, b, c, d y 2 más" and main.resumido(list("ab")) == "a y b"
+    assert main.lista_es(["a"]) == "a" and main.lista_es(["a", "b", "c"]) == "a, b y c" and main.lista_es([]) == ""
+    base = {"habits": [{"id": "g", "n": "Gimnasio", "goal": 4}, {"id": "r", "n": "Correr", "goal": 3},
+                       {"id": "c", "n": "Core", "goal": 3}, {"id": "w", "n": "Agua", "goal": 7}],
+            "rutinas": [{"id": "pa", "n": "Push A · Pecho", "tipo": "pesas", "hab": "g"},
+                        {"id": "la", "n": "Legs A · Pierna", "tipo": "pesas", "hab": "g"},
+                        {"id": "rs", "n": "Rodaje suave · 35 min", "tipo": "carrera", "hab": "r"},
+                        {"id": "c10", "n": "Core 15 min", "tipo": "movilidad", "hab": "c"}],
+            "plan": {"2026-11-11": ["g", "c"], "2026-11-12": ["r"], "2026-11-13": ["g"]},
+            "sesion": {"2026-11-11": {"g": "pa", "c": "c10"}, "2026-11-12": {"r": "rs"}, "2026-11-13": {"g": "la"}}}
+    # a un día sin gimnasio: se va con su sesión y el core se queda
+    s, t = main.mueve_entreno(clean(base), hoy, "2026-11-12", hoy)
+    assert s["plan"]["2026-11-11"] == ["c"] and s["plan"]["2026-11-12"] == ["g", "r"], s["plan"]
+    assert s["sesion"]["2026-11-11"] == {"c": "c10"} and s["sesion"]["2026-11-12"] == {"r": "rs", "g": "pa"}, s["sesion"]
+    assert t == "Push A pasa a mañana", t
+    # a un día que ya tiene gimnasio: se cambian las dos sesiones, no se pierde ninguna
+    s, t = main.mueve_entreno(clean(base), hoy, "2026-11-13", hoy)
+    assert sorted(s["plan"]["2026-11-11"]) == ["c", "g"] and s["sesion"]["2026-11-11"]["g"] == "la" and s["sesion"]["2026-11-13"]["g"] == "pa", s
+    assert t == "Push A pasa a pasado mañana y Legs A a hoy", t
+    # un hábito concreto (el bot: «el rodaje al viernes») y un día vacío que se queda sin nada desaparece
+    s, t = main.mueve_entreno(clean(base), "2026-11-12", "2026-11-14", hoy, "r")
+    assert "2026-11-12" not in s["plan"] and s["plan"]["2026-11-14"] == ["r"] and s["sesion"]["2026-11-14"] == {"r": "rs"}, s
+    assert t == "Rodaje suave pasa al sábado", t
+    for de, a, hid, error in ((hoy, hoy, None, "El entreno ya es hoy"), ("2026-11-15", hoy, None, "No tienes entreno el domingo"),
+                              (hoy, "2026-11-12", "r", "No tienes entreno hoy")):
+        try:
+            main.mueve_entreno(clean(base), de, a, hoy, hid)
+            assert False
+        except ValueError as e:
+            assert str(e) == error, e
+    hecho = clean({**base, "log": {hoy: ["g"]}})
+    try:
+        main.mueve_entreno(hecho, hoy, "2026-11-12", hoy)
+        assert False
+    except ValueError as e:
+        assert str(e) == "El entreno de hoy ya está hecho", e
+    # qué toca: entreno, lo que falta por marcar (solo hoy) y lo que vence
+    tareas = [{"t": "Llamar al dentista", "due": hoy, "hora": "10:00"}, {"t": "Renovar DNI", "due": "2026-11-01", "hora": ""},
+              {"t": "Comprar pan", "due": "2026-11-12", "hora": ""}]
+    assert main.texto_toca(clean(base), hoy, hoy, tareas) == \
+        "Hoy toca Push A y Core 15 min. Te falta Agua. Pendiente: Llamar al dentista a las 10:00. Y 1 tarea vencida.", \
+        main.texto_toca(clean(base), hoy, hoy, tareas)
+    assert main.texto_toca(clean(base), "2026-11-12", hoy, tareas) == "Mañana toca Rodaje suave. Pendiente: Comprar pan."
+    assert main.texto_toca(hecho, "2026-11-15", hoy, []) == "El domingo no tienes entreno."
+    assert main.texto_toca(clean({**base, "log": {hoy: ["g", "c", "w"]}}), hoy, hoy, []) == "Hoy ya has hecho Push A y Core 15 min."
+    g = {"total": 935.29, "presu": 1402.0, "quedan": 13, "al_dia": 35.9}
+    assert main.texto_presupuesto(g) == "Te quedan 467 € de 1402 € para 13 días, unos 36 € al día."
+    assert main.texto_presupuesto({**g, "total": 1500}) == "Te has pasado 98 € del presupuesto de 1402 €."
+    assert main.texto_presupuesto({**g, "presu": 0}) == "Llevas 935 € este ciclo."
+
+
 if __name__ == "__main__":
     test_sueno()
     test_salud()
@@ -616,4 +671,5 @@ if __name__ == "__main__":
     test_pesos()
     test_documentos()
     test_pantalla()
+    test_tom()
     print("ok")
