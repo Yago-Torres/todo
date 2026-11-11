@@ -110,6 +110,10 @@ struct Configurar: View {
                     }
                 }
             }
+
+            if hayClaves {
+                SeccionSinConexion()
+            }
         }
         .scrollContentBackground(.hidden)
         .background(Color("Fondo"))

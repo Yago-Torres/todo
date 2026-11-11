@@ -2,6 +2,8 @@ import Foundation
 
 struct APIError: LocalizedError {
     let mensaje: String
+    /// La petición no llegó a la app del servidor (sin red, o Cloudflare sin la Pi detrás): se puede mandar luego.
+    var sinRed = false
     var errorDescription: String? { mensaje }
 }
 
@@ -39,7 +41,8 @@ enum API {
         do {
             resultado = try await URLSession.shared.data(for: p)
         } catch {
-            throw APIError(mensaje: "Sin conexión con el servidor: \(error.localizedDescription)")
+            let cancelada = (error as? URLError)?.code == .cancelled || error is CancellationError
+            throw APIError(mensaje: "Sin conexión con el servidor: \(error.localizedDescription)", sinRed: !cancelada)
         }
         let (datos, respuesta) = resultado
         guard let http = respuesta as? HTTPURLResponse else { throw APIError(mensaje: "Respuesta rara del servidor") }
@@ -48,9 +51,16 @@ enum API {
             throw APIError(mensaje: "Cloudflare Access no acepta el service token (CF-Access-Client-Id/Secret)")
         }
         guard (200..<300).contains(http.statusCode) else {
-            throw APIError(mensaje: detalle(datos) ?? "Error \(http.statusCode) del servidor")
+            let tipo = http.value(forHTTPHeaderField: "Content-Type") ?? ""
+            throw APIError(mensaje: detalle(datos) ?? "Error \(http.statusCode) del servidor",
+                           sinRed: esCaida(http.statusCode, tipo: tipo))
         }
         return datos
+    }
+
+    /// La página de error de Cloudflare o de cloudflared (no el JSON de FastAPI): la Pi no ha llegado a hacer nada.
+    static func esCaida(_ codigo: Int, tipo: String) -> Bool {
+        [502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 527, 530].contains(codigo) && !tipo.contains("json")
     }
 
     /// El "detail" de FastAPI: un texto, o una lista de errores de validación.

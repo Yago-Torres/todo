@@ -28,6 +28,8 @@ struct HoyApp: App {
                     await Avisos.programa()
                     WidgetCenter.shared.reloadAllTimelines()
                 }
+                // lo apuntado sin red sale ya, y se baja lo principal para tenerlo sin conexión
+                Task { await Sincro.alActivar() }
             case .background:
                 Avisos.pideRefresco()
                 WidgetCenter.shared.reloadAllTimelines()
@@ -121,6 +123,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         Avisos.registraTareaFondo()
+        Red.shared.empieza()
         if Almacen.defaults.bool(forKey: "salud") { Salud.activaSegundoPlano() }
         return true
     }

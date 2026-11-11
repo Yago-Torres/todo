@@ -65,7 +65,7 @@ struct ApuntaGastoIntent: AppIntent {
     init() {}
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let texto = try await API.apuntaGasto(importe: importe, nota: nota, cat: categoria?.id, src: "siri")
+        let texto = try await API.apuntaGastoOEncola(importe: importe, nota: nota, cat: categoria?.id, src: "siri")
         WidgetCenter.shared.reloadAllTimelines()
         return .result(dialog: "\(texto)")
     }

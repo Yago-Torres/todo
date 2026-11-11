@@ -61,9 +61,10 @@ struct MarcaHabitoIntent: AppIntent {
     }
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        try await API.marca(habito: habito, hecho: hecho)
+        let encolado = try await API.marcaOEncola(habito: habito, hecho: hecho)
         WidgetCenter.shared.reloadAllTimelines()
-        return .result(dialog: "\(nombre) \(hecho ? "hecho" : "sin hacer")")
+        let texto = "\(nombre) \(hecho ? "hecho" : "sin hacer")" + (encolado ? ". \(API.avisoEncolado)" : "")
+        return .result(dialog: "\(texto)")
     }
 }
 
@@ -77,9 +78,10 @@ struct MarcaHabitoSiriIntent: AppIntent {
     init() {}
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        try await API.marca(habito: habito.id, hecho: true)
+        let encolado = try await API.marcaOEncola(habito: habito.id, hecho: true)
         WidgetCenter.shared.reloadAllTimelines()
-        return .result(dialog: "\(habito.nombre) hecho")
+        let texto = "\(habito.nombre) hecho" + (encolado ? ". \(API.avisoEncolado)" : "")
+        return .result(dialog: "\(texto)")
     }
 }
 
@@ -98,9 +100,10 @@ struct ApuntaTareaIntent: AppIntent {
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let limpio = texto.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !limpio.isEmpty else { throw APIError(mensaje: "La tarea está vacía") }
-        try await API.tarea(limpio)
+        let encolado = try await API.tareaOEncola(limpio)
         WidgetCenter.shared.reloadAllTimelines()
-        return .result(dialog: "Tarea apuntada")
+        let texto = encolado ? "Tarea: \(API.avisoEncolado.lowercased())" : "Tarea apuntada"
+        return .result(dialog: "\(texto)")
     }
 }
 

@@ -84,7 +84,7 @@ struct QueTocaIntent: AppIntent {
     init() {}
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let texto = try await API.toca(dia: dia.fecha(incluyendoHoy: true))
+        let texto = try await API.tocaOCopia(dia: dia.fecha(incluyendoHoy: true))
         return .result(dialog: "\(texto)")
     }
 }
@@ -98,7 +98,7 @@ struct PresupuestoIntent: AppIntent {
     init() {}
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let texto = try await API.presupuesto()
+        let texto = try await API.presupuestoOCopia()
         return .result(dialog: "\(texto)")
     }
 }
@@ -114,7 +114,7 @@ struct ApuntaPesoIntent: AppIntent {
     init() {}
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let texto = try await API.peso(kilos)
+        let texto = try await API.pesoOEncola(kilos)
         WidgetCenter.shared.reloadAllTimelines()
         return .result(dialog: "\(texto)")
     }
@@ -133,16 +133,21 @@ struct DileATomIntent: AppIntent {
     func perform() async throws -> some IntentResult & ProvidesDialog {
         var dicho = texto.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !dicho.isEmpty else { throw APIError(mensaje: "No te he oído") }
-        var respuesta = try await API.tom(dicho)
-        // lo que reorganiza la semana se confirma de viva voz, como el «vale» de Telegram
-        var vueltas = 0
-        while respuesta.confirmar && vueltas < 2 {
-            vueltas += 1
-            dicho = try await $texto.requestValue("\(respuesta.texto)")
-            respuesta = try await API.tom(dicho)
+        do {
+            var respuesta = try await API.tom(dicho)
+            // lo que reorganiza la semana se confirma de viva voz, como el «vale» de Telegram
+            var vueltas = 0
+            while respuesta.confirmar && vueltas < 2 {
+                vueltas += 1
+                dicho = try await $texto.requestValue("\(respuesta.texto)")
+                respuesta = try await API.tom(dicho)
+            }
+            WidgetCenter.shared.reloadAllTimelines()
+            return .result(dialog: "\(respuesta.texto)")
+        } catch let error as APIError where error.sinRed {
+            // lo entiende Claude en la Pi: sin red no hay nada que guardar para luego
+            return .result(dialog: "Para eso Tom necesita conexión. Prueba otra vez cuando vuelva la red.")
         }
-        WidgetCenter.shared.reloadAllTimelines()
-        return .result(dialog: "\(respuesta.texto)")
     }
 }
 

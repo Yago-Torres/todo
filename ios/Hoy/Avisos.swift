@@ -124,8 +124,10 @@ enum Avisos {
         BGTaskScheduler.shared.register(forTaskWithIdentifier: tareaId, using: nil) { tarea in
             pideRefresco()   // el siguiente, ya
             let trabajo = Task {
+                await Sincro.vacia()
                 await Salud.sincroniza()
                 await programa()
+                await Sincro.precarga()   // con el iPhone bloqueado no hace nada (Local está cifrado)
                 WidgetCenter.shared.reloadAllTimelines()
                 if !Task.isCancelled { tarea.setTaskCompleted(success: true) }
             }
@@ -166,7 +168,7 @@ final class AvisosDelegado: NSObject, UNUserNotificationCenterDelegate {
         if accion == "hecho", let habito {
             Task {
                 do {
-                    try await API.marca(habito: habito, hecho: true, dia: dia)
+                    try await API.marcaOEncola(habito: habito, hecho: true, dia: dia)   // sin red, a la cola
                     await Avisos.programa()   // el repaso de esta noche ya no hace falta
                     WidgetCenter.shared.reloadAllTimelines()
                 } catch {

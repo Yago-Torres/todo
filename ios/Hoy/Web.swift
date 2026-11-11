@@ -29,6 +29,7 @@ final class Coordinador: NSObject, WKNavigationDelegate, WKUIDelegate {
     private var pendiente: String?       // lo que pidió el Navegador antes de estar listo
     private var ultima: URL?             // la última página propia pedida, para volver a ella tras renovar
     private var reintentado = false      // renovar las cookies una sola vez por fallo, sin bucles
+    private var planB: (url: URL, cuando: Date)?   // la última copia de Local cargada sin red, para no repetirla en bucle
 
     init(claves: Claves) {
         self.claves = claves
@@ -44,9 +45,14 @@ final class Coordinador: NSObject, WKNavigationDelegate, WKUIDelegate {
         let contenido = WKUserContentController()
         contenido.addUserScript(WKUserScript(source: Self.puente, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         contenido.add(MensajeroDebil(self), name: "hoy")
+        // los datos sin red (Offline.swift): la copia de Local y la cola de cambios
+        contenido.addUserScript(WKUserScript(source: PuenteLocal.guion, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        let local = PuenteLocal()
+        contenido.addScriptMessageHandler(local, contentWorld: .page, name: PuenteLocal.nombre)
         conf.userContentController = contenido
 
         let v = WKWebView(frame: .zero, configuration: conf)
+        local.vista = v
         // sin esto, al arrancar se ve un destello blanco antes de que pinte la web
         let fondo = UIColor(named: "Fondo") ?? .systemBackground
         v.isOpaque = false
@@ -89,6 +95,7 @@ final class Coordinador: NSObject, WKNavigationDelegate, WKUIDelegate {
     func desmonta() {
         suscripcion?.cancel()
         vista?.configuration.userContentController.removeScriptMessageHandler(forName: "hoy")
+        vista?.configuration.userContentController.removeScriptMessageHandler(forName: PuenteLocal.nombre, contentWorld: .page)
         UIApplication.shared.isIdleTimerDisabled = false
     }
 
@@ -129,6 +136,8 @@ final class Coordinador: NSObject, WKNavigationDelegate, WKUIDelegate {
     /// CF_Authorization (Access, 1 mes) y todo_sesion (la app, 90 días), copiadas al almacén de la web.
     /// Se renuevan si faltan o caducan en menos de 3 días.
     private func prepara(forzar: Bool) async {
+        // sin red no se renueva nada (ni se espera a que falle): la web sale de la copia del service worker
+        guard Red.shared.hayRed else { return }
         let almacen = WKWebsiteDataStore.default().httpCookieStore
         if !forzar {
             let actuales = await almacen.allCookies()
@@ -212,6 +221,14 @@ final class Coordinador: NSObject, WKNavigationDelegate, WKUIDelegate {
         // cancelada por nosotros (renovar cookies) o porque empezó otra: no es un fallo de red
         if e.domain == NSURLErrorDomain && e.code == NSURLErrorCancelled { return }
         if e.domain == "WebKitErrorDomain" && e.code == 102 { return }   // «frame load interrupted» por la política
+        // sin red ni service worker: lo guardado en Local de esa ruta (un documento de «Ver»), si lo hay
+        if let fallida = e.userInfo[NSURLErrorFailingURLErrorKey] as? URL, Self.esPropio(fallida),
+           !(planB.map { $0.url == fallida && Date().timeIntervalSince($0.cuando) < 5 } ?? false),
+           let copia = PuenteLocal.copiaDe(fallida) {
+            planB = (fallida, Date())
+            webView.load(copia.cuerpo, mimeType: copia.mime, characterEncodingName: "utf-8", baseURL: fallida)
+            return
+        }
         // sin red y sin service worker que la sirva: una página mínima desde la que tirar hacia abajo para reintentar
         webView.loadHTMLString(Self.paginaError(e.localizedDescription), baseURL: nil)
     }
