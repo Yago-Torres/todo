@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-vt>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
@@ -18,14 +18,23 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<link rel="stylesheet" href="/calma.css?v=36c64bfb">
-<script src="/calma.js?v=36c64bfb"></script>
+<link rel="stylesheet" href="/calma.css?v=4423d460">
+<script src="/calma.js?v=4423d460"></script>
 <script src="/anime-4.5.0.min.js"></script>
-<script src="/anima.js?v=36c64bfb"></script>
-<script src="/mascota.js?v=4"></script>
+<script src="/anima.js?v=4423d460"></script>
+<script src="/mascota.js?v=5"></script>
 <script src="/sinred.js?v=1"></script>
-<script src="/hoja.js?v=36c64bfb"></script>
+<script src="/hoja.js?v=4423d460"></script>
+<script src="/movimiento.js?v=1"></script>
+<script defer src="/gsap-3.13.0.min.js"></script>
+<script defer src="/MorphSVGPlugin-3.13.0.min.js"></script>
+<script defer src="/Flip-3.13.0.min.js"></script>
 <style>
+  /* de una página a otra, la tarjeta que tocas vuela a la cabecera de la siguiente (calma.css, calma.js) */
+  @view-transition { navigation: auto; }
+  @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }
+  /* el cielo de la hora (movimiento.js → cielo()), debajo del ASCII de calma.js (#c-fondo, z-index -1) */
+  #cielo { position: fixed; inset: 0; width: 100%; height: 100%; z-index: -2; pointer-events: none; }
   /* Estilo Calma: tokens y componentes en /calma.css (fuente: ~/estilo). Aquí solo lo de la portada.
      Bento: lo del día en grande (anillos), cifras pequeñas alrededor, y el resto en piezas de 2 o 1. */
   body { padding: 16px; padding-bottom: 40px; }
@@ -95,7 +104,16 @@
   .fila .bx { width: 24px; height: 24px; flex: 0 0 24px; display: grid; place-items: center; border-radius: 50%;
               border: 2px solid color-mix(in oklab, var(--c) 40%, var(--linea)); }
   .fila[aria-pressed="true"] .bx { background: var(--c); border-color: var(--c); color: #fff; }
-  .fila svg.ck { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+  /* el círculo se llena de agua del color del hábito y el fantasma se vuelve ✓ (movimiento.js) */
+  .fila .bx.liq, .fila[aria-pressed="true"] .bx.liq { background: none; overflow: hidden; }
+  .bx svg.liq { width: 100%; height: 100%; display: block; }
+  .liq .ola { fill: var(--c); }
+  .liq .forma { fill: color-mix(in oklab, var(--c) 45%, var(--linea)); transition: fill .3s; }
+  .liq .forma.ok { fill: #fff; }
+  /* la racha rueda como un cuentakilómetros */
+  .odo { display: inline-flex; height: 1.25em; line-height: 1.25; overflow: hidden; }
+  .odo > span { display: flex; flex-direction: column; }
+  .odo > span > span { height: 1.25em; }
   .fila .nom { flex: 1; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .fila[aria-pressed="true"] .nom { color: var(--suave); text-decoration: line-through; text-decoration-color: var(--tenue); }
   .fila .plan { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--acento-suave); color: var(--acento); }
@@ -263,7 +281,6 @@ const eur = n => n.toLocaleString("es-ES", {minimumFractionDigits: 2, maximumFra
 const dia = s => { const d = fecha(s); return `${DIAS[d.getDay()]} ${d.getDate()}`; };
 const hm = m => `${Math.floor(Math.round(m) / 60)} h ${String(Math.round(m) % 60).padStart(2, "0")}`;
 const miles = n => Math.round(n).toLocaleString("es-ES", {useGrouping: "always"});
-const CHECK = '<svg class="ck" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12.5l4 4 8-9"/></svg>';
 const LLAMA = '<svg class="llama" viewBox="0 0 16 16" aria-hidden="true"><path d="M8.7 1c.4 2.4 4.3 4.1 4.3 8.2A5 5 0 0 1 8 14.5a5 5 0 0 1-5-5c0-2.1 1.1-3.4 2.2-4.4.1 1.4.8 2.4 1.8 2.8C6.6 5.3 7.2 2.8 8.7 1z"/></svg>';
 const OBJ = {pasos: 10000, sueno: 480};   // los anillos se cierran aquí
 let H = null;
@@ -331,6 +348,7 @@ function habitos() {
     const b = el("button", "fila");
     b.style.setProperty("--c", h.c);
     b.dataset.h = h.id;
+    b.dataset.flipId = h.id;
     b.setAttribute("aria-pressed", h.hecho);
     b.setAttribute("aria-label", `${h.n}, ${h.hecho ? "hecho" : "sin hacer"}`);
     const rn = el("span", "rn" + (h.racha ? "" : " cero"));
@@ -341,15 +359,15 @@ function habitos() {
       b.setAttribute("aria-label", `${h.n}, sin hacer: tu racha de ${h.racha} días está en juego`);
     }
     if (h.racha >= 3 || enJuego) rn.insertAdjacentHTML("beforeend", LLAMA);
-    rn.append(String(h.racha));
-    b.append(Object.assign(el("span", "bx"), {innerHTML: h.hecho ? CHECK : ""}), el("span", "nom", h.n));
+    rn.append(el("span", "rc", String(h.racha)));
+    b.append(Object.assign(el("span", "bx liq"), {innerHTML: mov.circulo(h.hecho)}), el("span", "nom", h.n));
     if (h.plan) b.append(el("span", "plan", "plan"));
     b.append(rn);
     b.onclick = () => marca(h);
     return b;
   };
-  // lo de hoy a la vista; el resto, plegado
-  const hoy = hs.filter(h => h.plan || h.hecho), resto = hs.filter(h => !h.plan && !h.hecho);
+  // lo de hoy a la vista (lo hecho, abajo); el resto, plegado
+  const orden = mov.ordena(hs), hoy = orden.filter(h => h.plan || h.hecho), resto = orden.filter(h => !h.plan && !h.hecho);
   const caja = $("#habitos");
   caja.replaceChildren(...(hoy.length ? hoy : hs).map(fila));
   if (hoy.length && resto.length) {
@@ -397,16 +415,17 @@ async function aHoy(x) {
 }
 
 async function marca(h) {
+  const antes = h.racha;
   h.hecho = !h.hecho;
-  habitos();
+  h.racha = h.base + h.hecho;
+  // lo hecho baja (y lo desmarcado sube) deslizándose; luego el círculo se llena y la racha rueda
+  mov.flip("#habitos > .fila", habitos);
   dia_();
+  racha();
   if (h.hecho) fantasma.reacciona("feliz");
   estadoFantasma();
   const b = $(`.fila[data-h="${h.id}"]`);
-  if (h.hecho && anima.mov) {
-    anima.salta(b.querySelector(".bx"));
-    anime.animate(anime.svg.createDrawable(b.querySelector("path")), {draw: ["0 0", "0 1"], duration: 260, delay: 40, ease: "outQuad"});
-  }
+  if (!mov.marca(b, h.hecho, antes, h.racha) && h.hecho) anima.salta(b?.querySelector(".bx"));   // sin GSAP, el saltito de antes
   // va sola, sin el estado entero: sin red se apunta y sale al volver (sinred.js)
   const st = await sinred.marca(H.hoy, h.id, h.hecho);
   if (st === 401) return puerta(true);
@@ -689,7 +708,12 @@ async function cargar() {
     H = await api("/api/hoy");
     const dia = new Date().toLocaleDateString("sv");
     if (H.hoy < dia) { H.hoy = dia; for (const h of H.habitos) h.hecho = false; }   // copia de otro día (sin red): hoy aún nada
-    for (const h of H.habitos) h.hecho = sinred.hecho(H.hoy, h.id, h.hecho);
+    // la racha del servidor cuenta hoy si está hecho: base es la de hasta ayer, y marcar suma o resta uno
+    for (const h of H.habitos) {
+      h.base = h.racha - h.hecho;
+      h.hecho = sinred.hecho(H.hoy, h.id, h.hecho);
+      h.racha = h.base + h.hecho;
+    }
     puerta(false);
     sinred.envia();   // por si quedó algo esperando a que entraras
     primera ? pinta() : calma.transicion(pinta);
@@ -712,6 +736,20 @@ $("#f-clave").onsubmit = async e => {
   else puerta(true, r && r.status === 401 ? "Contraseña incorrecta" : "No se pudo conectar");
 };
 addEventListener("visibilitychange", () => document.visibilityState === "visible" && H && cargar());
+// la tarjeta que tocas es la que vuela a la cabecera de la página que abre (si no, vuela el saludo)
+document.addEventListener("click", e => {
+  const a = e.target.closest?.(".app a[href^='/']"), t = a?.closest(".carta, .racha");
+  if (!t || !calma.entrePaginas()) return;
+  $(".app > header.top").style.viewTransitionName = "none";
+  t.style.viewTransitionName = "c-cabecera";
+}, true);
+// al volver con «atrás» desde la caché del navegador, cada nombre en su sitio
+addEventListener("pageshow", e => {
+  if (!e.persisted) return;
+  $(".app > header.top").style.viewTransitionName = "";
+  document.querySelectorAll(".app [style*='view-transition-name']").forEach(x => x.style.viewTransitionName = "");
+});
+mov.cielo();
 addEventListener("marca-enviada", e => e.detail.cola && H && cargar());   // lo apuntado sin red ya está en el servidor
 cargar();
 </script>

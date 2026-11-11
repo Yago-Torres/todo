@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-vt>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
@@ -17,12 +17,15 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<link rel="stylesheet" href="/calma.css?v=36c64bfb">
-<script src="/calma.js?v=36c64bfb"></script>
-<script src="/mascota.js?v=4"></script>
+<link rel="stylesheet" href="/calma.css?v=4423d460">
+<script src="/calma.js?v=4423d460"></script>
+<script src="/mascota.js?v=5"></script>
 <script src="/anime-4.5.0.min.js"></script>
-<script src="/anima.js?v=36c64bfb"></script>
+<script src="/anima.js?v=4423d460"></script>
 <style>
+  /* de una página a otra, la cabecera vuela y la barra de abajo se queda quieta (calma.css, calma.js) */
+  @view-transition { navigation: auto; }
+  @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }
   /* Estilo Calma: tokens y componentes en /calma.css (fuente: ~/estilo). Aquí solo lo de documentos. */
   body { padding: 16px; padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px)); }
   .app { max-width: 1120px; margin: 0 auto; display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }

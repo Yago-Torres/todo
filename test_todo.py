@@ -288,6 +288,10 @@ def test_frontal():
     assert [h for h in ("/", "/pendientes.html", "/entreno.html", "/gastos.html") if f'href="{h}"' in menu] == \
         ["/", "/pendientes.html", "/entreno.html", "/gastos.html"] and "/comida.html" not in menu, menu
     assert "Aitana" not in html, html
+    # transición entre páginas también en comida y gastos: la regla va en el <head>, antes de pintar nada
+    f.write_text('<html lang="es"><title>Comida</title><header class="top"><h1>Comida</h1><nav class="pestanas c-seg"></nav></header>')
+    html = main.frontal("comida").body.decode()
+    assert html.startswith('<html lang="es" data-vt>') and html.index("@view-transition") < html.index("<header"), html
     # los gastos de Aitana: su nombre, su reenvío y el selector Yago / Aitana marcando dónde estás
     html = main.frontal("gastos-aitana").body.decode()
     assert html.startswith('<header class="top"><h1>Gastos · Aitana</h1>') and '"/api/gastos-aitana/estado"' in html, html
@@ -352,6 +356,8 @@ def test_portada():
     assert main.limpia_ajustes({"mascota": {"tipo": "<script>"}})["mascota"]["tipo"] == "fantasma"
     # lo planificado y sin hacer arriba, luego lo planificado hecho, luego el resto
     assert [x["id"] for x in h["habitos"]] == ["a", "b", "c"], h
+    # su sitio en la lista de hábitos, para que la portada reordene al marcar (movimiento.js → ordena)
+    assert [x["orden"] for x in h["habitos"]] == [0, 1, 2], h
     assert h["peso"] == {"dia": "2026-10-25", "kg": 80, "media": 80.5,
                          "serie": [81, None, None, None, None, 80, None]}, h["peso"]   # 20 al 26, viejo -> nuevo
     # el año en puntos: un nivel por día desde el 1 de enero, según la parte de los hábitos hecha
@@ -654,7 +660,50 @@ def test_tom():
     assert main.texto_presupuesto({**g, "presu": 0}) == "Llevas 935 € este ciclo."
 
 
+def test_movimiento():
+    """movimiento.js (GSAP): el orden de Hoy, el cuentakilómetros y el cielo, con node; y que GSAP no bloquee."""
+    import shutil
+    import subprocess
+    from pathlib import Path
+    st = Path(__file__).parent / "static"
+    for f in ("gsap-3.13.0.min.js", "MorphSVGPlugin-3.13.0.min.js", "Flip-3.13.0.min.js"):
+        assert (st / f).stat().st_size > 10000, f
+    for pag in st.glob("*.html"):
+        html = pag.read_text("utf-8")
+        # GSAP siempre con defer (si no llega, la página va igual) y la transición, solo donde se pide
+        for linea in html.splitlines():
+            if "3.13.0.min.js" in linea:
+                assert "<script defer " in linea, (pag.name, linea)
+        assert ("data-vt" in html) == ("@view-transition" in html), pag.name
+    if not shutil.which("node"):
+        print("(sin node: movimiento.js sin probar)")
+        return
+    js = """
+    const m = require(process.argv[1]), ok = (c, x) => { if (!c) { console.error(JSON.stringify(x)); process.exit(1); } };
+    const hs = [{id: "a", plan: true, hecho: true, orden: 0}, {id: "b", plan: true, hecho: false, orden: 1},
+                {id: "c", plan: false, hecho: true, orden: 2}, {id: "d", plan: false, hecho: false, orden: 3},
+                {id: "e", plan: true, hecho: false, orden: 4}];
+    // planificado sin hacer arriba (en su orden), luego lo hecho, y lo que no toca al final
+    const o = m.ordena(hs).map(h => h.id).join("");
+    ok(o === "beadc", o);
+    // desmarcar devuelve cada uno a su sitio: sin orden del servidor, el de la lista
+    ok(m.ordena([{id: "x", plan: true, hecho: false}, {id: "y", plan: true, hecho: false}]).map(h => h.id).join("") === "xy", "sin orden");
+    ok(JSON.stringify(m.digitos("9", "10")) === JSON.stringify([[" ", "1"], ["9", "0"]]), m.digitos("9", "10"));
+    ok(JSON.stringify(m.digitos("10", "9")) === JSON.stringify([["1", " "], ["0", "9"]]), m.digitos("10", "9"));
+    ok(JSON.stringify(m.digitos("07", "08")) === JSON.stringify([["0", "0"], ["7", "8"]]), m.digitos("07", "08"));
+    // el cielo: en una parada, su color; entre dos, a medio camino; y medianoche igual a las 24
+    ok(JSON.stringify(m.colores(12)[0]) === JSON.stringify([0x5D, 0x9B, 0xD3]), m.colores(12));
+    ok(JSON.stringify(m.colores(0)) === JSON.stringify(m.colores(24)), "medianoche");
+    const medio = m.colores(9.75)[0];
+    ok(medio[0] === Math.round((0x7F + 0x5D) / 2), medio);
+    ok(m.colores(23.9).flat().every(v => v >= 0 && v <= 255), m.colores(23.9));
+    """
+    r = subprocess.run(["node", "-e", js, str(st / "movimiento.js")], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+
+
 if __name__ == "__main__":
+    test_movimiento()
     test_sueno()
     test_salud()
     test_frontal()

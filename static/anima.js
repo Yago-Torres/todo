@@ -19,9 +19,10 @@ const anima = (() => {
 
   // La entrada de todas las páginas, igual en todas: el título letra a letra y las tarjetas en
   // cascada, al mismo ritmo. Cada página la llama una vez, cuando ya tiene sus datos pintados.
+  // Si la página llega con transición entre páginas (calma.js → .c-vt), el título ya ha entrado volando: no se repite.
   function entrada() {
     const h1 = document.querySelector(".app h1");
-    if (mov && h1 && !h1.dataset.entro) {
+    if (mov && h1 && !h1.dataset.entro && !document.documentElement.classList.contains("c-vt")) {
       h1.dataset.entro = "1";
       anime.animate(anime.splitText(h1, {chars: true}).chars,
         {y: ["60%", "0%"], opacity: [0, 1], delay: anime.stagger(12), duration: 420, ease: "outExpo"});

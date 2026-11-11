@@ -1252,8 +1252,9 @@ def de_otra(nombre, ruta):
 
 def hoy_habitos(s, hoy):
     plan, hecho = set(s["plan"].get(hoy, [])), set(s["log"].get(hoy, []))
+    # orden: su sitio en la lista de hábitos, para que la portada reordene al marcar sin perderlo
     habitos = [{"id": h["id"], "n": h["n"], "c": h["c"], "plan": h["id"] in plan, "hecho": h["id"] in hecho,
-                "racha": racha(s["log"], h["id"], hoy)} for h in s["habits"]]
+                "racha": racha(s["log"], h["id"], hoy), "orden": i} for i, h in enumerate(s["habits"])]
     habitos.sort(key=lambda h: (not h["plan"], h["hecho"]))   # lo planificado y sin hacer, primero
     pesos = sorted(s["peso"].items())
     semana = [kg for d, kg in pesos if d > (date.fromisoformat(hoy) - timedelta(days=7)).isoformat()]
@@ -1755,7 +1756,11 @@ def frontal(nombre):
     # como las páginas de todo: barra de estado translúcida en la app instalada (los avisos salen de la isla)
     html = html.replace("</title>", '</title>\n<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">'
                         '\n<link rel="manifest" href="/manifest.json" crossorigin="use-credentials">'
-                        '\n<script src="/mascota.js?v=4"></script>', 1)
+                        '\n<script src="/mascota.js?v=5"></script>'
+                        # y la transición entre páginas de todo (calma.css, calma.js): la cabecera vuela, la barra quieta
+                        '\n<style>@view-transition{navigation:auto}'
+                        '@media(prefers-reduced-motion:reduce){@view-transition{navigation:none}}</style>', 1)
+    html = html.replace('<html lang="es">', '<html lang="es" data-vt>', 1)
     return HTMLResponse(html.replace(ancla, menu + ancla, 1))
 
 

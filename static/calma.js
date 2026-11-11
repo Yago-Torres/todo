@@ -39,6 +39,9 @@ const calma = (() => {
   /* Cambio de pestaña o de mes con fundido. View Transitions es nativo (Safari 18, Chrome):
      donde no existe, se ejecuta tal cual. */
   let animando = 0;   // transiciones en marcha: mientras tanto el fondo no se repinta (se lo come el fundido)
+  // algo se está animando encima (transición, hoja de cristal, la página que se va): los fondos no se repintan
+  const ocupado = () => animando > 0 || !!document.querySelector(".c-velo.on, .c-hoja.on")
+                        || document.documentElement.classList.contains("c-saliendo");
   function transicion(fn) {
     // con la pestaña oculta Chrome aborta la transición (InvalidStateError) y fn no llega a pintar
     if (quieto() || !document.startViewTransition || document.visibilityState !== "visible") return fn();
@@ -187,8 +190,7 @@ const calma = (() => {
     const cx = cv.getContext("2d");
     let W, H, cw, ch, cols, filas, tinta, vivo, px = -9999, py = -9999, ultimo = 0, pedido = false;
     let calla = performance.now() + 900, toque = performance.now();   // calla: hasta cuándo no repintar (la entrada, el scroll)
-    const ocupado = ms => ms < calla || animando || document.querySelector(".c-velo.on, .c-hoja.on")
-                          || document.documentElement.classList.contains("c-saliendo");
+    const libre = ms => ms >= calla && !ocupado();
     const medir = () => {
       const r = Math.min(devicePixelRatio || 1, 2), C = innerWidth < 600 ? 12 : 14;
       W = innerWidth; H = innerHeight;
@@ -230,7 +232,7 @@ const calma = (() => {
     const bucle = ms => {
       if (document.visibilityState !== "visible") { pedido = false; return; }
       const cada = ondas.length ? 33 : ms - toque > 8000 ? 166 : 83;   // con onda, más fluido; sin tocar nada, más calma
-      if (ms - ultimo > cada && (ondas.length || !ocupado(ms))) { ultimo = ms; pinta(ms); }
+      if (ms - ultimo > cada && (ondas.length || libre(ms))) { ultimo = ms; pinta(ms); }
       requestAnimationFrame(bucle);
     };
     const arranca = () => { if (!pedido && !quieto()) { pedido = true; requestAnimationFrame(bucle); } };
@@ -280,9 +282,19 @@ const calma = (() => {
      y luego se navega; la siguiente entra con anima.entrada(). El fondo y el menú se quedan quietos.
      Desde JS, además, la app instalada del iPhone no se sale al navegador (con un enlace normal sí). */
   function vete(url, espera = 230) {
-    if (!quieto()) document.documentElement.classList.add("c-saliendo");
+    if (!quieto() && !entrePaginas()) document.documentElement.classList.add("c-saliendo");
     setTimeout(() => { location.href = url; }, quieto() ? 0 : espera);
   }
+  /* Transición entre páginas (View Transitions entre documentos: Safari 18.2, Chrome 126). La pide cada página
+     con <html data-vt> y @view-transition en su <style>; calma.css le da nombre a la cabecera y a la barra.
+     Entonces no hay salida propia (.c-saliendo): la foto de la página vieja tiene que salir entera. */
+  const entrePaginas = () => !quieto() && "CSSViewTransitionRule" in window && document.documentElement.hasAttribute("data-vt");
+  addEventListener("pagereveal", e => {
+    if (!e.viewTransition) return;
+    if (quieto()) return e.viewTransition.skipTransition();
+    // la cabecera llega volando de la otra página: se ve desde el principio aunque el resto espere a los datos
+    document.documentElement.classList.add("c-vt");
+  });
   // al volver con «atrás», el navegador puede devolver la página tal cual se fue: desvanecida
   addEventListener("pageshow", e => { if (e.persisted) document.documentElement.classList.remove("c-saliendo"); });
   document.addEventListener("click", e => {
@@ -292,7 +304,7 @@ const calma = (() => {
     if (u.origin !== location.origin) return;   // obsidian://, webs de fuera: como siempre
     if (u.pathname === location.pathname && u.search === location.search) return;   // #ancla de la misma página
     e.preventDefault();
-    vete(u.href);
+    vete(u.href, entrePaginas() ? 0 : 230);
   });
 
   /* Vibración. Safari no deja vibrar a las webs, pero al cambiar un interruptor nativo (iOS 17.4+)
@@ -326,5 +338,5 @@ const calma = (() => {
     c.style.setProperty("--y", e.clientY - r.top + "px");
   }, {passive: true});
 
-  return {transicion, cuenta, fiesta, vibra, onda, perfil, ponPerfil, saludo};
+  return {transicion, cuenta, fiesta, vibra, onda, perfil, ponPerfil, saludo, ocupado, entrePaginas};
 })();

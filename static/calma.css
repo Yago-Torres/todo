@@ -74,6 +74,13 @@
 
 /* transiciones de vista (calma.js → transicion()): un fundido corto, nada más */
 ::view-transition-old(root), ::view-transition-new(root) { animation-duration: .18s; }
+/* entre páginas (las que llevan <html data-vt>, ver calma.js): la cabecera de una vuela a la de la otra (o la
+   tarjeta que tocaste a la cabecera de la página que abre) y la barra de abajo no se mueve */
+html[data-vt] .app > header.top { view-transition-name: c-cabecera; }
+html[data-vt] nav.c-dock { view-transition-name: c-dock; }
+::view-transition-group(c-cabecera) { animation-duration: .45s; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
+::view-transition-group(c-dock), ::view-transition-new(c-dock) { animation: none; }
+::view-transition-old(c-dock) { display: none; }
 
 /* ---------- base ---------- */
 * { box-sizing: border-box; overscroll-behavior: contain; }
@@ -88,6 +95,9 @@ body {
 }
 /* mientras llegan los datos (calma.js → c-cargando): nada a medias; el fondo y el menú sí se ven */
 .c-cargando .app { opacity: 0; }
+/* llegando con transición entre páginas, la cabecera ya se ve (es la que vuela); el resto espera igual */
+.c-vt.c-cargando .app { opacity: 1; }
+.c-vt.c-cargando .app > :not(header.top) { opacity: 0; }
 /* al irse a otra página (calma.js → vete()): baja y se desvanece; el menú y el fondo, quietos */
 .c-saliendo .app { opacity: 0; transform: translateY(22px); transition: opacity .23s ease-in, transform .23s cubic-bezier(.5, 0, .75, 0); }
 /* fondo: un «shader» de caracteres ASCII que ondula despacio (calma.js → fondo()). Detrás de todo. */

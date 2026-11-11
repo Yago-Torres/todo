@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-vt>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
@@ -20,14 +20,21 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<link rel="stylesheet" href="/calma.css?v=36c64bfb">
-<script src="/calma.js?v=36c64bfb"></script>
-<script src="/mascota.js?v=4"></script>
+<link rel="stylesheet" href="/calma.css?v=4423d460">
+<script src="/calma.js?v=4423d460"></script>
+<script src="/mascota.js?v=5"></script>
 <script src="/sinred.js?v=1"></script>
 <!-- anime.js servido desde aquí, sin CDN; si no carga, la página funciona igual sin animaciones -->
 <script src="/anime-4.5.0.min.js"></script>
-<script src="/anima.js?v=36c64bfb"></script>
+<script src="/anima.js?v=4423d460"></script>
+<script src="/movimiento.js?v=1"></script>
+<!-- GSAP (sin CDN) solo para marcar; con defer y, si no llega, se marca con anime.js como antes -->
+<script defer src="/gsap-3.13.0.min.js"></script>
+<script defer src="/MorphSVGPlugin-3.13.0.min.js"></script>
 <style>
+  /* de una página a otra, la cabecera vuela y la barra de abajo se queda quieta (calma.css, calma.js) */
+  @view-transition { navigation: auto; }
+  @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }
   /* Estilo Calma: tokens y componentes en /calma.css (fuente: ~/estilo). Aquí solo lo de todo. */
   /* sin bloquear html y body (height 100% + overflow hidden): en la app instalada del iPhone eso hacía
      que iOS midiera la pantalla sin las zonas de arriba y abajo, y el menú fijo quedaba flotando más arriba.
@@ -94,6 +101,16 @@
   /* cada hábito se marca con su color: la lista se va llenando de color a lo largo del día */
   .fila[aria-pressed="true"] .bx { background: var(--c); border-color: var(--c); color: #fff; }
   .fila .bx svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+  /* el círculo se llena de agua del color del hábito y el fantasma se vuelve ✓ (movimiento.js) */
+  .fila .bx.liq, .fila[aria-pressed="true"] .bx.liq { background: none; overflow: hidden; }
+  .fila .bx svg.liq { width: 100%; height: 100%; display: block; stroke: none; }
+  .liq .ola { fill: var(--c); }
+  .liq .forma { fill: color-mix(in oklab, var(--c) 45%, var(--linea)); transition: fill .3s; }
+  .liq .forma.ok { fill: #fff; }
+  /* la racha rueda como un cuentakilómetros */
+  .odo { display: inline-flex; height: 1.25em; line-height: 1.25; overflow: hidden; }
+  .odo > span { display: flex; flex-direction: column; }
+  .odo > span > span { height: 1.25em; }
   .fila .rn { display: inline-flex; align-items: center; }
   .fila .rn.cero { color: var(--tenue); }
   .fila .nom { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -390,7 +407,6 @@ const planeados = d => S.plan[d] || [];
 // ---------- animaciones (anime.js) ----------
 // Solo de adorno: sin anime.js o con "reducir movimiento" en el sistema, todo funciona igual y quieto.
 const MOV = !!window.anime && !matchMedia("(prefers-reduced-motion: reduce)").matches;
-const CHECK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12.5l4 4 8-9"/></svg>';
 const LLAMA = '<svg class="llama" viewBox="0 0 16 16" aria-hidden="true"><path d="M8.7 1c.4 2.4 4.3 4.1 4.3 8.2A5 5 0 0 1 8 14.5a5 5 0 0 1-5-5c0-2.1 1.1-3.4 2.2-4.4.1 1.4.8 2.4 1.8 2.8C6.6 5.3 7.2 2.8 8.7 1z"/></svg>';
 const RACHA_VIVA = 3;   // desde aquí la racha lleva llama
 
@@ -398,7 +414,7 @@ const RACHA_VIVA = 3;   // desde aquí la racha lleva llama
 function numRacha(tag, cls, r) {
   const n = el(tag, cls + (r ? "" : " cero"));
   if (r >= RACHA_VIVA) n.insertAdjacentHTML("beforeend", LLAMA);
-  n.append(Object.assign(el("span"), {textContent: dd(r)}));
+  n.append(Object.assign(el("span", "rc"), {textContent: dd(r)}));
   n.lastChild.dataset.cuenta = r;
   return n;
 }
@@ -408,7 +424,7 @@ function animaMarca(h) {
   const f = MOV && document.querySelector(`#c-habitos .fila[data-h="${h}"]`);
   if (!f) return;
   anime.animate(f.querySelector(".bx"), {scale: [.55, 1], duration: 360, ease: "outBack(3)"});
-  const p = f.querySelector(".bx path");
+  const p = f.querySelector(".bx svg:not(.liq) path");
   if (p) anime.animate(anime.svg.createDrawable(p), {draw: ["0 0", "0 1"], duration: 260, delay: 50, ease: "outQuad"});
   anime.animate(f.querySelector(".rn"), {scale: [1.45, 1], duration: 380, ease: "outBack(2)"});
 }
@@ -431,7 +447,7 @@ function animaEntrada() {
 }
 
 function marcar(d, h) {
-  const si = !hecho(d, h);
+  const si = !hecho(d, h), antes = racha(h);
   S.log[d] = si ? [...hechos(d), h] : hechos(d).filter(x => x !== h);
   if (!S.log[d].length) delete S.log[d];
   render();
@@ -440,7 +456,9 @@ function marcar(d, h) {
     if (st === 401) return puerta(true);
     $("#estado").textContent = st === 200 ? "Guardado" : "Sin red: se guarda al volver";
   });
-  if (d === sel && hecho(d, h)) animaMarca(h);
+  // con GSAP: ola, fantasma → ✓ y racha que rueda (también al desmarcar); sin él, lo de anime.js
+  const f = d === sel && document.querySelector(`#c-habitos .fila[data-h="${h}"]`);
+  if (f && !mov.marca(f, si, antes, racha(h), dd) && si) animaMarca(h);
   // todo lo planificado de hoy hecho (o todos los hábitos, si no había plan): confeti, una vez al día
   const objetivo = planeados(HOY).length ? planeados(HOY) : S.habits.map(x => x.id);
   if (d === HOY && objetivo.length && objetivo.every(x => hecho(HOY, x))) calma.fiesta("todo-dia");
@@ -570,7 +588,7 @@ function habitos() {
     b.setAttribute("aria-label", `${h.n}, ${on ? "hecho" : "sin hacer"}`);
     b.append(
       el("span", "cua"),
-      Object.assign(el("span", "bx"), {innerHTML: on ? CHECK : ""}),
+      Object.assign(el("span", "bx liq"), {innerHTML: mov.circulo(on)}),
       Object.assign(el("span", "nom"), {textContent: h.n}),
     );
     if (planeado(sel, h.id)) b.append(Object.assign(el("span", "plan"), {textContent: "plan"}));

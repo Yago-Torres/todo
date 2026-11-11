@@ -535,5 +535,5 @@ const fantasma = (() => {
     document.addEventListener("DOMContentLoaded", refresca);
     document.addEventListener("visibilitychange", () => { if (!document.hidden) refresca(); });
   }
-  return {lee, ajusta, previa, refresca, reacciona, emote: n => EMOTES[n]?.(), emotes: Object.keys(EMOTES), pasea};
+  return {lee, ajusta, previa, refresca, reacciona, tipo: () => A.tipo, emote: n => EMOTES[n]?.(), emotes: Object.keys(EMOTES), pasea};
 })();
