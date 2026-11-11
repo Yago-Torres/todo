@@ -16,12 +16,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<link rel="stylesheet" href="/calma.css?v=4423d460">
-<script src="/calma.js?v=4423d460"></script>
+<link rel="stylesheet" href="/calma.css?v=d2de558a">
+<script src="/calma.js?v=d2de558a"></script>
 <script src="/tom.js?v=1"></script>
 <script src="/mascota.js?v=6"></script>
 <script src="/anime-4.5.0.min.js"></script>
-<script src="/anima.js?v=4423d460"></script>
+<script src="/anima.js?v=d2de558a"></script>
 <style>
   /* de una página a otra, la cabecera vuela y la barra de abajo se queda quieta (calma.css, calma.js) */
   @view-transition { navigation: auto; }
@@ -96,6 +96,8 @@
       <h2 id="t-son">Sonidos</h2>
       <label class="opcion"><span>Sonidos sutiles<small>Un clic al marcar, una campanita al completar el día, el fin del descanso y cuando algo falla. Respetan el modo silencio.</small></span>
         <input type="checkbox" switch id="sonidos"></label>
+      <label class="opcion"><span>Fondos con textura<small>Rejilla de plano en Entreno y curvas de nivel en Carrera y Escalada. Se guarda en este dispositivo.</small></span>
+        <input type="checkbox" switch id="fondos"></label>
       <button class="c-btn opcion-app" id="app-ajustes" type="button" hidden>Ajustes de la app (iPhone)</button>
     </section>
 
@@ -239,6 +241,9 @@ async function cargar() {
   }
 }
 
+// fondos.js y calma.js lo leen al cargar cada página
+try { $("#fondos").checked = localStorage.getItem("tom-fondos") !== "no"; } catch { $("#fondos").checked = true; }
+$("#fondos").onchange = e => { try { e.target.checked ? localStorage.removeItem("tom-fondos") : localStorage.setItem("tom-fondos", "no"); } catch {} };
 // apagados por defecto; al encenderlos, suena uno para que se oiga cómo son (el toque ya ha despertado el audio)
 $("#sonidos").onchange = e => { A.sonidos = e.target.checked; tom.ponAjustes(A); if (A.sonidos) tom.suena("clic"); guardar(); };
 // dentro de la app: sus propios ajustes (claves, Face ID, Salud, avisos), que antes se abrían agitando el móvil

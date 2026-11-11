@@ -184,6 +184,9 @@ const calma = (() => {
   const ondas = [];   // {x, y, t0}: una onda que sale de donde has marcado algo
   function onda(x, y) { if (!quieto()) ondas.push({x, y, t0: performance.now()}); }
   function fondo() {
+    // una página con fondo propio (fondos.js de todo: rejilla de plano, curvas de nivel) no lleva el ASCII encima,
+    // salvo que esos fondos estén apagados en este dispositivo
+    if (document.body.dataset.fondo) { let no = null; try { no = localStorage.getItem("tom-fondos"); } catch {} if (no !== "no") return; }
     const cv = Object.assign(document.createElement("canvas"), {id: "c-fondo"});
     cv.setAttribute("aria-hidden", "true");
     document.body.prepend(cv);
