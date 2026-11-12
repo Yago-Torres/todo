@@ -160,6 +160,7 @@ final class Escalada {
 
     /// window.dispatchEvent(new CustomEvent("tom-escalada", {detail: {intento, fase, progreso, texto, color, nombre}})).
     func emite(_ intento: String, _ fase: String, progreso: Double? = nil, texto: String = "", datos: DatosIntento? = nil) {
+        Isla.subida(fase: fase, progreso: progreso, texto: texto)   // el progreso en la isla, también con la app fuera
         guard let web else { return }
         var detalle: [String: Any] = ["intento": intento, "fase": fase, "texto": texto]
         if let progreso, progreso.isFinite { detalle["progreso"] = min(1, max(0, progreso)) }

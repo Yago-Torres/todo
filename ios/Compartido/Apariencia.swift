@@ -9,12 +9,34 @@ import UIKit
 struct Catalogo: Codable {
     var version: Int?
     var defecto: Eleccion
-    var paletas: [PaletaCat]
-    var acentos: [AcentoCat]
+    /// Los temas (al estilo monkeytype): base + acento + letras + esquinas + fondo + modo. Desde el catálogo v2.
+    var temas: [TemaCat]?
+    var sugerencias: Sugerencias?
+    /// Solo por compatibilidad con el catálogo v1: ya no se usan.
+    var paletas: [PaletaCat]?
+    var acentos: [AcentoCat]?
     var fuentes: [FuenteCat]
     var esquinas: [EsquinasCat]
     var fondos: [FondoCat]
     var fijos: Fijos
+
+    struct TemaCat: Codable, Identifiable, Hashable {
+        var id: String
+        var nombre: String
+        var vibra: String?
+        var base: String
+        var acento: String
+        var fuente: String
+        var titulos: String?
+        var esquinas: String
+        var fondo: String
+        var modo: String?
+    }
+
+    struct Sugerencias: Codable, Hashable {
+        var acento: [String]
+        var base: [String]
+    }
 
     struct Tonos: Codable, Hashable {
         var fondo: String
@@ -87,18 +109,50 @@ struct Catalogo: Codable {
         var oscuro: TonosFijos
     }
 
-    func paleta(_ id: String) -> PaletaCat? { paletas.first { $0.id == id } }
-    func acento(_ id: String) -> AcentoCat? { acentos.first { $0.id == id } }
+    func tema(_ id: String) -> TemaCat? { temas?.first { $0.id == id } }
+    func fuente(_ id: String) -> FuenteCat? { fuentes.first { $0.id == id } }
 }
 
-/// Lo elegido. `acento` vacío = el de la paleta.
+/// Lo elegido: un tema (id, o "propio" si se ha tocado algo después) y sus valores. base y acento son "#RRGGBB".
 struct Eleccion: Codable, Equatable {
+    var tema: String = "hormigon"
     var modo: String = "sistema"
-    var paleta: String = "hormigon"
-    var acento: String = "salvia"
+    var base: String = "#F2F2F2"
+    var acento: String = "#4E7A62"
     var fuente: String = "instrument"
+    var titulos: String = "instrument"
     var esquinas: String = "suaves"
     var fondo: String = "sutil"
+
+    init() {}
+
+    /// Tolerante: lo guardado con el formato de antes (paleta + acento por id) cae en los valores por defecto.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = Eleccion()
+        tema = (try? c.decodeIfPresent(String.self, forKey: .tema)) ?? nil ?? d.tema
+        modo = (try? c.decodeIfPresent(String.self, forKey: .modo)) ?? nil ?? d.modo
+        let b = (try? c.decodeIfPresent(String.self, forKey: .base)) ?? nil
+        base = b.flatMap { Oklch.esHex($0) ? $0 : nil } ?? d.base
+        let a = (try? c.decodeIfPresent(String.self, forKey: .acento)) ?? nil
+        acento = a.flatMap { Oklch.esHex($0) ? $0 : nil } ?? d.acento
+        fuente = (try? c.decodeIfPresent(String.self, forKey: .fuente)) ?? nil ?? d.fuente
+        titulos = (try? c.decodeIfPresent(String.self, forKey: .titulos)) ?? nil ?? fuente
+        esquinas = (try? c.decodeIfPresent(String.self, forKey: .esquinas)) ?? nil ?? d.esquinas
+        fondo = (try? c.decodeIfPresent(String.self, forKey: .fondo)) ?? nil ?? d.fondo
+    }
+
+    /// Los siete valores de un tema.
+    init(tema t: Catalogo.TemaCat, modo: String? = nil) {
+        tema = t.id
+        self.modo = modo ?? t.modo ?? "sistema"
+        base = t.base
+        acento = t.acento
+        fuente = t.fuente
+        titulos = t.titulos ?? t.fuente
+        esquinas = t.esquinas
+        fondo = t.fondo
+    }
 }
 
 /// El orden y lo oculto de cada pantalla ("app-hoy", "app-dock"…; las de la web van por ruta y las lleva calma.js).

@@ -64,7 +64,13 @@ final class Coordinador: NSObject, WKNavigationDelegate, WKUIDelegate {
         v.scrollView.backgroundColor = fondo
         v.underPageBackgroundColor = fondo
         v.scrollView.contentInsetAdjustmentBehavior = .never
-        v.allowsBackForwardNavigationGestures = true
+        // sin el «atrás» de WebKit: deslizar desde los bordes cambia de sección (Pestanas.swift), como en las nativas
+        v.allowsBackForwardNavigationGestures = false
+        for borde in [UIRectEdge.left, .right] {
+            let g = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(desdeBorde(_:)))
+            g.edges = borde
+            v.addGestureRecognizer(g)
+        }
         v.navigationDelegate = self
         v.uiDelegate = self
         #if DEBUG
@@ -123,6 +129,13 @@ final class Coordinador: NSObject, WKNavigationDelegate, WKUIDelegate {
         guard let url = URL(string: ruta, relativeTo: Config.web)?.absoluteURL else { return }
         ultima = url
         vista?.load(URLRequest(url: url))
+    }
+
+    @objc private func desdeBorde(_ g: UIScreenEdgePanGestureRecognizer) {
+        guard g.state == .ended, let v = g.view else { return }
+        let dx = g.translation(in: v).x
+        guard abs(dx) > 50 else { return }
+        NotificationCenter.default.post(name: .hoyPaso, object: g.edges == .right ? 1 : -1)
     }
 
     @objc private func recarga() {
@@ -331,6 +344,10 @@ final class Coordinador: NSObject, WKNavigationDelegate, WKUIDelegate {
             Entreno.shared.termina()
         case "escalada-subir":
             Escalada.shared.hojaVisible = true
+        case "descanso":
+            // {accion:"descanso", segundos, siguiente}: la cuenta atrás en la isla (segundos 0 = quitarla)
+            let seg = (datos["segundos"] as? NSNumber)?.intValue ?? 0
+            Isla.descanso(segundos: seg, siguiente: datos["siguiente"] as? String ?? "")
         default:
             break
         }

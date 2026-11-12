@@ -22,6 +22,7 @@ struct HoyApp: App {
                 Accesos.instala()
                 guard estado.claves != nil else { return }
                 Task { await Aspecto.shared.sincroniza() }
+                Isla.limpia()
                 Navegador.shared.recogeVoz()
                 // los hábitos de hoy como valores de «Marca … en Tom»
                 AtajosHoy.updateAppShortcutParameters()

@@ -178,24 +178,37 @@ espacios, muelles y letra. Las vistas nativas solo usan `Tema.*`. Para cambiar l
 `cifras`); sin familia, SF Pro (`diseno` elige `.rounded`, `.serif`…). Otro tema = otra `Paleta`/`Fuentes` en
 `Tema.actual`.
 
-## Apariencia y orden de pantallas (Configurar)
+## Apariencia, gestos e isla
 
-La apariencia es la misma que la de la web y se guarda en el servidor: cambiarla en un sitio cambia el otro.
+**Temas al estilo monkeytype + colores libres.** Catálogo v2 (`GET /apariencia.json`, copia en `Hoy/apariencia.json`):
+`temas` (base, acento, letra, títulos, esquinas, fondo, modo, con su «vibra») y `sugerencias` de base y acento.
+Lo elegido (`GET/POST /api/apariencia`): `{tema (id o "propio"), modo, base, acento (hex), fuente, titulos, esquinas,
+fondo}`. Elegir un tema copia sus valores; tocar cualquiera después lo deja en «propio».
+- `Compartido/Oklch.swift`: la fórmula de calma.js `genera()` cifra a cifra (OKLCH de Ottosson): base + acento →
+  todos los tokens de claro y oscuro, la gota y el ascii. #F2F2F2 + #4E7A62 → oscuro fondo #131313, acento #87B098.
+- `Hoy/Aspecto.swift` construye `Tema.actual` (@Observable: se repinta todo con un fundido), lo guarda en el app group,
+  sincroniza al arrancar y al volver, y manda cada cambio (sin red, a la próxima sin pisarlo). Widget y Live
+  Activities leen los colores resueltos (`ColoresGuardados`, en oscuro).
+- Letras (variables o regular+bold, en `UIAppFonts`): Instrument Sans, Inter, Manrope, Geist, IBM Plex Sans, DM Sans,
+  Space Grotesk, JetBrains Mono, Fraunces, Shippori Mincho, Zen Kaku Gothic New; «sistema» = SF Pro. `titulos` es la
+  letra de los títulos.
+- Configurar → Apariencia: vista previa, rejilla de temas (nombre en su letra, claro/oscuro, vibra) y «Personalizar»
+  (fondo y acento con ColorPicker y sugerencias, letra, títulos, esquinas, fondo de caracteres, modo, Restablecer).
+- Configurar → Pantallas: orden y ocultos de la barra (`app-dock`) y de Hoy (`app-hoy`); en Hoy también el botón de
+  editar o mantener pulsado un bloque.
 
-- **Catálogo**: `GET /apariencia.json` (45 paletas en 7 familias, 48 acentos, letras, esquinas, fondos). Se guarda en el
-  app group y hay copia en el bundle (`Hoy/apariencia.json`, sale de `~/estilo/apariencia.json`) para arrancar sin red.
-- **Lo elegido**: `GET/POST /api/apariencia` → `{apariencia:{modo,paleta,acento,fuente,esquinas,fondo}, disposicion}`.
-  `Hoy/Aspecto.swift` lo guarda en el app group, sincroniza al arrancar y al volver a primer plano y manda cada cambio
-  (si no hay red, queda marcado y sale en la próxima sincronización, sin pisarlo con lo del servidor).
-- **Tema dinámico**: `Tema.actual` lo construye Aspecto (@Observable): al cambiar algo se repintan todas las pantallas
-  nativas con un fundido. El modo (Sistema/Claro/Oscuro) es `preferredColorScheme` en la raíz. El widget y la Live
-  Activity leen los colores elegidos que la app deja en el app group (`ColoresGuardados`, en oscuro).
-- **Letras** empaquetadas (variables, en `UIAppFonts`): Instrument Sans, Inter, Manrope, Geist, IBM Plex Sans; «sistema» = SF Pro.
-- **Configurar → Apariencia**: vista previa, modo, paleta (rejilla mitad claro/mitad oscuro con filtro por familia),
-  acento («El de la paleta» o uno de la lista), letra (cada nombre en su fuente), esquinas, fondo y «Restablecer».
-- **Configurar → Pantallas**: «Barra de abajo» (disposición `app-dock`: hoy, habitos, pendientes, entreno, salud, comida,
-  gastos, documentos; Hoy no se oculta) y «Hoy (app)» (`app-hoy`: anillos, habitos, entreno, tareas, salud, carrera,
-  gastos). En Hoy también: botón de editar arriba o mantener pulsado un bloque (editar / ocultar este bloque).
+**Gestos.** Deslizar a los lados cambia a la sección siguiente/anterior según el orden de la barra (con paso de página
+en las nativas). En la web, solo desde los bordes de la pantalla (el «atrás» de WebKit está quitado). En la barra,
+arrastrar el dedo mueve la gota con él (vibra al pasar por cada sección) y al soltar va a la de debajo; tocar sigue igual.
+
+**Isla dinámica** (`Hoy/Isla.swift`, `Compartido/AvisoActividad.swift`, `HoyWidget/AvisoLiveActivity.swift`), además
+del entreno serie a serie. Las cuentas atrás son `Text(timerInterval:)`: no despiertan la app; caducan solas y se
+terminan al acabar o al volver a la app.
+- Descanso: la web manda `postMessage({accion:"descanso", segundos: 90, siguiente: "Press banca · serie 3"})`
+  (`segundos: 0` lo quita). Con el entreno serie a serie abierto, va en su actividad.
+- Freno: al «Entrar N min», «Instagram» con la cuenta atrás del pase.
+- Escalada: comprimiendo / subiendo % y «listo» (o el error) al acabar.
+- «Día en la isla» (Configurar, apagado por defecto): anillos de hábitos, pasos y sueño hasta las 22:00.
 
 ## Freno de apps
 

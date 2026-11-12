@@ -27,10 +27,12 @@ final class Aspecto {
 
     init() {
         let d = Almacen.defaults
-        catalogo = d.data(forKey: Clave.catalogo).flatMap { try? JSONDecoder().decode(Catalogo.self, from: $0) }
-            ?? Bundle.main.url(forResource: "apariencia", withExtension: "json")
+        // el guardado si ya es v2 (con temas); si no, la copia del bundle
+        let guardado = d.data(forKey: Clave.catalogo).flatMap { try? JSONDecoder().decode(Catalogo.self, from: $0) }
+        catalogo = guardado?.temas != nil ? guardado
+            : Bundle.main.url(forResource: "apariencia", withExtension: "json")
                 .flatMap { try? Data(contentsOf: $0) }
-                .flatMap { try? JSONDecoder().decode(Catalogo.self, from: $0) }
+                .flatMap { try? JSONDecoder().decode(Catalogo.self, from: $0) } ?? guardado
         if let e = d.data(forKey: Clave.eleccion).flatMap({ try? JSONDecoder().decode(Eleccion.self, from: $0) }) {
             eleccion = e
         } else if let def = catalogo?.defecto {
@@ -55,9 +57,21 @@ final class Aspecto {
 
     // MARK: cambiar
 
+    /// Tocar cualquier valor a mano deja el tema en «propio».
     func cambia(_ cambio: (inout Eleccion) -> Void) {
         var e = eleccion
         cambio(&e)
+        guard e != eleccion else { return }
+        e.tema = "propio"
+        ponEleccion(e)
+    }
+
+    /// Elegir un tema copia sus siete valores (el modo, si el tema no trae uno, se queda como estaba).
+    func eligeTema(_ t: Catalogo.TemaCat) {
+        ponEleccion(Eleccion(tema: t, modo: t.modo ?? eleccion.modo))
+    }
+
+    private func ponEleccion(_ e: Eleccion) {
         guard e != eleccion else { return }
         withAnimation(.easeInOut(duration: 0.35)) {
             eleccion = e
@@ -67,8 +81,13 @@ final class Aspecto {
         programaEnvio()
     }
 
+    /// El tema por defecto del catálogo.
     func restablece() {
-        cambia { $0 = catalogo?.defecto ?? Eleccion() }
+        if let cat = catalogo, let t = cat.tema(cat.defecto.tema) {
+            ponEleccion(Eleccion(tema: t, modo: cat.defecto.modo))
+        } else {
+            ponEleccion(catalogo?.defecto ?? Eleccion())
+        }
     }
 
     func ponBloques(_ pantalla: String, _ b: Bloques) {
@@ -144,55 +163,50 @@ final class Aspecto {
 
     private func construye() -> Tema {
         var t = Tema()
-        guard let cat = catalogo else { return t }
-        let pal = cat.paleta(eleccion.paleta) ?? cat.paleta(cat.defecto.paleta) ?? cat.paletas.first
-        guard let pal else { return t }
-        let ac = cat.acento(eleccion.acento.isEmpty ? pal.acento : eleccion.acento) ?? cat.acento(pal.acento) ?? cat.acentos.first
+        let def = catalogo?.defecto ?? Eleccion()
+        let g = Oklch.genera(base: Oklch.esHex(eleccion.base) ? eleccion.base : def.base,
+                             acento: Oklch.esHex(eleccion.acento) ? eleccion.acento : def.acento)
         var p = Paleta()
-        let c = pal.claro, o = pal.oscuro
+        let c = g.claro, o = g.oscuro
         p.fondo = .init(claro: c.fondo, oscuro: o.fondo)
         p.carta = .init(claro: c.carta, oscuro: o.carta)
-        p.cartaLuz = .init(claro: c.carta_luz ?? c.carta, oscuro: o.carta_luz ?? o.carta)
+        p.cartaLuz = .init(claro: c.cartaLuz, oscuro: o.cartaLuz)
         p.carta2 = .init(claro: c.carta2, oscuro: o.carta2)
         p.texto = .init(claro: c.texto, oscuro: o.texto)
         p.suave = .init(claro: c.suave, oscuro: o.suave)
         p.tenue = .init(claro: c.tenue, oscuro: o.tenue)
         p.linea = .init(claro: c.linea, oscuro: o.linea)
         p.dock = .init(claro: c.dock, oscuro: o.dock)
-        p.dockTexto = .init(claro: c.dock_texto, oscuro: o.dock_texto)
+        p.dockTexto = .init(claro: c.dockTexto, oscuro: o.dockTexto)
         p.ascii = .init(claro: c.ascii, oscuro: o.ascii)
-        if let ac {
-            p.acento = .init(claro: ac.claro.acento, oscuro: ac.oscuro.acento)
-            p.acentoTexto = .init(claro: ac.claro.texto, oscuro: ac.oscuro.texto)
-            p.acentoSuave = .init(claro: ac.claro.suave, oscuro: ac.oscuro.suave)
-            p.gota = .init(claro: ac.gota, oscuro: ac.gota)
-            p.gotaTexto = .init(claro: ac.gota_texto, oscuro: ac.gota_texto)
+        p.acento = .init(claro: c.acento, oscuro: o.acento)
+        p.acentoTexto = .init(claro: c.acentoTexto, oscuro: o.acentoTexto)
+        p.acentoSuave = .init(claro: c.acentoSuave, oscuro: o.acentoSuave)
+        p.gota = .init(claro: g.gota, oscuro: g.gota)
+        p.gotaTexto = .init(claro: g.gotaTexto, oscuro: g.gotaTexto)
+        if let f = catalogo?.fijos {
+            p.peligro = .init(claro: f.claro.peligro, oscuro: f.oscuro.peligro)
+            p.aviso = .init(claro: f.claro.aviso, oscuro: f.oscuro.aviso)
         }
-        p.peligro = .init(claro: cat.fijos.claro.peligro, oscuro: cat.fijos.oscuro.peligro)
-        p.aviso = .init(claro: cat.fijos.claro.aviso, oscuro: cat.fijos.oscuro.aviso)
         t.paleta = p
-        if let f = cat.fuentes.first(where: { $0.id == eleccion.fuente }) {
-            let familia = (f.familia_ios ?? "").isEmpty ? nil : f.familia_ios
-            t.fuentes = Fuentes(texto: familia, titulo: familia, cifras: familia)
-        }
-        if let e = cat.esquinas.first(where: { $0.id == eleccion.esquinas }) {
+        t.fuentes = Fuentes(texto: familia(eleccion.fuente), titulo: familia(eleccion.titulos), cifras: familia(eleccion.fuente))
+        if let e = catalogo?.esquinas.first(where: { $0.id == eleccion.esquinas }) {
             t.radios = Radios(carta: e.carta, boton: e.boton, celda: e.celda)
         }
-        if let f = cat.fondos.first(where: { $0.id == eleccion.fondo }) { t.fondo = f.intensidad }
+        if let f = catalogo?.fondos.first(where: { $0.id == eleccion.fondo }) { t.fondo = f.intensidad }
         return t
+    }
+
+    /// La familia de iOS de una letra del catálogo (nil = SF Pro).
+    func familia(_ id: String) -> String? {
+        guard let f = catalogo?.fuente(id), let n = f.familia_ios, !n.isEmpty else { return nil }
+        return n
     }
 
     /// El widget y la Live Activity no tienen el catálogo: se les dejan los colores ya elegidos.
     private func guardaParaWidget() {
-        guard let cat = catalogo, let pal = cat.paleta(eleccion.paleta) else { return }
-        let ac = cat.acento(eleccion.acento.isEmpty ? pal.acento : eleccion.acento) ?? cat.acento(pal.acento)
-        func tonos(_ t: Catalogo.Tonos, _ a: Catalogo.TonoAcento?) -> [String: String] {
-            var r = ["fondo": t.fondo, "carta": t.carta, "carta2": t.carta2, "texto": t.texto, "suave": t.suave,
-                     "tenue": t.tenue, "linea": t.linea]
-            if let a { r["acento"] = a.acento; r["acento_texto"] = a.texto; r["acento_suave"] = a.suave }
-            return r
-        }
-        ColoresGuardados.guarda(claro: tonos(pal.claro, ac?.claro), oscuro: tonos(pal.oscuro, ac?.oscuro))
+        let g = Oklch.genera(base: eleccion.base, acento: eleccion.acento)
+        ColoresGuardados.guarda(claro: g.claro.tokens, oscuro: g.oscuro.tokens)
         WidgetCenter.shared.reloadAllTimelines()
     }
 }

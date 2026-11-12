@@ -100,6 +100,14 @@
 		<string>Manrope.ttf</string>
 		<string>Geist.ttf</string>
 		<string>IBMPlexSans.ttf</string>
+		<string>DMSans.ttf</string>
+		<string>SpaceGrotesk.ttf</string>
+		<string>JetBrainsMono.ttf</string>
+		<string>Fraunces.ttf</string>
+		<string>ShipporiMincho-Regular.ttf</string>
+		<string>ShipporiMincho-Bold.ttf</string>
+		<string>ZenKakuGothicNew-Regular.ttf</string>
+		<string>ZenKakuGothicNew-Bold.ttf</string>
 	</array>
 </dict>
 </plist>

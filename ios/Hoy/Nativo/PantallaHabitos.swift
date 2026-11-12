@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Hábitos en nativo: la semana de cada hábito (lunes a domingo), lo que lleva contra su objetivo y la racha.
-/// Tocar un día lo marca o desmarca (hoy y días pasados); el resto de la página web (editar hábitos, planificar)
+/// Tocar un día lo marca o desmarca (hoy y días pasados); las flechas cambian de semana (deslizar es cambiar de sección); el resto de la página web (editar hábitos, planificar)
 /// sigue en /habitos.html, a un toque desde «Editar».
 struct PantallaHabitos: View {
     @State private var datos = DatosNativos.shared
@@ -49,12 +49,6 @@ struct PantallaHabitos: View {
         .scrollIndicators(.hidden)
         .refreshable { await datos.recarga() }
         .task { await datos.carga() }
-        .simultaneousGesture(DragGesture(minimumDistance: 30).onEnded { g in
-            guard abs(g.translation.width) > abs(g.translation.height) * 1.5 else { return }
-            withAnimation(Tema.Muelle.pantalla) {
-                semanaAtras = max(0, semanaAtras + (g.translation.width > 0 ? 1 : -1))
-            }
-        })
     }
 
     private func cabecera(_ dias: [String]) -> some View {

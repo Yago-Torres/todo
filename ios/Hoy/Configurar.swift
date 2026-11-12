@@ -10,6 +10,7 @@ struct Configurar: View {
     @Environment(\.dismiss) private var cerrar
     @AppStorage("faceID", store: Almacen.defaults) private var faceID = false
     @AppStorage("salud", store: Almacen.defaults) private var salud = false
+    @AppStorage("islaDia", store: Almacen.defaults) private var islaDia = false
     @AppStorage("avisos", store: Almacen.defaults) private var avisos = false
 
     @State private var cfId = ""
@@ -76,6 +77,10 @@ struct Configurar: View {
                     .disabled(!Salud.disponible)
                     .onChange(of: salud) { _, activo in
                         if activo { Task { await activaSalud() } }
+                    }
+                Toggle("Día en la isla", isOn: $islaDia)
+                    .onChange(of: islaDia) { _, activo in
+                        if activo { DatosNativos.shared.actualizaIsla() } else { Isla.apagaDia() }
                     }
                 Toggle("Avisos en el iPhone", isOn: $avisos)
                     .onChange(of: avisos) { _, activo in

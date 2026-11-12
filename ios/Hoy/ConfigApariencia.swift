@@ -3,58 +3,167 @@ import SwiftUI
 // Configurar → Apariencia y Pantallas. Todo cambia al momento (Aspecto es @Observable) y se guarda en el servidor,
 // así que la web lo coge también.
 
-/// Configurar → Apariencia: vista previa, modo, paleta, acento, letra, esquinas y fondo.
-struct SeccionApariencia: View {
-    private var aspecto: Aspecto { Aspecto.shared }
+/// "#RRGGBB" de un Color (lo que devuelve el ColorPicker).
+private func hexDe(_ c: Color) -> String {
+    var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+    UIColor(c).getRed(&r, green: &g, blue: &b, alpha: &a)
+    func canal(_ x: CGFloat) -> Int { Int((max(0, min(1, x)) * 255).rounded()) }
+    return String(format: "#%02X%02X%02X", canal(r), canal(g), canal(b))
+}
 
+private func colorDe(_ css: String) -> Color { Color(uiColor: UIColor(css: css)) }
+
+/// Configurar → Apariencia: vista previa y la rejilla de temas (al estilo monkeytype).
+struct SeccionApariencia: View {
+    var body: some View {
+        let aspecto = Aspecto.shared
+        let temas = aspecto.catalogo?.temas ?? []
+        Section {
+            MuestraApariencia()
+                .listRowInsets(EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12))
+            if temas.isEmpty {
+                Text("Sin catálogo de temas todavía: se baja la próxima vez que haya conexión.")
+                    .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
+            } else {
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                    ForEach(temas) { t in
+                        Button {
+                            Haptica.shared.toca(.marcar)
+                            aspecto.eligeTema(t)
+                        } label: {
+                            TarjetaTema(tema: t, elegido: aspecto.eleccion.tema == t.id)
+                        }
+                        .buttonStyle(EstiloHundir())
+                    }
+                }
+                .padding(.vertical, 6)
+            }
+        } header: {
+            Text("Apariencia")
+        } footer: {
+            Text(aspecto.eleccion.tema == "propio" ? "Tema propio: lo has personalizado abajo." : "Se guarda en el servidor: la web cambia igual.")
+        }
+        SeccionPersonalizar()
+    }
+}
+
+/// Un tema: su nombre en su letra de títulos, sus colores en claro y oscuro y su vibra.
+struct TarjetaTema: View {
+    let tema: Catalogo.TemaCat
+    let elegido: Bool
+
+    var body: some View {
+        let g = Oklch.genera(base: tema.base, acento: tema.acento)
+        let familia = Aspecto.shared.familia(tema.titulos ?? tema.fuente)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 0) {
+                mitad(g.claro)
+                mitad(g.oscuro)
+            }
+            .frame(height: 44)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            Text(tema.nombre)
+                .font(familia.map { Font.custom($0, size: 17).weight(.bold) } ?? Font.system(size: 17, weight: .bold))
+                .foregroundStyle(Tema.texto)
+                .lineLimit(1)
+            if let v = tema.vibra {
+                Text(v).font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave).lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(Tema.fondo, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .strokeBorder(elegido ? Tema.acento : Tema.linea, lineWidth: elegido ? 2.5 : 1))
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(elegido ? .isSelected : [])
+    }
+
+    private func mitad(_ l: Oklch.Lado) -> some View {
+        ZStack(alignment: .bottomLeading) {
+            colorDe(l.fondo)
+            RoundedRectangle(cornerRadius: 3).fill(colorDe(l.carta)).frame(height: 14).padding(5).offset(y: -12)
+            Circle().fill(colorDe(l.acento)).frame(width: 10, height: 10).padding(6)
+        }
+    }
+}
+
+/// «Personalizar»: fondo y acento libres (con sugerencias), letras, esquinas, fondo de caracteres y modo.
+struct SeccionPersonalizar: View {
     private func enlace(_ clave: WritableKeyPath<Eleccion, String>) -> Binding<String> {
         Binding(get: { Aspecto.shared.eleccion[keyPath: clave] },
                 set: { v in Aspecto.shared.cambia { $0[keyPath: clave] = v } })
     }
 
+    private func color(_ clave: WritableKeyPath<Eleccion, String>) -> Binding<Color> {
+        Binding(get: { colorDe(Aspecto.shared.eleccion[keyPath: clave]) },
+                set: { c in
+                    let h = hexDe(c)
+                    Aspecto.shared.cambia { $0[keyPath: clave] = h }
+                })
+    }
+
     var body: some View {
+        let aspecto = Aspecto.shared
         let cat = aspecto.catalogo
         let e = aspecto.eleccion
         Section {
-            MuestraApariencia()
-                .listRowInsets(EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12))
-            Picker("Modo", selection: enlace(\.modo)) {
-                Text("Sistema").tag("sistema")
-                Text("Claro").tag("claro")
-                Text("Oscuro").tag("oscuro")
+            ColorPicker("Fondo", selection: color(\.base), supportsOpacity: false)
+            if let s = cat?.sugerencias?.base { sugerencias(s, elegido: e.base, clave: \.base) }
+            ColorPicker("Acento", selection: color(\.acento), supportsOpacity: false)
+            if let s = cat?.sugerencias?.acento { sugerencias(s, elegido: e.acento, clave: \.acento) }
+            NavigationLink {
+                ElegirFuente(clave: \.fuente, titulo: "Letra")
+            } label: {
+                LabeledContent("Letra", value: cat?.fuente(e.fuente)?.nombre ?? e.fuente)
             }
-            .pickerStyle(.segmented)
+            NavigationLink {
+                ElegirFuente(clave: \.titulos, titulo: "Títulos")
+            } label: {
+                LabeledContent("Títulos", value: cat?.fuente(e.titulos)?.nombre ?? e.titulos)
+            }
             if let cat {
-                NavigationLink {
-                    ElegirPaleta()
-                } label: {
-                    LabeledContent("Paleta", value: cat.paleta(e.paleta)?.nombre ?? e.paleta)
-                }
-                NavigationLink {
-                    ElegirAcento()
-                } label: {
-                    LabeledContent("Acento", value: e.acento.isEmpty ? "El de la paleta" : (cat.acento(e.acento)?.nombre ?? e.acento))
-                }
-                NavigationLink {
-                    ElegirFuente()
-                } label: {
-                    LabeledContent("Letra", value: cat.fuentes.first { $0.id == e.fuente }?.nombre ?? e.fuente)
-                }
                 Picker("Esquinas", selection: enlace(\.esquinas)) {
                     ForEach(cat.esquinas) { Text($0.nombre).tag($0.id) }
                 }
                 Picker("Fondo de caracteres", selection: enlace(\.fondo)) {
                     ForEach(cat.fondos) { Text($0.nombre).tag($0.id) }
                 }
-            } else {
-                Text("Sin catálogo todavía: se baja la próxima vez que haya conexión.")
-                    .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
             }
+            Picker("Modo", selection: enlace(\.modo)) {
+                Text("Sistema").tag("sistema")
+                Text("Claro").tag("claro")
+                Text("Oscuro").tag("oscuro")
+            }
+            .pickerStyle(.segmented)
             Button("Restablecer", role: .destructive) { Aspecto.shared.restablece() }
         } header: {
-            Text("Apariencia")
+            Text("Personalizar")
         } footer: {
-            Text("Se guarda en el servidor: la web cambia igual.")
+            Text("Con el fondo y el acento se calculan todos los colores de claro y oscuro, igual que en la web.")
+        }
+    }
+
+    private func sugerencias(_ lista: [String], elegido: String, clave: WritableKeyPath<Eleccion, String>) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(lista, id: \.self) { hex in
+                    Button {
+                        Haptica.shared.toca(.marcar)
+                        Aspecto.shared.cambia { $0[keyPath: clave] = hex }
+                    } label: {
+                        Circle().fill(colorDe(hex))
+                            .frame(width: 28, height: 28)
+                            .overlay(Circle().strokeBorder(Tema.linea, lineWidth: 1))
+                            .overlay(Circle().strokeBorder(Tema.acento, lineWidth: hex.uppercased() == elegido.uppercased() ? 2.5 : 0).padding(-4))
+                            .padding(4)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(hex)
+                }
+            }
         }
     }
 }
@@ -63,6 +172,7 @@ struct SeccionApariencia: View {
 struct MuestraApariencia: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Tema.Espacio.m) {
+            Text("Hoy").font(Tema.fuente(.titulo)).foregroundStyle(Tema.texto)
             HStack(spacing: Tema.Espacio.m) {
                 ZStack {
                     Circle().fill(Tema.acento)
@@ -76,6 +186,7 @@ struct MuestraApariencia: View {
                     .padding(.horizontal, 8).padding(.vertical, 2)
                     .background(Tema.acentoSuave, in: Capsule())
             }
+            .carta(relleno: Tema.Espacio.m)
             HStack(alignment: .bottom) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Pasos ayer").estiloEtiqueta().foregroundStyle(Tema.suave)
@@ -88,153 +199,26 @@ struct MuestraApariencia: View {
                     .padding(.horizontal, 16).padding(.vertical, 9)
                     .background(Tema.acento, in: RoundedRectangle(cornerRadius: Tema.Radio.boton, style: .continuous))
             }
+            .carta(relleno: Tema.Espacio.m)
         }
-        .carta(relleno: Tema.Espacio.m)
-        .padding(Tema.Espacio.s)
+        .padding(Tema.Espacio.m)
         .background(Tema.fondo, in: RoundedRectangle(cornerRadius: Tema.Radio.carta + 6, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Vista previa de la apariencia")
     }
 }
 
-/// Las paletas en rejilla: cada muestra, mitad claro y mitad oscuro, con el punto de su acento.
-struct ElegirPaleta: View {
-    @State private var familia = "Todas"
-
-    var body: some View {
-        let aspecto = Aspecto.shared
-        let cat = aspecto.catalogo
-        let familias = ["Todas"] + Array(Set(cat?.paletas.map(\.familia) ?? [])).sorted()
-        let paletas = (cat?.paletas ?? []).filter { familia == "Todas" || $0.familia == familia }
-        let elegida = cat?.paleta(aspecto.eleccion.paleta)
-        ScrollView {
-            VStack(alignment: .leading, spacing: Tema.Espacio.l) {
-                if let elegida {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(elegida.nombre).font(Tema.fuente(.seccion)).foregroundStyle(Tema.texto)
-                        if let d = elegida.descripcion { Text(d).font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave) }
-                    }
-                    .contentTransition(.interpolate)
-                }
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: Tema.Espacio.s) {
-                        ForEach(familias, id: \.self) { f in
-                            Button(f) { withAnimation(Tema.Muelle.toque) { familia = f } }
-                                .font(Tema.fuente(.pequeno, peso: .medium))
-                                .padding(.horizontal, 12).padding(.vertical, 6)
-                                .foregroundStyle(familia == f ? Tema.acentoTexto : Tema.texto)
-                                .background(familia == f ? Tema.acento : Tema.carta, in: Capsule())
-                        }
-                    }
-                }
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: Tema.Espacio.m)], spacing: Tema.Espacio.m) {
-                    ForEach(paletas) { p in
-                        Button {
-                            Haptica.shared.toca(.marcar)
-                            aspecto.cambia { $0.paleta = p.id }
-                        } label: {
-                            MuestraPaleta(paleta: p, acento: cat?.acento(p.acento), elegida: p.id == aspecto.eleccion.paleta)
-                        }
-                        .buttonStyle(EstiloHundir())
-                    }
-                }
-            }
-            .padding(Tema.Espacio.l)
-        }
-        .background(Tema.fondo.ignoresSafeArea())
-        .navigationTitle("Paleta")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-struct MuestraPaleta: View {
-    let paleta: Catalogo.PaletaCat
-    let acento: Catalogo.AcentoCat?
-    let elegida: Bool
-
-    private func c(_ s: String) -> Color { Color(uiColor: UIColor(css: s)) }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 0) {
-                mitad(paleta.claro, acento?.claro.acento)
-                mitad(paleta.oscuro, acento?.oscuro.acento)
-            }
-            .frame(height: 64)
-            .clipShape(RoundedRectangle(cornerRadius: Tema.Radio.boton, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Tema.Radio.boton, style: .continuous)
-                .strokeBorder(elegida ? Tema.acento : Tema.linea, lineWidth: elegida ? 2.5 : 1))
-            Text(paleta.nombre)
-                .font(Tema.fuente(.pequeno, peso: elegida ? .semibold : .regular))
-                .foregroundStyle(Tema.texto)
-                .lineLimit(1)
-        }
-        .accessibilityLabel("\(paleta.nombre)\(elegida ? ", elegida" : "")")
-    }
-
-    private func mitad(_ t: Catalogo.Tonos, _ ac: String?) -> some View {
-        ZStack(alignment: .bottomLeading) {
-            c(t.fondo)
-            RoundedRectangle(cornerRadius: 4).fill(c(t.carta)).frame(height: 22).padding(6).offset(y: -14)
-            Circle().fill(c(ac ?? t.texto)).frame(width: 10, height: 10).padding(8)
-        }
-    }
-}
-
-/// Acento: «El de la paleta» o uno de la lista.
-struct ElegirAcento: View {
-    var body: some View {
-        let aspecto = Aspecto.shared
-        let cat = aspecto.catalogo
-        List {
-            Section {
-                fila(nombre: "El de la paleta", claro: nil, oscuro: nil, elegido: aspecto.eleccion.acento.isEmpty) {
-                    aspecto.cambia { $0.acento = "" }
-                }
-            }
-            Section {
-                ForEach(cat?.acentos ?? []) { a in
-                    fila(nombre: a.nombre, claro: a.claro.acento, oscuro: a.oscuro.acento, elegido: aspecto.eleccion.acento == a.id) {
-                        aspecto.cambia { $0.acento = a.id }
-                    }
-                }
-            }
-        }
-        .scrollContentBackground(.hidden)
-        .background(Tema.fondo.ignoresSafeArea())
-        .navigationTitle("Acento")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private func fila(nombre: String, claro: String?, oscuro: String?, elegido: Bool, accion: @escaping () -> Void) -> some View {
-        Button(action: accion) {
-            HStack(spacing: Tema.Espacio.m) {
-                if let claro, let oscuro {
-                    HStack(spacing: -6) {
-                        Circle().fill(Color(uiColor: UIColor(css: claro))).frame(width: 22, height: 22)
-                        Circle().fill(Color(uiColor: UIColor(css: oscuro))).frame(width: 22, height: 22)
-                            .overlay(Circle().strokeBorder(Tema.carta, lineWidth: 2))
-                    }
-                } else {
-                    Image(systemName: "paintpalette").foregroundStyle(Tema.acento).frame(width: 38)
-                }
-                Text(nombre).foregroundStyle(Tema.texto)
-                Spacer()
-                if elegido { Image(systemName: "checkmark").foregroundStyle(Tema.acento) }
-            }
-        }
-        .listRowBackground(Tema.carta)
-    }
-}
-
-/// Letra: cada nombre escrito en su propia fuente.
+/// Letra o títulos: cada nombre escrito en su propia fuente.
 struct ElegirFuente: View {
+    let clave: WritableKeyPath<Eleccion, String>
+    let titulo: String
+
     var body: some View {
         let aspecto = Aspecto.shared
         List {
             ForEach(aspecto.catalogo?.fuentes ?? []) { f in
                 Button {
-                    aspecto.cambia { $0.fuente = f.id }
+                    aspecto.cambia { $0[keyPath: clave] = f.id }
                 } label: {
                     HStack {
                         let familia = f.familia_ios ?? ""
@@ -242,7 +226,7 @@ struct ElegirFuente: View {
                             .font(familia.isEmpty ? Font.system(size: 20) : Font.custom(familia, size: 20))
                             .foregroundStyle(Tema.texto)
                         Spacer()
-                        if aspecto.eleccion.fuente == f.id { Image(systemName: "checkmark").foregroundStyle(Tema.acento) }
+                        if aspecto.eleccion[keyPath: clave] == f.id { Image(systemName: "checkmark").foregroundStyle(Tema.acento) }
                     }
                     .padding(.vertical, 4)
                 }
@@ -251,7 +235,7 @@ struct ElegirFuente: View {
         }
         .scrollContentBackground(.hidden)
         .background(Tema.fondo.ignoresSafeArea())
-        .navigationTitle("Letra")
+        .navigationTitle(titulo)
         .navigationBarTitleDisplayMode(.inline)
     }
 }

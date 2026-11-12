@@ -56,6 +56,7 @@ final class DatosNativos {
             error = nil
             ultimaCarga = Date()
             tareasHechas = []
+            actualizaIsla()
         } catch {
             self.error = error.localizedDescription
         }
@@ -96,6 +97,7 @@ final class DatosNativos {
     func marca(_ id: String, hecho nuevo: Bool, dia: String = Fecha.hoy()) async -> Bool {
         let antes = hecho(id, dia: dia)
         withAnimation(Tema.Muelle.toque) { aplica(id, nuevo, dia) }
+        actualizaIsla()
         do {
             try await API.marcaOEncola(habito: id, hecho: nuevo, dia: dia)
             WidgetCenter.shared.reloadAllTimelines()
@@ -129,6 +131,16 @@ final class DatosNativos {
             _ = withAnimation(Tema.Muelle.toque) { tareasHechas.remove(id) }
             self.error = error.localizedDescription
         }
+    }
+
+    /// «Día en la isla» (si está activado): los anillos de hoy.
+    func actualizaIsla() {
+        let hs = habitosDeHoy
+        let hechos = hs.filter(\.hecho).count
+        let pasos = Double(hoy?.salud?.pasos?.ultimo ?? 0) / 10_000
+        let sueno = Double(hoy?.salud?.sueno?.ultimo ?? 0) / 480
+        Isla.dia(habitos: hs.isEmpty ? 0 : Double(hechos) / Double(hs.count), pasos: pasos, sueno: sueno,
+                 texto: hs.isEmpty ? "Nada planificado" : "\(hechos) de \(hs.count) hábitos")
     }
 
     // MARK: lo que se pinta

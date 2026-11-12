@@ -85,6 +85,7 @@ struct HoyWidgets: WidgetBundle {
         HoyWidget()
         HoyDatoWidget()
         EntrenoLiveActivity()
+        AvisoLiveActivity()
         if #available(iOS 18.0, *) {
             HablaConTomControl()
         }

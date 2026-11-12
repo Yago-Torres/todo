@@ -187,7 +187,10 @@ enum Freno {
     static func entra(_ app: AppFrenada, minutos: Int) {
         daPase(app, minutos: minutos)
         apunta(app) { $0.entradas += 1; $0.minutos += minutos }
-        Task { @MainActor in _ = await UIApplication.shared.open(app.enlace) }
+        Task { @MainActor in
+            Isla.pase(app.nombre, minutos: minutos)   // «Instagram · 4:59» en la isla hasta que caduque
+            _ = await UIApplication.shared.open(app.enlace)
+        }
     }
 
     static func renuncia(_ app: AppFrenada) {
