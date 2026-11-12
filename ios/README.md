@@ -215,6 +215,21 @@ PantallaEditable(pantalla: "app-entreno", titulo: "Entreno",
 - `pie:` (opcional) pinta algo tras el último bloque, `recarga:` activa tirar para recargar, y
   `@Environment(\.editarPantalla)` permite abrir la edición desde dentro de un bloque.
 
+### Entreno y Carrera nativos (`Hoy/Nativo/Entreno/`, `Hoy/Nativo/Carrera/`)
+
+- **Datos**: `DatosEntreno` lee `/api/state` y guarda con un PUT del estado entero con `X-Version`, como la web. Un 409 se
+  junta con `Fusion` a partir de lo último del servidor; sin red, el PUT va a la cola de `Local` (con su base) y la copia
+  local se queda con lo cambiado. Solo reescribe `rutinas`, `log`, `plan`, `sesion`, `gym` y `peso`; lo demás va tal cual.
+- **Modo entreno** (`SesionEnCurso`, `VistaSesion`): serie a serie en `gym` de hoy, marcar manteniendo 0,6 s, descanso
+  a pantalla completa (−15/+15/Terminar, pitidos y vibración), récords y doble progresión como entreno.html. La pantalla no
+  se apaga. Lo que está en marcha (y una copia de la sesión) va en `UserDefaults` «entreno.enMarcha»: si iOS mata la app,
+  `Entreno.init` vuelve a Entreno y la sesión se reabre. La rutina guiada (`GuiaEnCurso`) igual, «entreno.guiaEnMarcha».
+- **Isla**: la sesión nativa alimenta la Live Activity (`Entreno.muestraNativo`) y el «Serie hecha» de la isla la marca
+  la propia pantalla nativa (`Entreno.nativo`), también en segundo plano. El puente web (`{accion:"entreno"}`) sigue.
+- **Monigotes y cuerpo**: `monigotes.json` y `cuerpo.json` salen de `static/monigotes.js` y del `CUERPO` de
+  entreno.html (un script de node que los evalúa). Si cambian en la web, hay que regenerarlos.
+- `/carrera.html` va en su pantalla, pero `Navegador.seccion` la lleva a la pestaña Entreno: desde ahí, «Plan y gráficas».
+
 ## Apariencia, gestos e isla
 
 **Temas al estilo monkeytype + colores libres.** Catálogo v2 (`GET /apariencia.json`, copia en `Hoy/apariencia.json`):
