@@ -5,8 +5,8 @@
 <meta name="color-scheme" content="light dark">
 <meta name="calma-datos" content="/api/carrera">
 <meta name="calma-entrada" content="espera">
-<meta name="theme-color" content="#F4F5F0" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#171A16" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F2F2F2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)">
 <title>Carrera</title>
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
@@ -14,14 +14,12 @@
 <link rel="manifest" href="/manifest.json" crossorigin="use-credentials">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Carrera">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<link rel="stylesheet" href="/calma.css?v=c6f4bacb">
+<link rel="preload" href="/fuentes/instrument-sans-normal-latin.woff2?v=1" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/calma.css?v=f8384bb4">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="/calma.js?v=c6f4bacb"></script>
+<script src="/calma.js?v=f8384bb4"></script>
 <script src="/anime-4.5.0.min.js"></script>
-<script src="/anima.js?v=c6f4bacb"></script>
+<script src="/anima.js?v=f8384bb4"></script>
 <style>
   /* de una página a otra, la cabecera vuela y la barra de abajo se queda quieta (calma.css, calma.js) */
   @view-transition { navigation: auto; }
@@ -32,57 +30,57 @@
   .col { display: grid; gap: 14px; align-content: start; min-width: 0; }
   @media (min-width: 920px) { .app { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); } }
   .top { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 4px 2px 0; }
-  h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -.02em; }
+  h1 { margin: 0; font-size: var(--t-titulo); font-weight: 700; letter-spacing: -.02em; }
   .top nav { margin-left: auto; display: flex; gap: 6px; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
   .top nav a { text-decoration: none; }
-  #estado { font-size: 13px; color: var(--suave); }
+  #estado { font-size: var(--t-pequeno); color: var(--suave); }
   .carta { padding: 16px; min-width: 0; }
   .carta h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .carta h2 .der { margin-left: auto; font-weight: 400; }
-  .vacio { margin: 0; padding: 8px 2px; font-size: 14px; color: var(--suave); }
+  .vacio { margin: 0; padding: 8px 2px; font-size: var(--t-texto); color: var(--suave); }
 
-  .eti-sup { font-size: 13px; color: var(--suave); }
-  .cifra { font-size: 46px; font-weight: 700; letter-spacing: -.03em; line-height: 1.1; margin: 2px 0; font-variant-numeric: tabular-nums; }
-  .bajo { margin: 0 0 12px; font-size: 14px; color: var(--suave); }
+  .eti-sup { font-size: var(--t-pequeno); color: var(--suave); }
+  .cifra { font-size: var(--t-gigante); font-weight: 700; letter-spacing: -.03em; line-height: 1.1; margin: 2px 0; font-variant-numeric: tabular-nums; }
+  .bajo { margin: 0 0 12px; font-size: var(--t-texto); color: var(--suave); }
   .tres { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
   .tres div { background: var(--carta-2); border-radius: var(--r-s); padding: 10px; min-width: 0; }
-  .tres small { display: block; font-size: 12px; color: var(--suave); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .tres b { font-size: 17px; font-weight: 650; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .proy { margin: 12px 0 0; font-size: 14px; }
+  .tres small { display: block; font-size: var(--t-pequeno); color: var(--suave); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tres b { font-size: var(--t-destacado); font-weight: 650; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .proy { margin: 12px 0 0; font-size: var(--t-texto); }
 
   .ses { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
   .ses li { display: grid; grid-template-columns: 4.2em minmax(0, 1fr) auto; gap: 10px; align-items: center;
             padding: 10px; border-radius: var(--r-s); background: var(--carta-2); }
-  .ses .d { font-size: 13px; font-weight: 600; color: var(--suave); }
+  .ses .d { font-size: var(--t-pequeno); font-weight: 600; color: var(--suave); }
   .ses .n { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ses .n i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--c); margin-right: 8px; vertical-align: 1px; }
   .ses li.hecho .n { color: var(--suave); text-decoration: line-through; text-decoration-color: var(--tenue); }
   .ses li.hoy { box-shadow: inset 0 0 0 2px var(--acento); }
 
   .ins { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; }
-  .ins li { display: flex; gap: 10px; font-size: 14px; line-height: 1.45; }
+  .ins li { display: flex; gap: 10px; font-size: var(--t-texto); line-height: 1.45; }
   .ins li::before { content: "→"; color: var(--acento); font-weight: 700; }
 
-  table.ritmos { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table.ritmos { width: 100%; border-collapse: collapse; font-size: var(--t-texto); }
   table.ritmos td { padding: 8px 4px; border-bottom: 1px solid var(--linea); }
   table.ritmos tr:last-child td { border-bottom: 0; }
   table.ritmos td:last-child { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  table.ritmos small { display: block; color: var(--suave); font-size: 12px; }
+  table.ritmos small { display: block; color: var(--suave); font-size: var(--t-pequeno); }
 
   .lienzo { position: relative; height: 240px; }
-  .leyenda { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: -4px 0 10px; font-size: 13px; color: var(--suave); }
+  .leyenda { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: -4px 0 10px; font-size: var(--t-pequeno); color: var(--suave); }
   .leyenda span { display: inline-flex; align-items: center; gap: 6px; }
   .leyenda s { display: inline-block; width: 16px; height: 0; border-top: 2px solid var(--c); text-decoration: none; }
   .leyenda s.raya { border-top-style: dashed; }
   .leyenda s.punto { width: 9px; height: 9px; border: 0; border-radius: 50%; background: var(--c); }
   .leyenda s.caja { width: 12px; height: 10px; border: 0; border-radius: 3px; background: var(--c); }
-  details.datos { margin-top: 8px; font-size: 13px; color: var(--suave); }
+  details.datos { margin-top: 8px; font-size: var(--t-pequeno); color: var(--suave); }
   details.datos summary { cursor: pointer; width: max-content; }
   details.datos .scroll { max-height: 240px; overflow: auto; }
   details.datos table { width: 100%; border-collapse: collapse; margin-top: 6px; font-variant-numeric: tabular-nums; }
   details.datos th, details.datos td { text-align: right; padding: 4px 6px; border-bottom: 1px solid var(--linea); font-weight: 400; white-space: nowrap; }
   details.datos th:first-child, details.datos td:first-child { text-align: left; }
-  details.como p { font-size: 14px; color: var(--suave); margin: 8px 0 0; }
+  details.como p { font-size: var(--t-texto); color: var(--suave); margin: 8px 0 0; }
   details.como summary { cursor: pointer; font-weight: 600; }
   .puerta input { width: 100%; }
   .puerta button { width: 100%; }

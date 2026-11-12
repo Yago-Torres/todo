@@ -5,8 +5,8 @@
 <meta name="color-scheme" content="light dark">
 <meta name="calma-datos" content="/api/documentos">
 <meta name="calma-entrada" content="espera">
-<meta name="theme-color" content="#F4F5F0" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#171A16" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F2F2F2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)">
 <title>Documentos</title>
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
@@ -14,15 +14,13 @@
 <link rel="manifest" href="/manifest.json" crossorigin="use-credentials">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Documentos">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<link rel="stylesheet" href="/calma.css?v=c6f4bacb">
-<script src="/calma.js?v=c6f4bacb"></script>
+<link rel="preload" href="/fuentes/instrument-sans-normal-latin.woff2?v=1" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/calma.css?v=f8384bb4">
+<script src="/calma.js?v=f8384bb4"></script>
 <script src="/tom.js?v=1"></script>
 <script src="/mascota.js?v=6"></script>
 <script src="/anime-4.5.0.min.js"></script>
-<script src="/anima.js?v=c6f4bacb"></script>
+<script src="/anima.js?v=f8384bb4"></script>
 <style>
   /* de una página a otra, la cabecera vuela y la barra de abajo se queda quieta (calma.css, calma.js) */
   @view-transition { navigation: auto; }
@@ -33,18 +31,18 @@
   .col { display: grid; gap: 14px; align-content: start; min-width: 0; }
   @media (min-width: 920px) { .app { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); } }
   .top { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 4px 2px 0; }
-  h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -.02em; }
+  h1 { margin: 0; font-size: var(--t-titulo); font-weight: 700; letter-spacing: -.02em; }
   .top nav { margin-left: auto; display: flex; gap: 6px; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
   .top nav a { text-decoration: none; }
-  #estado { font-size: 13px; color: var(--suave); }
+  #estado { font-size: var(--t-pequeno); color: var(--suave); }
   .carta { padding: 16px; min-width: 0; }
   .carta h2 { margin: 0 0 10px; font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
-  .vacio { margin: 0; padding: 6px 2px; font-size: 14px; color: var(--suave); }
-  .pista { margin: 2px 2px 0; font-size: 13px; color: var(--suave); line-height: 1.45; }
+  .vacio { margin: 0; padding: 6px 2px; font-size: var(--t-texto); color: var(--suave); }
+  .pista { margin: 2px 2px 0; font-size: var(--t-pequeno); color: var(--suave); line-height: 1.45; }
 
   form.doc { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   form.doc > .c-campo, form.doc > .ancho { grid-column: 1 / -1; }
-  form.doc label { display: grid; gap: 4px; font-size: 13px; color: var(--suave); min-width: 0; }
+  form.doc label { display: grid; gap: 4px; font-size: var(--t-pequeno); color: var(--suave); min-width: 0; }
   form.doc textarea { min-height: 60px; resize: vertical; font: inherit; }
   .fichero { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 14px; border: 1px dashed var(--linea);
              border-radius: var(--r-s); cursor: pointer; color: var(--suave); overflow: hidden; }
@@ -53,16 +51,16 @@
   .fichero:focus-within { border-color: var(--acento); }
   .acciones { display: flex; gap: 8px; justify-content: flex-end; }
 
-  .grupo { margin: 14px 4px 4px; font-size: 13px; font-weight: 600; color: var(--suave); }
+  .grupo { margin: 14px 4px 4px; font-size: var(--t-pequeno); font-weight: 600; color: var(--suave); }
   .grupo:first-child { margin-top: 0; }
   .item { padding: 10px 4px; border-bottom: 1px solid var(--linea); }
   .item:last-child { border-bottom: 0; }
   .item .fila { display: flex; gap: 10px; align-items: flex-start; }
   .item .t { flex: 1; min-width: 0; background: none; border: 0; padding: 0; text-align: left; font: inherit; color: inherit; cursor: pointer; }
   .item .t b { display: block; font-weight: 600; overflow-wrap: anywhere; }
-  .item .t small { display: block; font-size: 12px; color: var(--suave); margin-top: 2px; }
+  .item .t small { display: block; font-size: var(--t-pequeno); color: var(--suave); margin-top: 2px; }
   .item .ver { flex: none; text-decoration: none; }
-  .item .c-chip { font-size: 12px; padding: 1px 8px; }
+  .item .c-chip { font-size: var(--t-pequeno); padding: 1px 8px; }
   .item form.doc { margin-top: 10px; padding: 12px; background: var(--carta-2); border-radius: var(--r-s); }
   .item form.doc .c-campo { background: var(--carta); }
   .puerta input, .puerta button { width: 100%; }

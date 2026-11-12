@@ -5,8 +5,8 @@
 <meta name="color-scheme" content="light dark">
 <meta name="calma-datos" content="/api/sueno">
 <meta name="calma-entrada" content="espera">
-<meta name="theme-color" content="#F4F5F0" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#171A16" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F2F2F2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)">
 <title>Salud</title>
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
@@ -14,16 +14,14 @@
 <link rel="manifest" href="/manifest.json" crossorigin="use-credentials">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Salud">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<link rel="stylesheet" href="/calma.css?v=c6f4bacb">
+<link rel="preload" href="/fuentes/instrument-sans-normal-latin.woff2?v=1" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/calma.css?v=f8384bb4">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="/calma.js?v=c6f4bacb"></script>
+<script src="/calma.js?v=f8384bb4"></script>
 <script src="/tom.js?v=1"></script>
 <script src="/mascota.js?v=6"></script>
 <script src="/anime-4.5.0.min.js"></script>
-<script src="/anima.js?v=c6f4bacb"></script>
+<script src="/anima.js?v=f8384bb4"></script>
 <style>
   /* de una página a otra, la cabecera vuela y la barra de abajo se queda quieta (calma.css, calma.js) */
   @view-transition { navigation: auto; }
@@ -37,39 +35,39 @@
   .col { display: grid; gap: 14px; align-content: start; min-width: 0; }
   @media (min-width: 920px) { .app { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); } }
   .top { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 4px 2px 0; }
-  h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -.02em; }
+  h1 { margin: 0; font-size: var(--t-titulo); font-weight: 700; letter-spacing: -.02em; }
   .top nav { margin-left: auto; display: flex; gap: 6px; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
   .top nav a { text-decoration: none; }
-  #estado { font-size: 13px; color: var(--suave); }
+  #estado { font-size: var(--t-pequeno); color: var(--suave); }
   .carta { padding: 16px; min-width: 0; }
   .carta h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
   .carta h2 .der { margin-left: auto; font-weight: 400; }
-  .vacio { margin: 0; padding: 8px 2px; font-size: 14px; color: var(--suave); }
+  .vacio { margin: 0; padding: 8px 2px; font-size: var(--t-texto); color: var(--suave); }
 
-  .eti-sup { font-size: 13px; color: var(--suave); }
+  .eti-sup { font-size: var(--t-pequeno); color: var(--suave); }
   .nota { display: flex; align-items: baseline; gap: 10px; }
-  .cifra { font-size: 46px; font-weight: 700; letter-spacing: -.03em; line-height: 1.1; margin: 2px 0; font-variant-numeric: tabular-nums; }
-  .bajo { margin: 0; font-size: 14px; color: var(--suave); }
+  .cifra { font-size: var(--t-gigante); font-weight: 700; letter-spacing: -.03em; line-height: 1.1; margin: 2px 0; font-variant-numeric: tabular-nums; }
+  .bajo { margin: 0; font-size: var(--t-texto); color: var(--suave); }
   .tres { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
   .tres div { background: var(--carta-2); border-radius: var(--r-s); padding: 10px; min-width: 0; }
-  .tres small { display: block; font-size: 12px; color: var(--suave); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .tres b { font-size: 17px; font-weight: 650; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .tres b span { font-size: 13px; font-weight: 400; color: var(--suave); }
+  .tres small { display: block; font-size: var(--t-pequeno); color: var(--suave); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tres b { font-size: var(--t-destacado); font-weight: 650; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .tres b span { font-size: var(--t-pequeno); font-weight: 400; color: var(--suave); }
 
   .lienzo { position: relative; height: 240px; }
-  .tres b small { display: block; font-size: 12px; font-weight: 500; }
+  .tres b small { display: block; font-size: var(--t-pequeno); font-weight: 500; }
   .sube { color: var(--peligro); } .baja { color: var(--acento); }
   .lienzo.bajo-h { height: 200px; }
-  .leyenda { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: -4px 0 10px; font-size: 13px; color: var(--suave); }
+  .leyenda { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: -4px 0 10px; font-size: var(--t-pequeno); color: var(--suave); }
   .leyenda span { display: inline-flex; align-items: center; gap: 6px; }
   .leyenda s { display: inline-block; width: 12px; height: 10px; border-radius: 3px; background: var(--c); text-decoration: none; }
-  details.datos { margin-top: 8px; font-size: 13px; color: var(--suave); }
+  details.datos { margin-top: 8px; font-size: var(--t-pequeno); color: var(--suave); }
   details.datos summary { cursor: pointer; width: max-content; }
   details.datos .scroll { max-height: 240px; overflow: auto; }
   details.datos table { width: 100%; border-collapse: collapse; margin-top: 6px; font-variant-numeric: tabular-nums; }
   details.datos th, details.datos td { text-align: right; padding: 4px 6px; border-bottom: 1px solid var(--linea); font-weight: 400; white-space: nowrap; }
   details.datos th:first-child, details.datos td:first-child { text-align: left; }
-  details.como p { font-size: 14px; color: var(--suave); margin: 8px 0 0; }
+  details.como p { font-size: var(--t-texto); color: var(--suave); margin: 8px 0 0; }
   details.como summary { cursor: pointer; font-weight: 600; }
   .puerta input, .puerta button { width: 100%; }
 </style>
@@ -247,7 +245,7 @@ function cuerpo() {
       };
       requestAnimationFrame(paso);
     }
-    $("#peso").lastChild.style.cssText = "font-size: 18px; font-weight: 500; color: var(--suave)";
+    $("#peso").lastChild.style.cssText = "font-size: var(--t-destacado); font-weight: 500; color: var(--suave)";
     const sub = $("#peso-sub");
     sub.replaceChildren(`${larga(d)} · media 7 días ${coma(m)} kg`);
     if (hace30) sub.append(" · en 30 días", cambio(m, media7(P, hace30[0]), " kg"));

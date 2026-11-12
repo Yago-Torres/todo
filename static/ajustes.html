@@ -3,8 +3,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#F4F5F0" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#171A16" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F2F2F2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)">
 <title>Ajustes</title>
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
@@ -13,15 +13,13 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Ajustes">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<link rel="stylesheet" href="/calma.css?v=c6f4bacb">
-<script src="/calma.js?v=c6f4bacb"></script>
+<link rel="preload" href="/fuentes/instrument-sans-normal-latin.woff2?v=1" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/calma.css?v=f8384bb4">
+<script src="/calma.js?v=f8384bb4"></script>
 <script src="/tom.js?v=1"></script>
 <script src="/mascota.js?v=6"></script>
 <script src="/anime-4.5.0.min.js"></script>
-<script src="/anima.js?v=c6f4bacb"></script>
+<script src="/anima.js?v=f8384bb4"></script>
 <style>
   /* de una página a otra, la cabecera vuela y la barra de abajo se queda quieta (calma.css, calma.js) */
   @view-transition { navigation: auto; }
@@ -33,38 +31,38 @@
   @media (min-width: 920px) { .app { grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); } }
   .top { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 4px 2px 0; }
   header.top { min-height: 0; padding-right: 2px; }
-  h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -.02em; }
+  h1 { margin: 0; font-size: var(--t-titulo); font-weight: 700; letter-spacing: -.02em; }
   .top nav { margin-left: auto; }
-  #estado { font-size: 13px; color: var(--suave); }
+  #estado { font-size: var(--t-pequeno); color: var(--suave); }
   .carta { padding: 16px; min-width: 0; }
   .carta h2 { margin: 0 0 10px; font-size: 16px; font-weight: 600; }
-  .pista { margin: 0 0 12px; font-size: 13px; color: var(--suave); }
+  .pista { margin: 0 0 12px; font-size: var(--t-pequeno); color: var(--suave); }
   input[type=checkbox] { width: 20px; height: 20px; margin: 0; accent-color: var(--acento); }
   input[type=range] { width: 100%; accent-color: var(--acento); }
   input[type=color] { width: 44px; height: 32px; padding: 0; border: 1px solid var(--linea); border-radius: 8px; background: none; }
   #modulos { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px 18px; align-items: center; }
-  #modulos .cab { font-size: 12px; color: var(--suave); text-align: center; }
+  #modulos .cab { font-size: var(--t-pequeno); color: var(--suave); text-align: center; }
   #modulos .nom { font-weight: 500; display: flex; align-items: center; gap: 8px; }
   #modulos input { justify-self: center; }
   #limites { display: grid; gap: 8px; }
   .limite { display: grid; grid-template-columns: minmax(0, 1fr) 96px auto; align-items: center; gap: 10px; font-weight: 500; }
   .limite .c-campo { text-align: right; }
-  .limite small { font-size: 13px; color: var(--suave); font-weight: 400; }
+  .limite small { font-size: var(--t-pequeno); color: var(--suave); font-weight: 400; }
   .escenario { display: grid; place-items: center; padding: 18px 0 14px; margin-bottom: 12px; border-radius: 12px; background: var(--carta-2); }
   #sitio-fantasma { width: min(100%, 320px); height: 180px; position: relative; }
   #sitio-fantasma #fantasma { position: static; width: 100%; height: 100%; }
   #sitio-fantasma #fantasma.flor .mec { stroke-width: .5; }
-  .eleccion { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; font-size: 14px; }
+  .eleccion { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; font-size: var(--t-texto); }
   .eleccion select { width: auto; min-height: 36px; }
   .probar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
   .controles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px 16px; }
-  .controles label { display: grid; gap: 4px; font-size: 12px; color: var(--suave); }
+  .controles label { display: grid; gap: 4px; font-size: var(--t-pequeno); color: var(--suave); }
   .controles label > span { display: flex; justify-content: space-between; }
-  .fila-op { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px; margin-top: 14px; font-size: 14px; }
+  .fila-op { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px; margin-top: 14px; font-size: var(--t-texto); }
   .fila-op label { display: flex; align-items: center; gap: 8px; }
   .solo-fantasma[hidden] { display: none; }
   .opcion { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-height: 44px; font-weight: 500; }
-  .opcion small { display: block; margin-top: 2px; font-size: 13px; font-weight: 400; color: var(--suave); }
+  .opcion small { display: block; margin-top: 2px; font-size: var(--t-pequeno); font-weight: 400; color: var(--suave); }
   .opcion-app { width: 100%; margin-top: 12px; min-height: 44px; }
   .opcion-app[hidden] { display: none; }
 </style>

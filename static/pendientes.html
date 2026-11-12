@@ -5,8 +5,8 @@
 <meta name="color-scheme" content="light dark">
 <meta name="calma-datos" content="/api/bandeja">
 <meta name="calma-entrada" content="espera">
-<meta name="theme-color" content="#F4F5F0" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#171A16" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F2F2F2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)">
 <title>Pendientes</title>
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
@@ -14,16 +14,14 @@
 <link rel="manifest" href="/manifest.json" crossorigin="use-credentials">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Pendientes">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<link rel="stylesheet" href="/calma.css?v=c6f4bacb">
-<script src="/calma.js?v=c6f4bacb"></script>
+<link rel="preload" href="/fuentes/instrument-sans-normal-latin.woff2?v=1" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/calma.css?v=f8384bb4">
+<script src="/calma.js?v=f8384bb4"></script>
 <script src="/tom.js?v=1"></script>
 <script src="/mascota.js?v=6"></script>
 <script src="/anime-4.5.0.min.js"></script>
-<script src="/anima.js?v=c6f4bacb"></script>
-<script src="/hoja.js?v=c6f4bacb"></script>
+<script src="/anima.js?v=f8384bb4"></script>
+<script src="/hoja.js?v=f8384bb4"></script>
 <style>
   /* de una página a otra, la cabecera vuela y la barra de abajo se queda quieta (calma.css, calma.js) */
   @view-transition { navigation: auto; }
@@ -34,20 +32,20 @@
   .col { display: grid; gap: 14px; align-content: start; min-width: 0; }
   @media (min-width: 920px) { .app { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); } }
   .top { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 4px 2px 0; }
-  h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -.02em; }
+  h1 { margin: 0; font-size: var(--t-titulo); font-weight: 700; letter-spacing: -.02em; }
   .top nav { margin-left: auto; display: flex; gap: 6px; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
   .top nav a { text-decoration: none; }
-  #estado { font-size: 13px; color: var(--suave); }
+  #estado { font-size: var(--t-pequeno); color: var(--suave); }
   .carta { padding: 16px; min-width: 0; }
   .carta h2 { margin: 0 0 10px; font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
-  .carta h2 .c-chip { font-size: 12px; padding: 1px 8px; }
-  .vacio { margin: 0; padding: 6px 2px; font-size: 14px; color: var(--suave); }
+  .carta h2 .c-chip { font-size: var(--t-pequeno); padding: 1px 8px; }
+  .vacio { margin: 0; padding: 6px 2px; font-size: var(--t-texto); color: var(--suave); }
   a { color: inherit; }
 
   /* apuntar: el texto y una píldora con el cuándo, que abre la hoja. Por defecto, hoy */
   form.nueva { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr) auto; }
   form.nueva .c-campo { grid-column: 1 / -1; }
-  form.nueva .pista { grid-column: 1 / -1; margin: 2px 2px 0; font-size: 13px; color: var(--suave); }
+  form.nueva .pista { grid-column: 1 / -1; margin: 2px 2px 0; font-size: var(--t-pequeno); color: var(--suave); }
   .cuando-btn { justify-self: start; display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 16px 0 12px;
                 border-radius: 999px; border: 1px solid var(--linea); background: var(--carta-2); font-weight: 500; }
   .cuando-btn svg, .h-cab svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
@@ -55,7 +53,7 @@
 
   .tarea .t[role="button"] { cursor: pointer; }
 
-  .grupo { margin: 14px 4px 4px; font-size: 13px; font-weight: 600; color: var(--suave); display: flex; gap: 6px; }
+  .grupo { margin: 14px 4px 4px; font-size: var(--t-pequeno); font-weight: 600; color: var(--suave); display: flex; gap: 6px; }
   .grupo:first-of-type { margin-top: 0; }
   .grupo.mal { color: var(--peligro); }
   .tarea { display: flex; align-items: flex-start; gap: 10px; padding: 8px 4px; border-radius: var(--r-s); }
@@ -66,28 +64,28 @@
   .tarea .bx.ok { display: grid; place-items: center; padding: 0; background: var(--acento); border: 2px solid var(--acento); color: var(--acento-texto); }
   .tarea .bx svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
   .tarea .t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-  .tarea .t small { display: block; font-size: 12px; color: var(--suave); }
+  .tarea .t small { display: block; font-size: var(--t-pequeno); color: var(--suave); }
   .tarea .t small a { text-decoration: none; }
-  .tarea .cuando { flex: none; font-size: 12px; font-weight: 600; color: var(--suave); white-space: nowrap; padding-top: 2px; font-variant-numeric: tabular-nums; }
+  .tarea .cuando { flex: none; font-size: var(--t-pequeno); font-weight: 600; color: var(--suave); white-space: nowrap; padding-top: 2px; font-variant-numeric: tabular-nums; }
   .tarea .cuando.mal { color: var(--peligro); }
   .tarea .cuando.hoy { color: var(--acento); }
   details.mas { margin-top: 10px; border-top: 1px solid var(--linea); padding-top: 8px; }
-  details.mas summary { cursor: pointer; font-size: 14px; font-weight: 500; padding: 6px 4px; list-style-position: inside; }
+  details.mas summary { cursor: pointer; font-size: var(--t-texto); font-weight: 500; padding: 6px 4px; list-style-position: inside; }
   details.mas summary small { color: var(--suave); font-weight: 400; }
-  details.mas .nota { margin: 8px 4px 0; font-size: 12px; font-weight: 600; color: var(--suave); }
+  details.mas .nota { margin: 8px 4px 0; font-size: var(--t-pequeno); font-weight: 600; color: var(--suave); }
   details.mas .nota a { text-decoration: none; }
 
   .item { padding: 12px 4px; border-bottom: 1px solid var(--linea); }
   .item:last-child { border-bottom: 0; }
   .item .tit { font-weight: 600; text-decoration: none; display: block; overflow-wrap: anywhere; }
-  .item .meta { font-size: 12px; color: var(--suave); margin: 2px 0 4px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-  .item p { margin: 0; font-size: 14px; color: var(--suave); line-height: 1.45; }
+  .item .meta { font-size: var(--t-pequeno); color: var(--suave); margin: 2px 0 4px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .item p { margin: 0; font-size: var(--t-texto); color: var(--suave); line-height: 1.45; }
   .item .acc { display: flex; gap: 6px; margin-top: 8px; }
   .item .acc a { text-decoration: none; }
   .lista-simple a { display: flex; gap: 10px; align-items: baseline; padding: 8px 4px; text-decoration: none; border-radius: var(--r-s); }
   .lista-simple a:hover { background: var(--carta-2); }
   .lista-simple a span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .lista-simple a small { flex: none; font-size: 12px; color: var(--suave); }
+  .lista-simple a small { flex: none; font-size: var(--t-pequeno); color: var(--suave); }
   .puerta input, .puerta button { width: 100%; }
   @media (prefers-reduced-motion: no-preference) { .tarea.fuera { opacity: 0; transform: translateX(12px); transition: opacity .2s, transform .2s; } }
 </style>

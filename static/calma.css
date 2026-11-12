@@ -3,36 +3,52 @@
    No edites la copia de una app: se pisa en el siguiente aplica.sh. Lo propio de cada
    app va en su <style>, usando SOLO estos tokens. */
 
+/* Instrument Sans servida desde la propia app (fuentes/, copiada por aplica.sh): sin esperar a Google ni saltos */
+@font-face { font-family: "Instrument Sans"; font-style: normal; font-weight: 400 700; font-stretch: 75% 100%; font-display: swap;
+  src: url("/fuentes/instrument-sans-normal-latin.woff2?v=1") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Instrument Sans"; font-style: normal; font-weight: 400 700; font-stretch: 75% 100%; font-display: swap;
+  src: url("/fuentes/instrument-sans-normal-latin-ext.woff2?v=1") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Instrument Sans"; font-style: italic; font-weight: 400 700; font-stretch: 75% 100%; font-display: swap;
+  src: url("/fuentes/instrument-sans-italic-latin.woff2?v=1") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+
 :root {
   color-scheme: light dark;
-  --fondo:        #F4F5F0;
+  --fondo:        #F2F2F2;
   --carta:        #FFFFFF;
-  --carta-2:      #ECEEE6;
-  --texto:        #1E211C;
-  --suave:        #686D60;
-  --tenue:        #A0A595;
-  --linea:        #E2E5DB;
-  --acento:       #5E7A1E;
+  --carta-2:      #E8E8E8;
+  --texto:        #161616;
+  --suave:        #6A6A6A;
+  --tenue:        #A3A3A3;
+  --linea:        #DEDEDE;
+  --acento:       #4E7A62;
   --acento-texto: #FFFFFF;
-  --acento-suave: #EBF3D6;
+  --acento-suave: #E2EFE7;
   --peligro:      #D64545;
   --peligro-suave:#FBE9E9;
   --aviso:        #B97A0E;
   --aviso-suave:  #FBF1DD;
-  --franja:       #1E211C;   /* detrás de la hora en la app instalada: iOS la pinta en blanco */
+  --franja:       #161616;   /* detrás de la hora en la app instalada: iOS la pinta en blanco */
   --carta-luz:    #FFFFFF;   /* arriba de la carta: un degradado mínimo le da volumen */
-  --borde:        rgba(24, 28, 20, .06);
-  --dock:         #2E342B;   /* la barra de abajo: grafito en los dos temas, como en el reel */
-  --dock-texto:   #B5BAA6;
-  --ascii:        rgba(44, 50, 38, .26);    /* los caracteres del fondo */
-  --ascii-vivo:   rgba(94, 122, 30, .7);   /* los más densos, y bajo el dedo */
+  --borde:        rgba(0, 0, 0, .06);
+  --dock:         #262626;   /* la barra de abajo: grafito en los dos temas, como en el reel */
+  --dock-texto:   #B0B0B0;
+  --gota:         #A8D5BA;   /* la sección actual de la barra, en los dos temas */
+  --gota-texto:   #173325;
+  --ascii:        rgba(20, 20, 20, .13);    /* los caracteres del fondo (sutil) */
+  --ascii-vivo:   rgba(78, 122, 98, .45);   /* los más densos, y bajo el dedo */
   --velo:         90%;                      /* opacidad de las cartas: el fondo se intuye debajo */
 
-  --r:    18px;   /* cartas */
-  --r-s:  12px;   /* botones y campos */
-  --r-xs: 8px;    /* celdas, etiquetas */
+  --r:    12px;   /* cartas */
+  --r-s:  8px;    /* botones y campos */
+  --r-xs: 6px;    /* celdas, etiquetas */
   --sombra: 0 1px 2px rgba(16, 16, 12, .04), 0 8px 24px rgba(16, 16, 12, .06);
-  --fuente: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --fuente: "Instrument Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* escala de letra (12/11): úsala en vez de px sueltos. Pesos: 400 texto, 500 etiquetas, 600 destacados, 700 títulos */
+  --t-gigante: 44px; --t-titulo: 28px; --t-seccion: 20px; --t-destacado: 17px; --t-texto: 15px; --t-pequeno: 13px; --t-etiqueta: 11px;
 
   /* series de gráficas: orden fijo, validado para daltonismo (dataviz). Color = identidad, nunca rango. */
   --serie-1: #2a78d6; --serie-2: #eb6834; --serie-3: #1baf7a; --serie-4: #eda100;
@@ -45,26 +61,26 @@
 @media (prefers-color-scheme: dark) {
   :root {
     /* grafito con un punto oliva, no negro: menos duro y con más profundidad entre capas */
-    --fondo:        #171A16;
-    --carta:        #21251F;
-    --carta-luz:    #282D26;
-    --carta-2:      #2B3028;
-    --texto:        #EEF0E8;
-    --suave:        #A3A892;
-    --tenue:        #737865;
-    --linea:        #363C31;
-    --acento:       #CDE77F;
-    --acento-texto: #26300A;
-    --acento-suave: #333D22;
+    --fondo:        #111111;
+    --carta:        #1B1B1B;
+    --carta-luz:    #212121;
+    --carta-2:      #252525;
+    --texto:        #EDEDED;
+    --suave:        #9A9A9A;
+    --tenue:        #6E6E6E;
+    --linea:        #2F2F2F;
+    --acento:       #9FD3B4;
+    --acento-texto: #14301F;
+    --acento-suave: #24372C;
     --peligro:      #F2726B;
     --peligro-suave:#3F2624;
     --aviso:        #E8B04A;
     --aviso-suave:  #3D3119;
-    --franja:       #171A16;
+    --franja:       #111111;
     --borde:        rgba(255, 255, 255, .06);
-    --dock:         #2E342B;
-    --ascii:        rgba(214, 222, 196, .2);
-    --ascii-vivo:   rgba(205, 231, 127, .65);
+    --dock:         #262626;
+    --ascii:        rgba(237, 237, 237, .1);
+    --ascii-vivo:   rgba(159, 211, 180, .4);
     --velo:         88%;
     --sombra: inset 0 1px 0 rgba(255, 255, 255, .04), 0 10px 30px rgba(0, 0, 0, .25);
     --serie-1: #3987e5; --serie-2: #d95926; --serie-3: #199e70; --serie-4: #c98500;
@@ -201,7 +217,7 @@ nav.c-dock { position: fixed; z-index: 150; left: 50%; transform: translateX(-50
              display: grid; grid-template-columns: repeat(var(--n, 7), minmax(0, 1fr)); }
 .c-goo { position: absolute; inset: -44px 0 0; pointer-events: none; filter: url(#c-goo) drop-shadow(0 10px 22px rgba(0, 0, 0, .2)); }
 .c-tira { position: absolute; left: 0; right: 0; bottom: 0; height: 62px; border-radius: 22px; background: var(--dock); }
-.c-gota { position: absolute; left: 0; bottom: 36px; width: 52px; height: 52px; border-radius: 50%; background: #CDE77F;
+.c-gota { position: absolute; left: 0; bottom: 36px; width: 52px; height: 52px; border-radius: 50%; background: var(--gota);
           transition: transform .55s cubic-bezier(.45, 1.5, .4, 1); }
 .c-dock a { position: relative; z-index: 1; height: 62px; min-width: 0; display: grid; justify-items: center; align-content: center; gap: 3px;
             text-decoration: none; color: var(--dock-texto); font-size: 10.5px; font-weight: 500; white-space: nowrap; }
@@ -211,7 +227,7 @@ nav.c-dock { position: fixed; z-index: 150; left: 50%; transform: translateX(-50
 .c-dock a[aria-current="page"] { font-weight: 600; }
 .c-dock svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
               transition: transform .5s cubic-bezier(.45, 1.5, .4, 1), color .3s; }
-.c-dock a[aria-current="page"] svg { transform: translateY(-23px); color: #26300A; }   /* sobre la gota lima, en los dos temas */
+.c-dock a[aria-current="page"] svg { transform: translateY(-23px); color: var(--gota-texto); }   /* sobre la gota, en los dos temas */
 /* hueco para la barra dentro de .app: también vale en las páginas de una pantalla (comida, hábitos) */
 body:has(nav.c-dock) .app { padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px)) !important; }
 body:has(nav.c-dock):not(:has(.app)) { padding-bottom: calc(108px + env(safe-area-inset-bottom, 0px)) !important; }

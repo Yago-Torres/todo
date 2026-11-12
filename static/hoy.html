@@ -5,8 +5,8 @@
 <meta name="color-scheme" content="light dark">
 <meta name="calma-datos" content="/api/hoy">
 <meta name="calma-entrada" content="espera">
-<meta name="theme-color" content="#F4F5F0" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#171A16" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F2F2F2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)">
 <title>Hoy</title>
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
@@ -15,17 +15,15 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Hoy">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-<link rel="stylesheet" href="/calma.css?v=c6f4bacb">
-<script src="/calma.js?v=c6f4bacb"></script>
+<link rel="preload" href="/fuentes/instrument-sans-normal-latin.woff2?v=1" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/calma.css?v=f8384bb4">
+<script src="/calma.js?v=f8384bb4"></script>
 <script src="/anime-4.5.0.min.js"></script>
-<script src="/anima.js?v=c6f4bacb"></script>
+<script src="/anima.js?v=f8384bb4"></script>
 <script src="/tom.js?v=1"></script>
 <script src="/mascota.js?v=6"></script>
 <script src="/sinred.js?v=1"></script>
-<script src="/hoja.js?v=c6f4bacb"></script>
+<script src="/hoja.js?v=f8384bb4"></script>
 <script src="/movimiento.js?v=2"></script>
 <script defer src="/gsap-3.13.0.min.js"></script>
 <script defer src="/MorphSVGPlugin-3.13.0.min.js"></script>
@@ -51,8 +49,8 @@
   }
   .top { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; padding: 4px 2px 0; }
   /* el saludo engorda con el día: peso de 300 (nada hecho) a 800 (día completo) */
-  h1 { margin: 0; font-size: 28px; font-weight: 300; letter-spacing: -.02em; transition: font-weight .6s; }
-  #fecha { font-size: 14px; color: var(--suave); }
+  h1 { margin: 0; font-size: var(--t-titulo); font-weight: 300; letter-spacing: -.02em; transition: font-weight .6s; }
+  #fecha { font-size: var(--t-texto); color: var(--suave); }
   #fecha b { color: var(--texto); font-weight: 500; }
   .top nav { margin-left: auto; }
   [data-mod][hidden] { display: none !important; }
@@ -61,20 +59,20 @@
   .cartel { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; max-width: 170px; padding: 5px 9px; font: inherit; line-height: 1.25; text-align: right;
     color: var(--texto); background: var(--carta); border: 2px solid var(--linea); border-radius: 0; box-shadow: 3px 3px 0 var(--linea); cursor: pointer; animation: f-cartel 1.2s ease-in-out infinite; }
   .cartel[hidden] { display: none; }
-  .cartel b { font-size: 13px; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .cartel span { font-size: 11px; color: var(--peligro); }
+  .cartel b { font-size: var(--t-pequeno); font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cartel span { font-size: var(--t-etiqueta); color: var(--peligro); }
   @keyframes f-cartel { 0%, 100% { transform: rotate(-1.5deg); } 50% { transform: rotate(1.5deg); } }
   @media (prefers-reduced-motion: reduce) { .cartel { animation: none; } }
 
   .carta { padding: 16px; min-width: 0; }
   .carta h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
-  .carta h2 a { margin-left: auto; font-size: 13px; font-weight: 500; color: var(--suave); text-decoration: none; }
+  .carta h2 a { margin-left: auto; font-size: var(--t-pequeno); font-weight: 500; color: var(--suave); text-decoration: none; }
   .carta h2 a:hover { color: var(--texto); }
-  .carta h2 .c-chip { font-size: 12px; padding: 1px 8px; }
-  .vacio { margin: 0; padding: 4px 2px; font-size: 14px; color: var(--suave); }
-  .error { margin: 0; font-size: 13px; color: var(--peligro); }
-  .cifra { font-size: 40px; font-weight: 700; letter-spacing: -.03em; line-height: 1.1; font-variant-numeric: tabular-nums; }
-  .bajo { margin: 2px 0 0; font-size: 14px; color: var(--suave); }
+  .carta h2 .c-chip { font-size: var(--t-pequeno); padding: 1px 8px; }
+  .vacio { margin: 0; padding: 4px 2px; font-size: var(--t-texto); color: var(--suave); }
+  .error { margin: 0; font-size: var(--t-pequeno); color: var(--peligro); }
+  .cifra { font-size: var(--t-gigante); font-weight: 700; letter-spacing: -.03em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .bajo { margin: 2px 0 0; font-size: var(--t-texto); color: var(--suave); }
   .c-barra { margin: 10px 0 4px; }
 
   /* anillos del día: hábitos, pasos y sueño */
@@ -85,17 +83,17 @@
   .anillos ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; min-width: 150px; }
   .anillos li { display: grid; grid-template-columns: 12px auto; column-gap: 10px; align-items: center; }
   .anillos li i { width: 12px; height: 12px; border-radius: 50%; background: var(--c); grid-row: span 2; }
-  .anillos li small { font-size: 13px; color: var(--suave); }
-  .anillos li b { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
-  .anillos li b span { font-size: 13px; font-weight: 500; color: var(--suave); }
+  .anillos li small { font-size: var(--t-pequeno); color: var(--suave); }
+  .anillos li b { font-size: var(--t-seccion); font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+  .anillos li b span { font-size: var(--t-pequeno); font-weight: 500; color: var(--suave); }
 
   /* cifras pequeñas con su línea de 7 días */
   .pieza { text-decoration: none; display: grid; align-content: start; gap: 2px; color: inherit; }
-  .pieza .cifra { font-size: 30px; }
+  .pieza .cifra { font-size: var(--t-titulo); }
   .spark { width: 100%; height: 28px; margin-top: 8px; overflow: visible; }
   .spark polyline { fill: none; stroke: var(--acento); stroke-width: 2; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
   .spark circle { fill: var(--acento); }
-  .pieza .apps { margin: 6px 0 0; padding: 0; list-style: none; font-size: 12px; color: var(--suave); }
+  .pieza .apps { margin: 6px 0 0; padding: 0; list-style: none; font-size: var(--t-pequeno); color: var(--suave); }
   .pieza .apps li { display: flex; gap: 8px; } .pieza .apps li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* hábitos: como en index.html, el círculo se rellena con el color del hábito */
@@ -117,7 +115,7 @@
   .odo > span > span { height: 1.25em; }
   .fila .nom { flex: 1; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .fila[aria-pressed="true"] .nom { color: var(--suave); text-decoration: line-through; text-decoration-color: var(--tenue); }
-  .fila .plan { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--acento-suave); color: var(--acento); }
+  .fila .plan { font-size: var(--t-etiqueta); font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--acento-suave); color: var(--acento); }
   .fila .rn { display: inline-flex; align-items: center; font-weight: 600; font-variant-numeric: tabular-nums; }
   .fila .rn.cero { color: var(--tenue); font-weight: 500; }
   .llama { width: 13px; height: 13px; fill: var(--c); margin-right: 3px; transform-origin: 50% 90%; animation: llama 1.8s ease-in-out infinite; }
@@ -133,7 +131,7 @@
   .anillos.celebra svg { animation: vuelta 1.3s cubic-bezier(.3, 1.2, .4, 1); }
   @keyframes vuelta { 40% { transform: rotate(200deg) scale(1.08); } 100% { transform: rotate(360deg) scale(1); } }
   @media (prefers-reduced-motion: reduce) { .fila.peligro .rn, .fila.peligro .bx, .anillos.celebra svg { animation: none; } }
-  details.resto summary { cursor: pointer; font-size: 13px; color: var(--suave); padding: 6px; width: max-content; position: relative; z-index: 1; }
+  details.resto summary { cursor: pointer; font-size: var(--t-pequeno); color: var(--suave); padding: 6px; width: max-content; position: relative; z-index: 1; }
 
   /* tareas en pila, como la Cartera: cerradas se ven los bordes; al tocar se abren en abanico */
   .pila { position: relative; z-index: 1; transition: height .5s cubic-bezier(.3, 1.2, .4, 1); }
@@ -147,9 +145,9 @@
   .tarea .bx.ok { display: grid; place-items: center; padding: 0; background: #fff; color: var(--c); }
   .tarea .bx svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
   .tarea .t { flex: 1; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .tarea .cuando { flex: none; font-size: 12px; font-weight: 600; opacity: .9; white-space: nowrap; }
+  .tarea .cuando { flex: none; font-size: var(--t-pequeno); font-weight: 600; opacity: .9; white-space: nowrap; }
   .tarea .cuando.mal { background: rgba(0, 0, 0, .25); padding: 2px 8px; border-radius: 999px; opacity: 1; }
-  .pila-pista { margin: 8px 0 0; font-size: 12px; color: var(--suave); }
+  .pila-pista { margin: 8px 0 0; font-size: var(--t-pequeno); color: var(--suave); }
   .pila-pista .recoger { border: 0; background: none; padding: 0; font: inherit; font-weight: 600; color: var(--acento); }
   .pila:not(.cerrada) .tarea { cursor: pointer; }
   /* «+» para apuntar desde la portada */
@@ -160,21 +158,21 @@
 
   .menu { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
   .menu li { display: flex; gap: 10px; align-items: baseline; }
-  .menu i { font-style: normal; font-size: 12px; color: var(--tenue); width: 3.2em; flex: none; }
+  .menu i { font-style: normal; font-size: var(--t-pequeno); color: var(--tenue); width: 3.2em; flex: none; }
   .menu span { flex: 1; min-width: 0; font-weight: 500; }
-  .menu u { text-decoration: none; font-size: 12px; color: var(--suave); white-space: nowrap; }
+  .menu u { text-decoration: none; font-size: var(--t-pequeno); color: var(--suave); white-space: nowrap; }
   .sesion { margin-top: 12px; padding: 12px; border-radius: var(--r-s); background: var(--carta-2); }
-  .sesion small { display: block; font-size: 12px; color: var(--suave); }
+  .sesion small { display: block; font-size: var(--t-pequeno); color: var(--suave); }
   .sesion b { font-weight: 600; }
   .sesion.hoy { background: var(--acento-suave); }
 
   /* tarjeta que se inclina: la mejor racha */
   .escena3d { perspective: 700px; }
   .racha { height: 100%; min-height: 150px; border-radius: var(--r); padding: 16px; color: #fff; display: grid; align-content: space-between;
-           background: linear-gradient(135deg, #46601A, #6F8C2C 45%, #3E5B4A); position: relative; overflow: hidden;
+           background: linear-gradient(135deg, #2E4F3E, #4E7A62 45%, #3B5C55); position: relative; overflow: hidden;
            transition: transform .2s ease-out; --mx: 50%; --my: 30%; touch-action: pan-y; text-decoration: none; }
   .racha::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(circle at var(--mx) var(--my), rgba(255, 255, 255, .35), transparent 55%); }
-  .racha small { font-size: 13px; opacity: .85; }
+  .racha small { font-size: var(--t-pequeno); opacity: .85; }
   .racha b { font-size: 34px; font-weight: 800; letter-spacing: -.03em; line-height: 1; }
   .racha small, .racha b { position: relative; margin-right: 92px; }
   /* la planta de la racha (tom.js): crece con la mejor racha y se mustia si se rompe una más larga */
@@ -195,7 +193,7 @@
   .anio i.futuro { background: none; box-shadow: inset 0 0 0 1px var(--linea); }
   .anio i.hoy { outline: 2px solid var(--texto); outline-offset: 0; animation: late 1.6s ease-in-out infinite; }
   @keyframes late { 50% { transform: scale(1.45); } }
-  .anio-pie { display: flex; justify-content: space-between; gap: 10px; margin-top: 8px; font-size: 12px; color: var(--suave); }
+  .anio-pie { display: flex; justify-content: space-between; gap: 10px; margin-top: 8px; font-size: var(--t-pequeno); color: var(--suave); }
 
   .puerta input, .puerta button { width: 100%; }
   @media (prefers-reduced-motion: reduce) { .llama, .anio i.hoy { animation: none; } .pila, .pila .tarea, .racha, h1 { transition: none; } }
