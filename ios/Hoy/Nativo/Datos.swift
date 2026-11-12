@@ -68,7 +68,7 @@ final class DatosNativos {
         await carga()
     }
 
-    private func leeEstado(_ crudo: Data) {
+    func leeEstado(_ crudo: Data) {
         guard let e = (try? JSONSerialization.jsonObject(with: crudo)) as? [String: Any] else { return }
         habitos = ((e["habits"] as? [[String: Any]]) ?? []).compactMap { h in
             guard let id = h["id"] as? String else { return nil }

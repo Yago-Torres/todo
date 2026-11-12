@@ -1,11 +1,14 @@
 import SwiftUI
 
 /// Hábitos en nativo: la semana de cada hábito (lunes a domingo), lo que lleva contra su objetivo y la racha.
-/// Tocar un día lo marca o desmarca (hoy y días pasados); las flechas cambian de semana (deslizar es cambiar de sección); el resto de la página web (editar hábitos, planificar)
-/// sigue en /habitos.html, a un toque desde «Editar».
+/// Tocar un día lo marca o desmarca (hoy y días pasados); las flechas cambian de semana (deslizar es cambiar de sección).
+/// «Editar» crea, cambia, ordena y borra hábitos y planifica la semana (Habitos/EditorHabitos.swift).
 struct PantallaHabitos: View {
     @State private var datos = DatosNativos.shared
     @State private var semanaAtras = 0
+    @State private var editando = false
+    @State private var planificando = false
+    @State private var nuevo: BorradorHabito?
 
     private let letras = ["L", "M", "X", "J", "V", "S", "D"]
 
@@ -34,7 +37,7 @@ struct PantallaHabitos: View {
                 }
                 .padding(.horizontal, Tema.Espacio.m)
                 if datos.habitos.isEmpty {
-                    Text(datos.cargando ? "Cargando…" : "Sin hábitos todavía. Créalos desde «Editar».")
+                    Text(datos.cargando ? "Cargando…" : "Sin hábitos todavía. Crea el primero desde «Editar».")
                         .font(Tema.fuente(.texto)).foregroundStyle(Tema.suave)
                         .carta()
                 }
@@ -49,6 +52,9 @@ struct PantallaHabitos: View {
         .scrollIndicators(.hidden)
         .refreshable { await datos.recarga() }
         .task { await datos.carga() }
+        .sheet(isPresented: $editando) { EditorHabitos() }
+        .sheet(isPresented: $planificando) { PlanificarSemana() }
+        .sheet(item: $nuevo) { FichaHabito(borrador: $0) }
     }
 
     private func cabecera(_ dias: [String]) -> some View {
@@ -70,11 +76,14 @@ struct PantallaHabitos: View {
                 }
                 .disabled(semanaAtras == 0)
                 .accessibilityLabel("Semana siguiente")
-                Button("Editar") {
-                    // la página web de siempre, con la edición y la planificación
-                    Navegador.shared.abre("/habitos.html?web=1")
+                Menu {
+                    Button("Nuevo hábito", systemImage: "plus") { nuevo = BorradorHabito() }
+                    Button("Planificar la semana", systemImage: "calendar") { planificando = true }
+                    Button("Editar y ordenar", systemImage: "pencil") { editando = true }
+                } label: {
+                    Text("Editar").font(Tema.fuente(.pequeno, peso: .medium))
                 }
-                .font(Tema.fuente(.pequeno, peso: .medium))
+                .accessibilityLabel("Editar hábitos")
             }
             .foregroundStyle(Tema.acento)
             .font(.system(size: 15, weight: .semibold))

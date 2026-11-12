@@ -249,10 +249,19 @@ struct SeccionPantallas: View {
                     .navigationTitle("Barra de abajo")
                     .navigationBarTitleDisplayMode(.inline)
             }
-            NavigationLink("Hoy (app)") {
-                EditorBloques(pantalla: "app-hoy", todos: PantallaHoy.bloques, fijos: [])
-                    .navigationTitle("Hoy")
-                    .navigationBarTitleDisplayMode(.inline)
+            // todas las pantallas nativas del registro: las que ya usan PantallaEditable se editan; el resto, «pronto»
+            ForEach(PantallasEditables.registradas(), id: \.clave) { p in
+                if let bloques = PantallasEditables.bloques[p.clave] {
+                    NavigationLink(p.nombre) {
+                        EditorBloques(pantalla: p.clave, todos: bloques, fijos: [])
+                            .navigationTitle(p.nombre)
+                            .navigationBarTitleDisplayMode(.inline)
+                    }
+                } else {
+                    LabeledContent(p.nombre) { Text("pronto") }
+                        .foregroundStyle(Tema.suave)
+                        .accessibilityHint("Esta pantalla aún no se puede editar")
+                }
             }
         } header: {
             Text("Pantallas")
