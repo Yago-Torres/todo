@@ -28,7 +28,7 @@ struct PantallaHoy: View {
                 if let p = hoy?.carrera?.proxima { tarjetaCarrera(p) }
                 if let g = hoy?.gastos, g.total != nil { tarjetaGastos(g) }
                 if let error = datos.error, hoy == nil {
-                    Text(error).font(Tema.fuente(.pie)).foregroundStyle(Tema.peligro)
+                    Text(error).font(Tema.fuente(.pequeno)).foregroundStyle(Tema.peligro)
                 }
             }
             .padding(.horizontal, Tema.Espacio.l)
@@ -47,12 +47,12 @@ struct PantallaHoy: View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(Self.fechaLarga())
-                    .font(Tema.fuente(.etiqueta))
+                    .estiloEtiqueta()
                     .foregroundStyle(Tema.suave)
                     .textCase(.uppercase)
                 // el saludo engorda con el día, como en la web (de fino a negrita)
                 Text(Self.saludo())
-                    .font(Tema.fuente(.saludo, peso: progreso >= 1 ? .heavy : progreso > 0.5 ? .bold : progreso > 0 ? .semibold : .regular))
+                    .font(Tema.fuente(.titulo, peso: progreso >= 1 ? .heavy : progreso > 0.5 ? .bold : progreso > 0 ? .semibold : .regular))
                     .foregroundStyle(Tema.texto)
                     .contentTransition(.interpolate)
                     .animation(Tema.Muelle.pantalla, value: progreso)
@@ -74,7 +74,7 @@ struct PantallaHoy: View {
 
     private func avisoCopia(_ fecha: Date) -> some View {
         Label(API.notaCopia(fecha), systemImage: "wifi.slash")
-            .font(Tema.fuente(.pie))
+            .font(Tema.fuente(.pequeno))
             .foregroundStyle(Tema.aviso)
     }
 
@@ -107,8 +107,8 @@ struct PantallaHoy: View {
         HStack(spacing: Tema.Espacio.s) {
             Circle().fill(color).frame(width: 8, height: 8)
             VStack(alignment: .leading, spacing: 0) {
-                Text(nombre).font(Tema.fuente(.etiqueta)).foregroundStyle(Tema.suave)
-                Text(valor).font(Tema.fuente(.seccion)).foregroundStyle(Tema.texto)
+                Text(nombre).estiloEtiqueta().foregroundStyle(Tema.suave)
+                Text(valor).font(Tema.fuente(.destacado)).foregroundStyle(Tema.texto)
                     .contentTransition(.numericText())
                     .monospacedDigit()
             }
@@ -124,7 +124,7 @@ struct PantallaHoy: View {
             VStack(spacing: 0) {
                 if datos.habitosDeHoy.isEmpty {
                     Text("Nada planificado para hoy.")
-                        .font(Tema.fuente(.cuerpo)).foregroundStyle(Tema.suave)
+                        .font(Tema.fuente(.texto)).foregroundStyle(Tema.suave)
                         .padding(.vertical, Tema.Espacio.m)
                 }
                 // lo que falta, arriba; lo hecho baja con muelle
@@ -142,7 +142,7 @@ struct PantallaHoy: View {
                         Text(verOtros ? "Ocultar el resto" : "El resto (\(datos.otrosHabitos.count))")
                         Image(systemName: "chevron.down").rotationEffect(.degrees(verOtros ? 180 : 0))
                     }
-                    .font(Tema.fuente(.pie, peso: .medium))
+                    .font(Tema.fuente(.pequeno, peso: .medium))
                     .foregroundStyle(Tema.suave)
                 }
                 .buttonStyle(.plain)
@@ -183,7 +183,7 @@ struct PantallaHoy: View {
                                 .frame(width: 34, height: 34)
                                 .background(e.hecho ? Tema.acento : Tema.acentoSuave,
                                             in: RoundedRectangle(cornerRadius: Tema.Radio.celda, style: .continuous))
-                            Text(e.n).font(Tema.fuente(.cuerpo, peso: .medium)).foregroundStyle(Tema.texto)
+                            Text(e.n).font(Tema.fuente(.texto, peso: .medium)).foregroundStyle(Tema.texto)
                             Spacer()
                             if e.hecho { Image(systemName: "checkmark").foregroundStyle(Tema.acento) }
                         }
@@ -215,14 +215,14 @@ struct PantallaHoy: View {
                         .disabled(t.id == nil)
                         .accessibilityLabel("Hecha: \(t.t)")
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(t.t).font(Tema.fuente(.cuerpo)).foregroundStyle(Tema.texto)
+                            Text(t.t).font(Tema.fuente(.texto)).foregroundStyle(Tema.texto)
                             if let due = t.due, due < (hoy?.hoy ?? Fecha.hoy()) {
-                                Text("Venció el \(Self.diaCorto(due))").font(Tema.fuente(.pie)).foregroundStyle(Tema.peligro)
+                                Text("Venció el \(Self.diaCorto(due))").font(Tema.fuente(.pequeno)).foregroundStyle(Tema.peligro)
                             }
                         }
                         Spacer()
                         if let hora = t.hora, !hora.isEmpty {
-                            Text(hora).font(Tema.fuente(.pie)).monospacedDigit().foregroundStyle(Tema.suave)
+                            Text(hora).font(Tema.fuente(.pequeno)).monospacedDigit().foregroundStyle(Tema.suave)
                         }
                     }
                     .padding(.vertical, Tema.Espacio.s)
@@ -248,7 +248,7 @@ struct PantallaHoy: View {
             Navegador.shared.abre("/salud.html")
         } label: {
             VStack(alignment: .leading, spacing: 4) {
-                Text(nombre).font(Tema.fuente(.etiqueta)).foregroundStyle(Tema.suave).lineLimit(1)
+                Text(nombre).estiloEtiqueta().foregroundStyle(Tema.suave).lineLimit(1)
                 Text(valor ?? "—").font(Tema.fuente(.cifra)).foregroundStyle(Tema.texto)
                     .monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
                     .contentTransition(.numericText())
@@ -266,8 +266,8 @@ struct PantallaHoy: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Carrera · \(p.dia == hoy?.hoy ? "hoy" : Self.diaCorto(p.dia))")
-                        .font(Tema.fuente(.etiqueta)).foregroundStyle(Tema.suave)
-                    Text(p.n).font(Tema.fuente(.seccion)).foregroundStyle(Tema.texto)
+                        .estiloEtiqueta().foregroundStyle(Tema.suave)
+                    Text(p.n).font(Tema.fuente(.destacado)).foregroundStyle(Tema.texto)
                 }
                 Spacer()
                 Image(systemName: "figure.run").font(.system(size: 22)).foregroundStyle(Tema.acento)
@@ -283,14 +283,14 @@ struct PantallaHoy: View {
         } label: {
             VStack(alignment: .leading, spacing: Tema.Espacio.s) {
                 HStack(alignment: .firstTextBaseline) {
-                    Text("Gastos").font(Tema.fuente(.etiqueta)).foregroundStyle(Tema.suave)
+                    Text("Gastos").estiloEtiqueta().foregroundStyle(Tema.suave)
                     Spacer()
-                    if let al = g.al_dia { Text("\(Self.euros(al))/día").font(Tema.fuente(.pie)).foregroundStyle(Tema.suave) }
+                    if let al = g.al_dia { Text("\(Self.euros(al))/día").font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave) }
                 }
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text(Self.euros(g.total ?? 0)).font(Tema.fuente(.cifra)).foregroundStyle(Tema.texto).monospacedDigit()
                     if let presu = g.presu, presu > 0 {
-                        Text("de \(Self.euros(presu))").font(Tema.fuente(.pie)).foregroundStyle(Tema.suave)
+                        Text("de \(Self.euros(presu))").font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
                     }
                 }
                 if let presu = g.presu, presu > 0 {
@@ -305,10 +305,10 @@ struct PantallaHoy: View {
 
     private func encabezado(_ titulo: String, chip: String?, enlace: (String, String)?) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: Tema.Espacio.s) {
-            Text(titulo).font(Tema.fuente(.titulo)).foregroundStyle(Tema.texto)
+            Text(titulo).font(Tema.fuente(.seccion)).foregroundStyle(Tema.texto)
             if let chip {
                 Text(chip)
-                    .font(Tema.fuente(.etiqueta)).monospacedDigit()
+                    .estiloEtiqueta().monospacedDigit()
                     .foregroundStyle(Tema.acento)
                     .padding(.horizontal, 8).padding(.vertical, 2)
                     .background(Tema.acentoSuave, in: Capsule())
@@ -317,7 +317,7 @@ struct PantallaHoy: View {
             Spacer()
             if let enlace {
                 Button(enlace.0) { Navegador.shared.abre(enlace.1) }
-                    .font(Tema.fuente(.pie, peso: .medium))
+                    .font(Tema.fuente(.pequeno, peso: .medium))
                     .foregroundStyle(Tema.acento)
             }
         }
@@ -404,7 +404,7 @@ struct FilaHabito: View {
                 .scaleEffect(habito.hecho ? 1 : 0.92)
                 .animation(Tema.Muelle.toque, value: habito.hecho)
                 Text(habito.n)
-                    .font(Tema.fuente(.cuerpo))
+                    .font(Tema.fuente(.texto))
                     .foregroundStyle(habito.hecho ? Tema.suave : Tema.texto)
                     .strikethrough(habito.hecho, color: Tema.tenue)
                     .lineLimit(2)
@@ -412,14 +412,14 @@ struct FilaHabito: View {
                 Spacer(minLength: Tema.Espacio.s)
                 if habito.plan && !habito.hecho {
                     Text("plan")
-                        .font(Tema.fuente(.etiqueta))
+                        .estiloEtiqueta()
                         .foregroundStyle(Tema.acento)
                         .padding(.horizontal, 8).padding(.vertical, 2)
                         .background(Tema.acentoSuave, in: Capsule())
                 }
                 if habito.racha > 1 {
                     Label("\(habito.racha)", systemImage: "flame.fill")
-                        .font(Tema.fuente(.pie, peso: .semibold))
+                        .font(Tema.fuente(.pequeno, peso: .semibold))
                         .monospacedDigit()
                         .foregroundStyle(habito.hecho ? Tema.aviso : Tema.tenue)
                         .contentTransition(.numericText())

@@ -1,7 +1,8 @@
 import SwiftUI
 import UIKit
 
-/// El estilo de las pantallas nativas, en un solo sitio. Calcado de ~/estilo/calma.css (los mismos nombres que sus
+/// El estilo de las pantallas nativas, en un solo sitio: Calma con paleta «Hormigón» + acento «Salvia» (elegido el 12/11),
+/// calcado de ~/estilo/calma.css (los mismos nombres que sus
 /// tokens): las vistas nativas solo usan lo de aquí, nunca un color o un tamaño suelto. Para otro tema, otra `Paleta`
 /// y otras `Fuentes`, y se cambia `Tema.actual` (pensado para elegirlo luego desde Configurar).
 struct Paleta {
@@ -14,33 +15,35 @@ struct Paleta {
         }
     }
 
-    var fondo = Token(claro: "#F4F5F0", oscuro: "#171A16")
-    var carta = Token(claro: "#FFFFFF", oscuro: "#21251F")
-    var carta2 = Token(claro: "#ECEEE6", oscuro: "#2B3028")
-    var texto = Token(claro: "#1E211C", oscuro: "#EEF0E8")
-    var suave = Token(claro: "#686D60", oscuro: "#A3A892")
-    var tenue = Token(claro: "#A0A595", oscuro: "#737865")
-    var linea = Token(claro: "#E2E5DB", oscuro: "#363C31")
-    var acento = Token(claro: "#5E7A1E", oscuro: "#CDE77F")
-    var acentoTexto = Token(claro: "#FFFFFF", oscuro: "#26300A")
-    var acentoSuave = Token(claro: "#EBF3D6", oscuro: "#333D22")
+    var fondo = Token(claro: "#F2F2F2", oscuro: "#111111")
+    var carta = Token(claro: "#FFFFFF", oscuro: "#1B1B1B")
+    var cartaLuz = Token(claro: "#FFFFFF", oscuro: "#212121")
+    var carta2 = Token(claro: "#E8E8E8", oscuro: "#252525")
+    var texto = Token(claro: "#161616", oscuro: "#EDEDED")
+    var suave = Token(claro: "#6A6A6A", oscuro: "#9A9A9A")
+    var tenue = Token(claro: "#A3A3A3", oscuro: "#6E6E6E")
+    var linea = Token(claro: "#DEDEDE", oscuro: "#2F2F2F")
+    var acento = Token(claro: "#4E7A62", oscuro: "#9FD3B4")
+    var acentoTexto = Token(claro: "#FFFFFF", oscuro: "#14301F")
+    var acentoSuave = Token(claro: "#E2EFE7", oscuro: "#24372C")
     var peligro = Token(claro: "#D64545", oscuro: "#F2726B")
     var aviso = Token(claro: "#B97A0E", oscuro: "#E8B04A")
     /// La barra de abajo: grafito en los dos temas, con la gota lima de la sección actual.
-    var dock = Token(claro: "#2E342B", oscuro: "#2E342B")
-    var dockTexto = Token(claro: "#B5BAA6", oscuro: "#B5BAA6")
-    var gota = Token(claro: "#CDE77F", oscuro: "#CDE77F")
-    var gotaTexto = Token(claro: "#26300A", oscuro: "#26300A")
+    var dock = Token(claro: "#262626", oscuro: "#262626")
+    var dockTexto = Token(claro: "#B0B0B0", oscuro: "#B0B0B0")
+    var gota = Token(claro: "#A8D5BA", oscuro: "#A8D5BA")
+    var gotaTexto = Token(claro: "#173325", oscuro: "#173325")
     /// Los caracteres del fondo (calma.js): tenues, y los densos en acento.
-    var ascii = Token(claro: "#2C3226", oscuro: "#D6DEC4")
+    var ascii = Token(claro: "#141414", oscuro: "#EDEDED")
 }
 
-/// Familias de letra. nil = la del sistema (SF Pro). Para usar otra (p. ej. "Inter"), se empaqueta el .ttf/.otf en
-/// Hoy/, se añade a UIAppFonts en Info.plist y se pone aquí su nombre PostScript: todas las pantallas la cogen.
+/// Familias de letra (nombre de familia). nil = la del sistema (SF Pro). Instrument Sans va empaquetada (variable,
+/// Hoy/InstrumentSans.ttf, en UIAppFonts): los pesos salen de .weight(). Para otra, el .ttf en Hoy/, UIAppFonts y su
+/// nombre aquí. Si no carga, SF Pro.
 struct Fuentes {
-    var texto: String? = nil
-    var titulo: String? = nil
-    var cifras: String? = nil
+    var texto: String? = "Instrument Sans"
+    var titulo: String? = "Instrument Sans"
+    var cifras: String? = "Instrument Sans"
     /// El diseño del sistema cuando no hay familia propia (.default, .rounded, .serif, .monospaced).
     var diseno: Font.Design = .default
 }
@@ -73,10 +76,11 @@ struct Tema {
 
     // MARK: medidas (las de calma.css)
     enum Radio {
-        static let carta: CGFloat = 18
-        static let boton: CGFloat = 12
+        static let carta: CGFloat = 12     // esquinas «suaves»
+        static let boton: CGFloat = 8      // botones y campos
         static let celda: CGFloat = 8
-        static let dock: CGFloat = 22
+        static let pastilla: CGFloat = 999
+        static let dock: CGFloat = 20
     }
 
     enum Espacio {
@@ -96,26 +100,34 @@ struct Tema {
     }
 
     // MARK: letra
+    /// La escala de letra: gigante 44, título 28, sección 20, destacado 17, texto 15, pequeño 13, etiqueta 11
+    /// (en mayúsculas y con tracking: usa .estiloEtiqueta()). `cifra` es el título en 600 para las cifras de las cartas.
     enum Estilo {
-        case saludo, titulo, seccion, cuerpo, etiqueta, cifra, cifraGrande, pie
+        case gigante, titulo, seccion, destacado, texto, pequeno, etiqueta, cifra
     }
+
+    private static let familiaCargada: Set<String> = Set(UIFont.familyNames)
 
     static func fuente(_ estilo: Estilo, peso: Font.Weight? = nil) -> Font {
         let f = actual.fuentes
         let (tam, relativo, pesoBase, familia): (CGFloat, Font.TextStyle, Font.Weight, String?) = {
             switch estilo {
-            case .saludo: return (34, .largeTitle, .bold, f.titulo)
-            case .titulo: return (22, .title2, .semibold, f.titulo)
-            case .seccion: return (17, .headline, .semibold, f.titulo)
-            case .cuerpo: return (16, .body, .regular, f.texto)
-            case .etiqueta: return (12, .caption, .semibold, f.texto)
-            case .cifra: return (26, .title, .semibold, f.cifras)
-            case .cifraGrande: return (44, .largeTitle, .bold, f.cifras)
-            case .pie: return (13, .footnote, .regular, f.texto)
+            case .gigante: return (44, .largeTitle, .bold, f.cifras)
+            case .titulo: return (28, .title, .bold, f.titulo)
+            case .seccion: return (20, .title3, .bold, f.titulo)
+            case .destacado: return (17, .headline, .semibold, f.texto)
+            case .texto: return (15, .body, .regular, f.texto)
+            case .pequeno: return (13, .footnote, .regular, f.texto)
+            case .etiqueta: return (11, .caption2, .semibold, f.texto)
+            case .cifra: return (28, .title, .semibold, f.cifras)
             }
         }()
-        let base: Font = familia.map { Font.custom($0, size: tam, relativeTo: relativo) }
-            ?? Font.system(size: tam, design: f.diseno)
+        let base: Font
+        if let familia, familiaCargada.contains(familia) {
+            base = Font.custom(familia, size: tam, relativeTo: relativo)
+        } else {
+            base = Font.system(size: tam, design: f.diseno)
+        }
         return base.weight(peso ?? pesoBase)
     }
 }
@@ -145,6 +157,11 @@ struct EstiloCarta: ViewModifier {
 
 extension View {
     func carta(relleno: CGFloat = Tema.Espacio.l) -> some View { modifier(EstiloCarta(relleno: relleno)) }
+
+    /// Etiqueta de Calma: 11, seminegrita, mayúsculas y tracking .07em.
+    func estiloEtiqueta(peso: Font.Weight? = nil) -> some View {
+        font(Tema.fuente(.etiqueta, peso: peso)).tracking(11 * 0.07).textCase(.uppercase)
+    }
 }
 
 /// Botón que se hunde un poco al tocarlo, con muelle (para tarjetas y filas).

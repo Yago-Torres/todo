@@ -171,7 +171,8 @@ esconde (la nativa la sustituye). Un enlace de la web a `/` o a `/habitos.html` 
 - `FondoCalma.swift`: el plasma de caracteres de calma.js en Canvas (15 fps, quieto con «reducir movimiento»);
   se apaga en Configurar → «Fondo de caracteres en Hoy».
 
-**El tema está en un solo sitio: `Hoy/Tema.swift`.** Colores claro/oscuro calcados de `~/estilo/calma.css`, radios,
+**El tema está en un solo sitio: `Hoy/Tema.swift`.** Paleta «Hormigón» (grises) + acento «Salvia», letra Instrument
+Sans (variable, `Hoy/InstrumentSans.ttf` en `UIAppFonts`), esquinas suaves (12/8/pastilla). Colores claro/oscuro, radios,
 espacios, muelles y letra. Las vistas nativas solo usan `Tema.*`. Para cambiar la letra: empaqueta el `.ttf` en
 `Hoy/`, añádelo a `UIAppFonts` en `Info.plist` y pon su nombre PostScript en `Fuentes` (`texto`, `titulo`,
 `cifras`); sin familia, SF Pro (`diseno` elige `.rounded`, `.serif`…). Otro tema = otra `Paleta`/`Fuentes` en

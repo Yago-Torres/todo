@@ -22,12 +22,12 @@ struct PantallaHabitos: View {
                 cabecera(dias)
                 if let copia = datos.copia {
                     Label(API.notaCopia(copia), systemImage: "wifi.slash")
-                        .font(Tema.fuente(.pie)).foregroundStyle(Tema.aviso)
+                        .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.aviso)
                 }
                 HStack(spacing: 0) {
                     ForEach(Array(dias.enumerated()), id: \.offset) { i, dia in
                         Text(letras[i])
-                            .font(Tema.fuente(.etiqueta))
+                            .estiloEtiqueta()
                             .foregroundStyle(dia == hoy ? Tema.acento : Tema.suave)
                             .frame(maxWidth: .infinity)
                     }
@@ -35,7 +35,7 @@ struct PantallaHabitos: View {
                 .padding(.horizontal, Tema.Espacio.m)
                 if datos.habitos.isEmpty {
                     Text(datos.cargando ? "Cargando…" : "Sin hábitos todavía. Créalos desde «Editar».")
-                        .font(Tema.fuente(.cuerpo)).foregroundStyle(Tema.suave)
+                        .font(Tema.fuente(.texto)).foregroundStyle(Tema.suave)
                         .carta()
                 }
                 ForEach(datos.habitos) { h in
@@ -61,9 +61,9 @@ struct PantallaHabitos: View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(semanaAtras == 0 ? "Esta semana" : semanaAtras == 1 ? "La semana pasada" : "Hace \(semanaAtras) semanas")
-                    .font(Tema.fuente(.etiqueta)).foregroundStyle(Tema.suave).textCase(.uppercase)
+                    .estiloEtiqueta().foregroundStyle(Tema.suave).textCase(.uppercase)
                     .contentTransition(.interpolate)
-                Text("Hábitos").font(Tema.fuente(.saludo)).foregroundStyle(Tema.texto)
+                Text("Hábitos").font(Tema.fuente(.titulo)).foregroundStyle(Tema.texto)
             }
             Spacer()
             HStack(spacing: Tema.Espacio.s) {
@@ -80,7 +80,7 @@ struct PantallaHabitos: View {
                     // la página web de siempre, con la edición y la planificación
                     Navegador.shared.abre("/habitos.html?web=1")
                 }
-                .font(Tema.fuente(.pie, peso: .medium))
+                .font(Tema.fuente(.pequeno, peso: .medium))
             }
             .foregroundStyle(Tema.acento)
             .font(.system(size: 15, weight: .semibold))
@@ -106,16 +106,16 @@ struct TarjetaHabito: View {
         VStack(alignment: .leading, spacing: Tema.Espacio.m) {
             HStack(alignment: .firstTextBaseline, spacing: Tema.Espacio.s) {
                 Circle().fill(color).frame(width: 10, height: 10)
-                Text(habito.n).font(Tema.fuente(.seccion)).foregroundStyle(Tema.texto).lineLimit(2)
+                Text(habito.n).font(Tema.fuente(.destacado)).foregroundStyle(Tema.texto).lineLimit(2)
                 Spacer()
                 if racha > 1 {
                     Label("\(racha)", systemImage: "flame.fill")
-                        .font(Tema.fuente(.pie, peso: .semibold)).monospacedDigit()
+                        .font(Tema.fuente(.pequeno, peso: .semibold)).monospacedDigit()
                         .foregroundStyle(Tema.aviso)
                         .contentTransition(.numericText())
                 }
                 Text(habito.cada > 1 ? "\(hechos)/\(habito.goal) · cada \(habito.cada) sem." : "\(hechos)/\(habito.goal)")
-                    .font(Tema.fuente(.pie)).monospacedDigit()
+                    .font(Tema.fuente(.pequeno)).monospacedDigit()
                     .foregroundStyle(hechos >= habito.goal ? Tema.acento : Tema.suave)
                     .contentTransition(.numericText())
             }

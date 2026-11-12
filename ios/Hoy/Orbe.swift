@@ -54,7 +54,7 @@ struct Orbe: View {
     }
 
     /// Acento Calma: oliva en claro, lima en oscuro.
-    private var acento: Color { esquema == .dark ? Color(hex: "#CDE77F") : Color(hex: "#5E7A1E") }
+    private var acento: Color { esquema == .dark ? Color(hex: "#9FD3B4") : Color(hex: "#4E7A62") }
     private static let azul = Color(hex: "#2a78d6")
     private static let ambar = Color(hex: "#E7B04A")
 }

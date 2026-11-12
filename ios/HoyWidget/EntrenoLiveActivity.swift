@@ -70,11 +70,11 @@ struct EntrenoLiveActivity: Widget {
 }
 
 private enum Tono {
-    static let fondo = Color(hex: "#171A16")
-    static let acento = Color(hex: "#CDE77F")        // acento Calma oscuro
-    static let acentoTexto = Color(hex: "#26300A")   // texto sobre el acento
-    static let texto = Color(hex: "#EEF0E8")
-    static let suave = Color(hex: "#A3A892")
+    static let fondo = Color(hex: "#111111")
+    static let acento = Color(hex: "#9FD3B4")        // acento salvia oscuro
+    static let acentoTexto = Color(hex: "#14301F")   // texto sobre el acento
+    static let texto = Color(hex: "#EDEDED")
+    static let suave = Color(hex: "#9A9A9A")
 }
 
 private struct EntrenoBloqueo: View {

@@ -353,12 +353,12 @@ final class Coordinador: NSObject, WKNavigationDelegate, WKUIDelegate {
         <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
         <style>
         body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;
-        font:17px -apple-system,sans-serif;background:#F4F5F0;color:#2B3028;padding:24px;box-sizing:border-box}
-        @media (prefers-color-scheme:dark){body{background:#171A16;color:#EEF0E8}}
+        font:17px -apple-system,sans-serif;background:#F2F2F2;color:#161616;padding:24px;box-sizing:border-box}
+        @media (prefers-color-scheme:dark){body{background:#111111;color:#EDEDED}}
         p{opacity:.7}
-        a{display:inline-block;margin-top:12px;padding:12px 20px;border-radius:12px;background:rgba(46,139,87,.14);
-        color:#2E8B57;text-decoration:none;font-weight:600}
-        @media (prefers-color-scheme:dark){a{background:rgba(46,139,87,.28);color:#6FCF97}}
+        a{display:inline-block;margin-top:12px;padding:12px 20px;border-radius:8px;background:#E2EFE7;
+        color:#4E7A62;text-decoration:none;font-weight:600}
+        @media (prefers-color-scheme:dark){a{background:#24372C;color:#9FD3B4}}
         </style></head><body><div><h2>Sin conexión</h2><p>\(limpio)</p><p>Tira hacia abajo para reintentar.</p>
         <a href="hoy://configurar">Ajustes de la app</a></div></body></html>
         """

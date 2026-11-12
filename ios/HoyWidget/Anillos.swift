@@ -4,10 +4,10 @@ enum Paleta {
     static let hab = Color(hex: "#1baf7a")
     static let pas = Color(hex: "#eb6834")
     static let sue = Color(hex: "#3987e5")
-    static let fondo = Color(hex: "#171A16")
-    static let campo = Color(hex: "#2B3028")
-    static let texto = Color(hex: "#EEF0E8")
-    static let suave = Color(hex: "#A3A892")
+    static let fondo = Color(hex: "#111111")
+    static let campo = Color(hex: "#252525")
+    static let texto = Color(hex: "#EDEDED")
+    static let suave = Color(hex: "#9A9A9A")
     static let aviso = Color(hex: "#E8B04A")
 }
 

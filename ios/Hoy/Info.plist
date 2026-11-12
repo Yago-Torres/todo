@@ -93,5 +93,9 @@
 	<string>Tom escucha lo que le dices en el modo voz para contestarte.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Tom pasa tu voz a texto, en el iPhone si puede, para entender lo que le pides.</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>InstrumentSans.ttf</string>
+	</array>
 </dict>
 </plist>

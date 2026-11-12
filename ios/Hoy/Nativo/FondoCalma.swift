@@ -29,7 +29,7 @@ struct FondoCalma: View {
             let vivo = i >= Self.rampa.count - 2
             return ctx.resolve(Text(String(c))
                 .font(.system(size: 12, design: .monospaced))
-                .foregroundColor(vivo ? Tema.acento.opacity(0.55) : Tema.ascii.opacity(0.22)))
+                .foregroundColor(vivo ? Tema.acento.opacity(0.22) : Tema.ascii.opacity(0.09)))   // «sutil»: la mitad que en la web de antes
         }
         let cols = Int(tam.width / Self.celda.width) + 1
         let filas = Int(tam.height / Self.celda.height) + 1
