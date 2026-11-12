@@ -232,3 +232,13 @@ Conocidas (sin Enlace): Instagram, TikTok, YouTube, X, Facebook, Reddit, WhatsAp
 ## Ajustes de Tom sin pasar por la web
 
 Mantén pulsado el icono de Tom → **Ajustes de Tom**. Ahí están las claves, Salud, los avisos, el freno y **Diagnóstico → Comprobar conexión** (si la web sale con la pantalla de Cloudflare, manda una captura de eso).
+
+## Trabajar en paralelo (ramas nativo/*)
+
+- Cada bloque de trabajo va en su rama `nativo/<tema>`. Un push a `nativo/**` compila en Actions **sin publicar**; si
+  falla, el registro queda en la release `ios-log-nativo-<tema>` (descargable sin sesión). Solo `main` publica `Tom.ipa`.
+- Una sección nueva en nativo: su vista en `Hoy/Nativo/<Seccion>/` y **una línea** en `Hoy/Nativo/Registro.swift`.
+  `Navegador.nativas` se rellena desde ahí al arrancar; Pestanas y la barra no hay que tocarlas.
+- Los colores, letras, esquinas y muelles salen de `Tema` (Hoy/Tema.swift y Aspecto.swift); ninguna vista pone colores a mano.
+- Las peticiones van por `API` (Compartido/API.swift) con las claves de siempre; lo que deba funcionar sin red, por la
+  cola de `Local`/`Sincro` como Hoy y Hábitos.

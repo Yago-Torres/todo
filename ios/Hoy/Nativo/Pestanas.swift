@@ -78,13 +78,7 @@ struct Pestanas: View {
         navegador.toca(lista[i].href)
     }
 
-    @ViewBuilder private var pantalla: some View {
-        if navegador.pestana == "/habitos.html" {
-            PantallaHabitos()
-        } else {
-            PantallaHoy()
-        }
-    }
+    private var pantalla: some View { RegistroNativo.vista(navegador.pestana) }
 }
 
 extension Notification.Name {

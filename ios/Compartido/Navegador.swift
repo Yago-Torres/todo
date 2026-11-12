@@ -16,7 +16,8 @@ final class Navegador: ObservableObject {
     /// «/habitos.html?hecho=id» (un aviso o el widget): el hábito que la pantalla nativa tiene que marcar.
     @Published var marcaPendiente: String?
 
-    static let nativas: Set<String> = ["/", "/habitos.html"]
+    /// Lo rellena la app al arrancar con RegistroNativo.rutas (Compartido también compila en el widget, que no las tiene).
+    static var nativas: Set<String> = ["/", "/habitos.html"]
 
     /// Hoy y Hábitos van a su pantalla nativa, salvo con «web=1» (la página de siempre, para editar y planificar).
     static func esNativa(_ ruta: String) -> Bool {

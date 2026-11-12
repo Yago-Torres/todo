@@ -11,6 +11,10 @@ struct HoyApp: App {
     @Environment(\.scenePhase) private var fase
     @State private var estado = EstadoApp()
 
+    init() {
+        Navegador.nativas = RegistroNativo.rutas   // qué secciones son pantallas nativas (Hoy/Nativo/Registro.swift)
+    }
+
     var body: some Scene {
         WindowGroup {
             Raiz(estado: estado)

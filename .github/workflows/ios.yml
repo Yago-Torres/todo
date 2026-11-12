@@ -4,7 +4,8 @@ name: iOS
 
 on:
   push:
-    branches: [main]
+    # main publica el IPA; nativo/* solo compila (las ramas de cada agente: ver ios/README.md → «Trabajar en paralelo»)
+    branches: [main, "nativo/**"]
     paths: ["ios/**", ".github/workflows/ios.yml"]
   workflow_dispatch:
 
@@ -54,6 +55,7 @@ jobs:
           ls -la Tom.ipa
 
       - name: Publicar en la release «ios»
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -68,7 +70,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view ios-log >/dev/null 2>&1 || gh release create ios-log --title "Registro de la última compilación fallida" --notes "Solo para depurar" --prerelease
+          # una release de registro por rama: ios-log (main) o ios-log-<rama sin barras>
+          R=ios-log; [ "$GITHUB_REF_NAME" != main ] && R="ios-log-${GITHUB_REF_NAME//\//-}"
+          gh release view "$R" >/dev/null 2>&1 || gh release create "$R" --title "Registro de la compilación fallida ($GITHUB_REF_NAME)" --notes "Solo para depurar" --prerelease
           grep -E "error:|warning: .*deprecated|BUILD FAILED|\*\* " ios/build.log > ios/errores.txt || true
           tail -n 300 ios/build.log >> ios/errores.txt || echo "sin build.log" >> ios/errores.txt
-          gh release upload ios-log ios/errores.txt --clobber
+          gh release upload "$R" ios/errores.txt --clobber
