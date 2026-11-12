@@ -40,7 +40,8 @@ struct PantallaHoy: View {
             }
         }
         .task { await datos.carga() }
-        .sensoryFeedback(.success, trigger: toques)
+        // completar el día: confeti con los colores del tema, háptica y sonido
+        .overlay { CelebracionDia(disparo: toques).ignoresSafeArea() }
     }
 
     @ViewBuilder private func bloque(_ id: String) -> some View {
@@ -76,8 +77,12 @@ struct PantallaHoy: View {
                     .foregroundStyle(Tema.texto)
                     .contentTransition(.interpolate)
                     .animation(Tema.Muelle.pantalla, value: progreso)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
             }
-            Spacer()
+            Spacer(minLength: Tema.Espacio.s)
+            MascotaHoy()
+                .alignmentGuide(.firstTextBaseline) { d in d[.bottom] - 6 }
             Button {
                 Haptica.shared.toca(.marcar)
                 Navegador.shared.voz = true

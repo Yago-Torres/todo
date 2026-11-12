@@ -25,6 +25,7 @@ final class Haptica {
     }
 
     func toca(_ patron: Patron) {
+        Sonidos.shared.toca(patron)   // su sonido, con el juego del tema (si «sonidos» está encendido)
         guard soportado else {
             respaldo(patron)
             return

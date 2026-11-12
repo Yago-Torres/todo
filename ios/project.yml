@@ -30,6 +30,8 @@ targets:
         INFOPLIST_FILE: Hoy/Info.plist
         CODE_SIGN_ENTITLEMENTS: Hoy/Hoy.entitlements
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # un icono por tema (Assets.xcassets/Icono-<tema>.appiconset, IconoTema.swift): Xcode los pone en CFBundleAlternateIcons
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "Icono-hormigon Icono-shibuya Icono-kioto Icono-sakura Icono-calma Icono-terminal Icono-prensa Icono-fiordo Icono-cafe Icono-bauhaus Icono-miami Icono-matcha Icono-lavanda Icono-medianoche Icono-braun Icono-bosque Icono-arena Icono-grafito"
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
     dependencies:
       - target: HoyWidget

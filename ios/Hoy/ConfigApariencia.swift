@@ -29,7 +29,8 @@ struct SeccionApariencia: View {
                     ForEach(temas) { t in
                         Button {
                             Haptica.shared.toca(.marcar)
-                            aspecto.eligeTema(t)
+                            // el tema nuevo se extiende en un círculo desde el toque
+                            TransicionCirculo.cambia { aspecto.eligeTema(t) }
                         } label: {
                             TarjetaTema(tema: t, elegido: aspecto.eleccion.tema == t.id)
                         }
@@ -38,10 +39,12 @@ struct SeccionApariencia: View {
                 }
                 .padding(.vertical, 6)
             }
+            InterruptorIconoTema()
         } header: {
             Text("Apariencia")
         } footer: {
-            Text(aspecto.eleccion.tema == "propio" ? "Tema propio: lo has personalizado abajo." : "Se guarda en el servidor: la web cambia igual.")
+            Text((aspecto.eleccion.tema == "propio" ? "Tema propio: lo has personalizado abajo." : "Se guarda en el servidor: la web cambia igual.")
+                 + " Con «Icono a juego», iOS avisa con un mensaje cada vez que cambia el icono.")
         }
         SeccionPersonalizar()
     }
@@ -152,7 +155,7 @@ struct SeccionPersonalizar: View {
                 ForEach(lista, id: \.self) { hex in
                     Button {
                         Haptica.shared.toca(.marcar)
-                        Aspecto.shared.cambia { $0[keyPath: clave] = hex }
+                        TransicionCirculo.cambia { Aspecto.shared.cambia { $0[keyPath: clave] = hex } }
                     } label: {
                         Circle().fill(colorDe(hex))
                             .frame(width: 28, height: 28)
