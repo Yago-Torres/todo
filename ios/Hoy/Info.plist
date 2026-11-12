@@ -83,6 +83,8 @@
 	</array>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Tom usa la cámara para escanear o fotografiar tus documentos.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Tom usa Face ID para que nadie más vea tus hábitos y tus datos al abrirla.</string>
 	<key>NSHealthShareUsageDescription</key>
