@@ -364,3 +364,4 @@ body:has(nav.c-dock):not(:has(.app)) { padding-bottom: calc(108px + env(safe-are
                  border-radius: 999px; background: var(--texto); color: var(--fondo); box-shadow: var(--sombra); font-size: var(--t-pequeno); font-weight: 500; }
 .c-edita-barra span { flex: 1; min-width: 0; }
 .c-edita-barra .c-btn:not(.pri) { background: transparent; color: var(--fondo); border-color: color-mix(in srgb, var(--fondo) 30%, transparent); }
+.c-titulo-editable { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }

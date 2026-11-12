@@ -581,10 +581,13 @@ const calma = (() => {
     const gs = grupos();
     ordena(gs, todaDisposicion[pantalla()]);
     if (new URLSearchParams(location.search).has("editar")) editaPantalla();
+    // mantener pulsado el título (sin que iOS seleccione el texto ni saque su menú: .c-titulo-editable en calma.css)
     const h1 = document.querySelector(".app h1, h1");
     let tm;
-    h1?.addEventListener("pointerdown", () => { tm = setTimeout(editaPantalla, 650); });
-    for (const ev of ["pointerup", "pointerleave", "pointercancel"]) h1?.addEventListener(ev, () => clearTimeout(tm));
+    h1?.classList.add("c-titulo-editable");
+    h1?.addEventListener("contextmenu", e => e.preventDefault());
+    h1?.addEventListener("pointerdown", () => { tm = setTimeout(editaPantalla, 550); });
+    for (const ev of ["pointerup", "pointerleave", "pointercancel", "pointermove"]) h1?.addEventListener(ev, e => { if (ev !== "pointermove" || e.movementY > 4) clearTimeout(tm); });
   }
   async function guardaDisposicion(p, d) {
     todaDisposicion = {...todaDisposicion, [p]: d};
