@@ -66,6 +66,21 @@ struct ContadorFreno: Codable, Equatable {
     var entradas = 0    // veces que dijiste «Entrar»
     var renuncias = 0   // veces que dijiste «Mejor no»
     var minutos = 0     // minutos de pase concedidos
+    var segundos = 0    // uso real: de abrirla a cerrarla (automatización «Al cerrar» → «App cerrada»)
+
+    var minutosReales: Int { (segundos + 30) / 60 }
+
+    init() {}
+
+    // los registros de antes no traen «segundos»
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        aperturas = try c.decodeIfPresent(Int.self, forKey: .aperturas) ?? 0
+        entradas = try c.decodeIfPresent(Int.self, forKey: .entradas) ?? 0
+        renuncias = try c.decodeIfPresent(Int.self, forKey: .renuncias) ?? 0
+        minutos = try c.decodeIfPresent(Int.self, forKey: .minutos) ?? 0
+        segundos = try c.decodeIfPresent(Int.self, forKey: .segundos) ?? 0
+    }
 }
 
 enum Freno {
@@ -75,6 +90,32 @@ enum Freno {
     static var minutosPase: Int { max(1, Almacen.defaults.object(forKey: "freno.minutos") as? Int ?? 5) }
     static var esperaBase: Int { max(3, Almacen.defaults.object(forKey: "freno.espera") as? Int ?? 8) }
     static var libresAlDia: Int { max(0, Almacen.defaults.object(forKey: "freno.libres") as? Int ?? 0) }
+    /// Minutos de uso real al día por app (0: sin límite). Pasado, la espera es la máxima y no hay aperturas libres.
+    static var limiteDiario: Int { max(0, Almacen.defaults.object(forKey: "freno.limite") as? Int ?? 0) }
+
+    static func pasadoDeLimite(_ app: AppFrenada) -> Bool {
+        limiteDiario > 0 && deHoy(app).segundos >= limiteDiario * 60
+    }
+
+    private static func claveAbierta(_ app: AppFrenada) -> String { "freno.abierta.\(app.rawValue)" }
+
+    /// La app ha pasado a primer plano (con pase): desde aquí cuenta el uso real.
+    private static func marcaAbierta(_ app: AppFrenada) {
+        if Almacen.defaults.double(forKey: claveAbierta(app)) == 0 {
+            Almacen.defaults.set(Date().timeIntervalSince1970, forKey: claveAbierta(app))
+        }
+    }
+
+    /// Lo que hace «App cerrada»: suma el rato desde que se abrió (si es creíble: menos de 4 h) al día en que se abrió.
+    static func alCerrar(_ app: AppFrenada) {
+        let desde = Almacen.defaults.double(forKey: claveAbierta(app))
+        Almacen.defaults.removeObject(forKey: claveAbierta(app))
+        guard desde > 0 else { return }
+        let segundos = Int(Date().timeIntervalSince1970 - desde)
+        guard segundos > 0, segundos < 4 * 3600 else { return }
+        recuerda(app)
+        apunta(app) { $0.segundos += segundos }
+    }
 
     private static var hoy: String { Fecha.dia(Date()) }
 
@@ -127,19 +168,20 @@ enum Freno {
     /// Lo que hace la acción de Atajos: el enlace que hay que abrir ahora.
     static func alAbrir(_ app: AppFrenada) -> URL {
         recuerda(app)
-        if pase(app) != nil { return app.enlace }
+        if pase(app) != nil { marcaAbierta(app); return app.enlace }
         apunta(app) { $0.aperturas += 1 }
-        if deHoy(app).aperturas <= libresAlDia {
+        if deHoy(app).aperturas <= libresAlDia, !pasadoDeLimite(app) {
             daPase(app, minutos: minutosPase)
             apunta(app) { $0.minutos += minutosPase }
+            marcaAbierta(app)
             return app.enlace
         }
         return app.freno
     }
 
-    /// Cada entrada de más hoy alarga la espera 4 s, hasta 30.
+    /// Cada entrada de más hoy alarga la espera 4 s, hasta 30; pasado el límite diario, 30 directamente.
     static func espera(_ app: AppFrenada) -> Int {
-        min(30, esperaBase + 4 * deHoy(app).entradas)
+        pasadoDeLimite(app) ? 30 : min(30, esperaBase + 4 * deHoy(app).entradas)
     }
 
     static func entra(_ app: AppFrenada, minutos: Int) {
@@ -184,6 +226,26 @@ enum FrenoError: Error, CustomLocalizedStringResourceConvertible {
         case .sinEnlace(let app):
             "No sé cómo abrir «\(app)». Pon su esquema de URL en «Enlace» (por ejemplo, brawlstars://)."
         }
+    }
+}
+
+/// La segunda automatización, «Al cerrar la app»: con ella Tom mide el uso real (de abrir a cerrar).
+struct FrenoCerradaIntent: AppIntent {
+    static var title: LocalizedStringResource = "App cerrada"
+    static var description = IntentDescription("Para la automatización «Al cerrar una app»: Tom suma el rato que la has tenido abierta. Pon el mismo nombre que en «Frenar app».")
+    static var openAppWhenRun = false
+
+    @Parameter(title: "App", description: "El mismo nombre que en «Frenar app»")
+    var app: String
+
+    static var parameterSummary: some ParameterSummary { Summary("Cerrada \(\.$app)") }
+
+    func perform() async throws -> some IntentResult {
+        let clave = AppFrenada.normaliza(app)
+        let frenada = Freno.apps()[clave] ?? AppFrenada.resuelve(nombre: app, esquema: nil)
+            ?? AppFrenada(rawValue: clave, nombre: app, esquema: "")
+        Freno.alCerrar(frenada)
+        return .result()
     }
 }
 
@@ -236,6 +298,7 @@ struct PantallaFreno: View {
                     Text("Mejor no").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
+                .foregroundStyle(Color("AcentoTexto"))
                 .controlSize(.large)
 
                 Button {
@@ -266,7 +329,18 @@ struct PantallaFreno: View {
         var partes = ["Hoy la has abierto \(contador.aperturas) \(contador.aperturas == 1 ? "vez" : "veces")"]
         if contador.entradas > 0 { partes.append("has entrado \(contador.entradas) (\(contador.minutos) min)") }
         if contador.renuncias > 0 { partes.append("y lo has dejado \(contador.renuncias)") }
-        return partes.joined(separator: ", ") + "."
+        var texto = partes.joined(separator: ", ") + "."
+        if contador.segundos > 0 {
+            texto += "\nUso real hoy: \(contador.minutosReales) min"
+            if Freno.limiteDiario > 0 {
+                texto += contador.segundos >= Freno.limiteDiario * 60
+                    ? " (te has pasado de los \(Freno.limiteDiario) que te pusiste)."
+                    : " de \(Freno.limiteDiario)."
+            } else {
+                texto += "."
+            }
+        }
+        return texto
     }
 }
 
@@ -275,6 +349,7 @@ struct SeccionFreno: View {
     @AppStorage("freno.minutos", store: Almacen.defaults) private var minutos = 5
     @AppStorage("freno.espera", store: Almacen.defaults) private var espera = 8
     @AppStorage("freno.libres", store: Almacen.defaults) private var libres = 0
+    @AppStorage("freno.limite", store: Almacen.defaults) private var limite = 0
     @State private var ayuda = false
 
     var body: some View {
@@ -282,9 +357,13 @@ struct SeccionFreno: View {
             Stepper("Pase al entrar: \(minutos) min", value: $minutos, in: 1...60)
             Stepper("Espera: \(espera) s", value: $espera, in: 3...30)
             Stepper("Aperturas libres al día: \(libres)", value: $libres, in: 0...20)
+            Stepper(limite == 0 ? "Límite diario: sin límite" : "Límite diario: \(limite) min",
+                    value: $limite, in: 0...240, step: 5)
             let hoy = Freno.apps().values.sorted { $0.nombre < $1.nombre }.map { ($0, Freno.deHoy($0)) }.filter { $0.1.aperturas > 0 }
             ForEach(hoy, id: \.0) { app, c in
-                LabeledContent(app.nombre, value: "\(c.aperturas) aperturas · \(c.entradas) entradas · \(c.minutos) min")
+                LabeledContent(app.nombre, value: c.segundos > 0
+                               ? "\(c.minutosReales) min de uso · \(c.aperturas) aperturas · \(c.entradas) entradas"
+                               : "\(c.aperturas) aperturas · \(c.entradas) entradas · \(c.minutos) min de pase")
                     .font(.callout)
             }
             DisclosureGroup("Cómo se activa", isExpanded: $ayuda) {
@@ -294,6 +373,9 @@ struct SeccionFreno: View {
                 2. Añade la acción «Frenar app» de Tom (búscala: no está entre los recuadros) y escribe el nombre de la app. Si Tom no la conoce, te pedirá su enlace en «Enlace» (p. ej. brawlstars://).
                 3. Añade «Abrir URL» (la de Atajos): coge sola el resultado de la anterior.
                 Sin pase, se abre Tom y te pregunta. Cada vez que entras hoy, la espera crece 4 s.
+
+                Para medir el uso real (y el límite diario), otra automatización por app:
+                App → la misma, marca solo «Se cierra» y «Ejecutar inmediatamente» → acción «App cerrada» de Tom con el mismo nombre.
                 """)
                 .font(.callout)
                 .foregroundStyle(.secondary)

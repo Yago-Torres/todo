@@ -422,6 +422,7 @@ enum Galletas {
         var lineas = ["Bundle: \(Bundle.main.bundleIdentifier ?? "?")",
                       "App group: \(Config.grupo) \(contenedor ? "✓" : "✗ sin acceso")",
                       "Perfil: \(Firma.grupos().joined(separator: ", "))",
+                      "Salud en la firma: \(Salud.firmadaConSalud ? "✓" : "✗ (SideStore la quitó)")",
                       "Red: \(Red.shared.hayRed ? "sí" : "no")"]
         let sesion = URLSession(configuration: .ephemeral)
         defer { sesion.finishTasksAndInvalidate() }

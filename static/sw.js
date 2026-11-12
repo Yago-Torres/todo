@@ -2,10 +2,10 @@
 // - Lo que no cambia nunca (con versión en la URL, o de las webs de fuentes y librerías): de la copia, sin preguntar.
 // - Las páginas: de la copia al momento, y por detrás la nueva para la próxima vez (un despliegue se ve en la
 //   segunda visita). Si Cloudflare Access pide entrar, se borra la copia: la próxima vez va a la red y al login.
-// - Los datos (/api): de la red si contesta en 400 ms; si no, la copia ya, y cuando llega la respuesta, si es
+// - Los datos (/api): de la red si contesta en 250 ms; si no, la copia ya, y cuando llega la respuesta, si es
 //   distinta, se avisa a la página para que recargue (calma.js). Sin red, la copia. Las marcas sin red, sinred.js.
 
-const CACHE = "todo-6";
+const CACHE = "todo-7";
 const FUERA = /^https:\/\/(fonts\.googleapis\.com|fonts\.gstatic\.com|cdnjs\.cloudflare\.com|cdn\.jsdelivr\.net)\//;
 // ?v= (aplica.sh), o la versión en el nombre (anime-4.5.0, Chart.js/4.4.1): si cambia, cambia la URL
 const fijo = u => FUERA.test(u.href) || u.searchParams.has("v") || /\d+\.\d+\.\d+/.test(u.pathname);
@@ -58,7 +58,7 @@ async function datos(e) {
   if (!copia) return red.then(([res]) => res);
   // un 5xx es la Pi caída detrás de Cloudflare: para eso también está la copia
   const ya = await Promise.race([red.then(([res]) => (res.status >= 500 ? null : res), () => null),
-                                 new Promise(ok => setTimeout(() => ok("tarde"), 400))]);
+                                 new Promise(ok => setTimeout(() => ok("tarde"), 250))]);
   if (ya && ya !== "tarde") return ya;
   if (ya === null) return copia;
   const antes = copia.clone();

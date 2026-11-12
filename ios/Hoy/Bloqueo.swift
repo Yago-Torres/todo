@@ -33,6 +33,7 @@ struct Bloqueo: View {
                     Task { await pide() }
                 }
                 .buttonStyle(.borderedProminent)
+                .foregroundStyle(Color("AcentoTexto"))
                 .disabled(pidiendo)
             }
             .padding(32)

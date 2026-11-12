@@ -21,14 +21,24 @@ enum Salud {
         return tipos
     }
 
-    static func autoriza() async -> Bool {
-        guard disponible else { return false }
+    /// nil si va bien; si no, por qué (sin el permiso de HealthKit en la firma, iOS ni enseña la hoja de Salud).
+    static func autoriza() async -> String? {
+        guard disponible else { return "Este dispositivo no tiene Salud." }
+        guard firmadaConSalud else {
+            return "La firma de Tom no lleva el permiso de Salud (com.apple.developer.healthkit): SideStore lo ha quitado al instalar. Sin él, iOS no deja ni pedir acceso."
+        }
         do {
             try await almacen.requestAuthorization(toShare: [], read: tiposLectura)
-            return true
+            return nil
         } catch {
-            return false
+            return "Salud: \(error.localizedDescription)"
         }
+    }
+
+    /// Sin perfil embebido (simulador) se da por bueno.
+    static var firmadaConSalud: Bool {
+        let d = Firma.derechos()
+        return d.isEmpty || (d["com.apple.developer.healthkit"] as? Bool ?? false)
     }
 
     /// Manda sueño, pasos, peso y entrenos. Devuelve el texto que contesta el servidor, o nil si no hubo nada o falló.

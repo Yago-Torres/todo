@@ -591,6 +591,7 @@ struct HojaEscalada: View {
     var body: some View {
         NavigationStack {
             Form {
+                Group {
                 Section {
                     PhotosPicker(selection: $elegido, matching: .videos, preferredItemEncoding: .current) {
                         Label(elegido == nil ? "Elegir el vídeo" : "Vídeo elegido · cambiar", systemImage: "video")
@@ -663,7 +664,11 @@ struct HojaEscalada: View {
                         }
                     }
                 }
+                }
+                .listRowBackground(Color("Carta"))
             }
+            .scrollContentBackground(.hidden)
+            .background(Color("Fondo"))
             .navigationTitle("Subir intento")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -22,14 +22,19 @@ enum Config {
 /// Lo que dice embedded.mobileprovision: un plist XML dentro de una firma CMS, que se puede recortar a mano.
 enum Firma {
     static func grupos() -> [String] {
+        derechos()["com.apple.security.application-groups"] as? [String] ?? []
+    }
+
+    /// Los permisos con los que se firmó de verdad (SideStore quita los que la cuenta gratis no admite).
+    static func derechos() -> [String: Any] {
         guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
               let datos = try? Data(contentsOf: url),
               let inicio = datos.range(of: Data("<?xml".utf8)),
               let fin = datos.range(of: Data("</plist>".utf8), in: inicio.lowerBound..<datos.endIndex),
               let plist = try? PropertyListSerialization.propertyList(from: datos[inicio.lowerBound..<fin.upperBound],
                                                                        format: nil) as? [String: Any],
-              let derechos = plist["Entitlements"] as? [String: Any] else { return [] }
-        return derechos["com.apple.security.application-groups"] as? [String] ?? []
+              let derechos = plist["Entitlements"] as? [String: Any] else { return [:] }
+        return derechos
     }
 }
 

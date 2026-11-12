@@ -78,7 +78,7 @@
    tarjeta que tocaste a la cabecera de la página que abre) y la barra de abajo no se mueve */
 html[data-vt] .app > header.top { view-transition-name: c-cabecera; }
 html[data-vt] nav.c-dock { view-transition-name: c-dock; }
-::view-transition-group(c-cabecera) { animation-duration: .45s; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
+::view-transition-group(c-cabecera) { animation-duration: .3s; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
 ::view-transition-group(c-dock), ::view-transition-new(c-dock) { animation: none; }
 ::view-transition-old(c-dock) { display: none; }
 
@@ -99,7 +99,7 @@ body {
 .c-vt.c-cargando .app { opacity: 1; }
 .c-vt.c-cargando .app > :not(header.top) { opacity: 0; }
 /* al irse a otra página (calma.js → vete()): baja y se desvanece; el menú y el fondo, quietos */
-.c-saliendo .app { opacity: 0; transform: translateY(22px); transition: opacity .23s ease-in, transform .23s cubic-bezier(.5, 0, .75, 0); }
+.c-saliendo .app { opacity: 0; transform: translateY(12px); transition: opacity .13s ease-in, transform .13s cubic-bezier(.5, 0, .75, 0); }
 /* fondo: un «shader» de caracteres ASCII que ondula despacio (calma.js → fondo()). Detrás de todo. */
 #c-fondo { position: fixed; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
 /* una carta con data-fondo lleva el dibujo dentro, debajo de su contenido y con sus esquinas */

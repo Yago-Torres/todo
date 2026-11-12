@@ -165,9 +165,11 @@ Tom no puede leer el Tiempo de uso (Apple solo lo deja con cuenta de pago), así
 2. Añade la acción **Frenar app** de Tom (búscala por nombre: no cabe entre los 10 recuadros) y escribe el nombre de la app. Las conocidas (Instagram, TikTok, YouTube, Brawl Stars, Clash Royale…) van solas; para otra, pon su esquema de URL en **Enlace** (p. ej. `brawlstars://`).
 3. Añade **Abrir URL** (la acción de Atajos). Coge sola el resultado de la anterior.
 
+Para medir el **uso real** (y poder ponerle un límite diario en Configurar → Freno de apps), otra automatización por app: la misma app, solo **Se cierra** y **Ejecutar inmediatamente**, con la acción **App cerrada** de Tom y el mismo nombre. Tom cuenta de abrir a cerrar; pasado el límite del día, la espera es de 30 s y no quedan aperturas libres.
+
 Sin pase, se abre Tom: respiras unos segundos y eliges **Mejor no** o **Entrar 5 min**. Entrar abre la app con un pase de esos minutos; cada vez que entras en el día, la espera crece 4 s. El pase, la espera y las aperturas libres al día se cambian en **Ajustes de Tom → Freno de apps**. Lo que abres no sale del iPhone.
 
-Apps: Instagram, TikTok, YouTube, X, Facebook, Reddit, WhatsApp, Twitch, Threads y BeReal.
+Conocidas (sin Enlace): Instagram, TikTok, YouTube, X, Facebook, Reddit, WhatsApp, Twitch, Threads, BeReal, Telegram, Snapchat, Pinterest, Discord, LinkedIn, Netflix, Spotify, Tinder, Brawl Stars, Clash Royale y Clash of Clans.
 
 ## Ajustes de Tom sin pasar por la web
 

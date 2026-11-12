@@ -12,7 +12,7 @@ struct Voz: View {
     @Environment(\.accessibilityReduceMotion) private var sinMovimiento
     @State private var charla = Conversacion()
 
-    private let acento = Color(hex: "#2E8B57")
+    private let acento = Color.accentColor   // el acento Calma (oliva / lima en oscuro), como la web
 
     var body: some View {
         ZStack {
@@ -63,6 +63,7 @@ struct Voz: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(acento)
+                .foregroundStyle(Color("AcentoTexto"))
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 12)
@@ -112,10 +113,10 @@ private struct Burbuja: View {
         HStack {
             if !turno.deTom { Spacer(minLength: 40) }
             Text(turno.texto)
-                .foregroundStyle(turno.deTom ? Color.primary : Color.white)
+                .foregroundStyle(turno.deTom ? Color.primary : Color("AcentoTexto"))
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .background(turno.deTom ? Color.secondary.opacity(0.12) : acento,
+                .background(turno.deTom ? Color("Carta") : acento,
                             in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             if turno.deTom { Spacer(minLength: 40) }
         }
@@ -157,6 +158,7 @@ final class Conversacion: NSObject, AVSpeechSynthesizerDelegate {
     @ObservationIgnored private var tarea: SFSpeechRecognitionTask?
     @ObservationIgnored private var reloj: Task<Void, Never>?
     @ObservationIgnored private var activa = false
+    @ObservationIgnored private var escuchoAlgo = false   // el micro llegó a captar voz en esta escucha
     @ObservationIgnored private var ronda = 0   // cambia en cada escucha: lo que llegue tarde de la anterior no cuenta
 
     override init() {
@@ -235,7 +237,7 @@ final class Conversacion: NSObject, AVSpeechSynthesizerDelegate {
             let p = SFSpeechAudioBufferRecognitionRequest()
             p.shouldReportPartialResults = true
             p.addsPunctuation = true
-            if reconocedor.supportsOnDeviceRecognition { p.requiresOnDeviceRecognition = true }
+            // sin exigir el modelo del iPhone: si no está descargado, el reconocimiento falla al instante sin oír nada
 
             let entrada = motor.inputNode
             let formato = entrada.outputFormat(forBus: 0)
@@ -244,9 +246,11 @@ final class Conversacion: NSObject, AVSpeechSynthesizerDelegate {
                 return
             }
             nivel = 0
+            escuchoAlgo = false
             Self.conecta(entrada, formato, p) { [weak self] valor in
                 guard let self else { return }
                 self.nivel += (valor - self.nivel) * 0.5   // suavizado; el orbe vuelve a suavizar por fotograma
+                if valor > 0.35 { self.escuchoAlgo = true }
             }
             motor.prepare()
             try motor.start()
@@ -294,22 +298,28 @@ final class Conversacion: NSObject, AVSpeechSynthesizerDelegate {
     }
 
     nonisolated private static func reconoce(_ r: SFSpeechRecognizer, _ p: SFSpeechAudioBufferRecognitionRequest,
-                                             _ alOir: @escaping @MainActor (String?, Bool, Bool) -> Void) -> SFSpeechRecognitionTask {
+                                             _ alOir: @escaping @MainActor (String?, Bool, String?) -> Void) -> SFSpeechRecognitionTask {
         r.recognitionTask(with: p) { resultado, error in
             let texto = resultado?.bestTranscription.formattedString
             let acabado = resultado?.isFinal ?? false
-            let fallo = error != nil
+            let fallo = error.map { ($0 as NSError).localizedDescription }
             Task { @MainActor in alOir(texto, acabado, fallo) }
         }
     }
 
-    private func oye(_ texto: String?, acabado: Bool, fallo: Bool, ronda deEsta: Int) {
+    private func oye(_ texto: String?, acabado: Bool, fallo: String?, ronda deEsta: Int) {
         guard deEsta == ronda, fase == .escuchando else { return }
         if let texto, !texto.isEmpty, texto != parcial {
             parcial = texto
             esperaSilencio(Self.trasHablar)
         }
-        if acabado || fallo { cierraFrase() }
+        // falló sin haber oído nada (y no por silencio): se cuenta, no se cierra la hoja a escondidas
+        if let fallo, parcial.trimmingCharacters(in: .whitespaces).isEmpty {
+            paraEscucha()
+            fase = .parada("No te he podido oír: \(fallo) Toca para reintentar.")
+            return
+        }
+        if acabado || fallo != nil { cierraFrase() }
     }
 
     private func esperaSilencio(_ segundos: Double) {
@@ -340,7 +350,11 @@ final class Conversacion: NSObject, AVSpeechSynthesizerDelegate {
         let dicho = parcial.trimmingCharacters(in: .whitespacesAndNewlines)
         paraEscucha()
         guard !dicho.isEmpty else {
-            termina()
+            if escuchoAlgo || !turnos.isEmpty {
+                termina()   // silencio de verdad: se acabó la conversación
+            } else {
+                fase = .parada("No me llega sonido del micrófono. ¿Lo está usando otra app (llamada, grabación)? Toca para reintentar.")
+            }
             return
         }
         turnos.append(Turno(deTom: false, texto: dicho))

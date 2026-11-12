@@ -165,7 +165,7 @@ const calma = (() => {
       a.setAttribute("aria-current", "page");
       gota.hidden = false;
       pon(a, true);
-      vete(a.href, 320);   // la gota se desliza mientras la página se va
+      vete(a.href, entrePaginas() ? 90 : 120);   // la gota arranca y la página se va enseguida (antes 320 ms en cada toque)
     });
   }
   /* App instalada en un iPhone con isla dinámica (barra de estado de 51 px o más): los avisos salen de ella */
@@ -376,7 +376,7 @@ const calma = (() => {
   /* Al irse a otra página: el contenido baja un poco mientras se desvanece (.c-saliendo en calma.css)
      y luego se navega; la siguiente entra con anima.entrada(). El fondo y el menú se quedan quietos.
      Desde JS, además, la app instalada del iPhone no se sale al navegador (con un enlace normal sí). */
-  function vete(url, espera = 230) {
+  function vete(url, espera = 130) {
     if (!quieto() && !entrePaginas()) document.documentElement.classList.add("c-saliendo");
     setTimeout(() => { location.href = url; }, quieto() ? 0 : espera);
   }
@@ -399,7 +399,7 @@ const calma = (() => {
     if (u.origin !== location.origin) return;   // obsidian://, webs de fuera: como siempre
     if (u.pathname === location.pathname && u.search === location.search) return;   // #ancla de la misma página
     e.preventDefault();
-    vete(u.href, entrePaginas() ? 0 : 230);
+    vete(u.href, entrePaginas() ? 0 : 130);
   });
 
   /* Vibración. Safari no deja vibrar a las webs, pero al cambiar un interruptor nativo (iOS 17.4+)

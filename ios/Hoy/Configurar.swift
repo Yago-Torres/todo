@@ -35,6 +35,7 @@ struct Configurar: View {
 
     var body: some View {
         Form {
+            Group {
             Section {
                 SecureField("CF-Access-Client-Id", text: $cfId)
                 SecureField("CF-Access-Client-Secret", text: $cfSecret)
@@ -139,6 +140,8 @@ struct Configurar: View {
                     Text("Si la web sale con la pantalla de Cloudflare, pulsa aquí y manda una captura.")
                 }
             }
+            }
+            .listRowBackground(Color("Carta"))
         }
         .scrollContentBackground(.hidden)
         .background(Color("Fondo"))
@@ -199,11 +202,12 @@ struct Configurar: View {
 
     private func activaSalud() async {
         aviso = nil
-        if await Salud.autoriza() {
-            Salud.activaSegundoPlano()
-        } else {
+        if let fallo = await Salud.autoriza() {
             salud = false
-            aviso = "Salud no ha dado permiso. Revísalo en Ajustes > Salud > Acceso a datos."
+            aviso = fallo
+        } else {
+            Salud.activaSegundoPlano()
+            await sincronizaSalud()
         }
     }
 
