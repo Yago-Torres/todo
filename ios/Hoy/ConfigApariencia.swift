@@ -16,7 +16,7 @@ struct SeccionApariencia: View {
         let cat = aspecto.catalogo
         let e = aspecto.eleccion
         Section {
-            VistaPrevia()
+            MuestraApariencia()
                 .listRowInsets(EdgeInsets(top: 12, leading: 12, bottom: 12, trailing: 12))
             Picker("Modo", selection: enlace(\.modo)) {
                 Text("Sistema").tag("sistema")
@@ -60,7 +60,7 @@ struct SeccionApariencia: View {
 }
 
 /// Una carta de muestra: un hábito marcado, una cifra y un botón, con el tema actual.
-struct VistaPrevia: View {
+struct MuestraApariencia: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Tema.Espacio.m) {
             HStack(spacing: Tema.Espacio.m) {
