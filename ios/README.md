@@ -156,3 +156,19 @@ Si la compilación falla, el registro de errores queda descargable sin iniciar s
 | Tras actualizar o resetear el iPhone, nada funciona | El archivo de emparejamiento caduca. Repite la sección [Instalar SideStore](#instalar-sidestore-una-vez-con-el-pc) con iloader. Tus datos siguen en el servidor. |
 
 Si nada de esto funciona, mira el [registro de errores](#cómo-se-compila) o el servidor de Discord de iloader, que es donde atienden los problemas de iloader.
+
+## Freno de apps
+
+Tom no puede leer el Tiempo de uso (Apple solo lo deja con cuenta de pago), así que el freno va con Atajos. Una vez por app:
+
+1. **Atajos → Automatización → Nueva → App**. Elige la app (Instagram, TikTok…), marca **Se abre** y **Ejecutar inmediatamente**.
+2. Añade la acción **Frenar app** de Tom y elige esa misma app.
+3. Añade **Abrir URL** (la acción de Atajos). Coge sola el resultado de la anterior.
+
+Sin pase, se abre Tom: respiras unos segundos y eliges **Mejor no** o **Entrar 5 min**. Entrar abre la app con un pase de esos minutos; cada vez que entras en el día, la espera crece 4 s. El pase, la espera y las aperturas libres al día se cambian en **Ajustes de Tom → Freno de apps**. Lo que abres no sale del iPhone.
+
+Apps: Instagram, TikTok, YouTube, X, Facebook, Reddit, WhatsApp, Twitch, Threads y BeReal.
+
+## Ajustes de Tom sin pasar por la web
+
+Mantén pulsado el icono de Tom → **Ajustes de Tom**. Ahí están las claves, Salud, los avisos, el freno y **Diagnóstico → Comprobar conexión** (si la web sale con la pantalla de Cloudflare, manda una captura de eso).

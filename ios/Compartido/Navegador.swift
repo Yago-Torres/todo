@@ -10,6 +10,8 @@ final class Navegador: ObservableObject {
     @Published var ruta: String?
     /// El modo voz de Tom (Hoy/Voz.swift) a pantalla completa.
     @Published var voz = false
+    /// Abrir Configurar desde el acceso del icono (también en frío, antes de que exista la vista).
+    @Published var configurar = false
 
     private static let claveVoz = "abreVoz"
 

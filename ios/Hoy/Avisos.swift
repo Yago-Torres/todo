@@ -8,7 +8,9 @@ import WidgetKit
 /// Telegram sigue avisando también, a propósito: este aviso es el de reserva si Telegram no llega, y el de Telegram
 /// lo es si iOS no deja correr la app en segundo plano y los avisos locales se quedan sin recalcular.
 enum Avisos {
-    static let tareaId = "dev.yagotg.hoy.refresco"
+    /// SideStore reescribe BGTaskSchedulerPermittedIdentifiers con el bundle id nuevo (dev.yagotg.hoy.<EQUIPO>.refresco):
+    /// con el id fijo, register() y submit() no fallan pero la tarea no llega nunca.
+    static var tareaId: String { (Bundle.main.bundleIdentifier ?? "dev.yagotg.hoy") + ".refresco" }
     private static let prefijo = "hoy."
     private static let categoriaHecho = "hecho"
     private static let accionHecho = "hecho"

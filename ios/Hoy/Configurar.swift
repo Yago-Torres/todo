@@ -22,6 +22,8 @@ struct Configurar: View {
     @State private var sincronizando = false
     @State private var resumenSalud: String?
     @State private var hayClaves = Almacen.claves != nil
+    @State private var diagnosticando = false
+    @State private var diagnostico: [String] = []
 
     init(alGuardar: @escaping (Claves) -> Void) {
         self.alGuardar = alGuardar
@@ -111,8 +113,31 @@ struct Configurar: View {
                 }
             }
 
+            SeccionFreno()
+
             if hayClaves {
                 SeccionSinConexion()
+                Section {
+                    Button {
+                        Task { await diagnostica() }
+                    } label: {
+                        HStack {
+                            Text("Comprobar conexión")
+                            if diagnosticando {
+                                Spacer()
+                                ProgressView()
+                            }
+                        }
+                    }
+                    .disabled(diagnosticando)
+                    ForEach(diagnostico, id: \.self) { linea in
+                        Text(linea).font(.caption.monospaced()).textSelection(.enabled)
+                    }
+                } header: {
+                    Text("Diagnóstico")
+                } footer: {
+                    Text("Si la web sale con la pantalla de Cloudflare, pulsa aquí y manda una captura.")
+                }
             }
         }
         .scrollContentBackground(.hidden)
@@ -155,6 +180,13 @@ struct Configurar: View {
         } catch {
             fallo = error.localizedDescription
         }
+    }
+
+    private func diagnostica() async {
+        guard let c = Almacen.claves else { return }
+        diagnosticando = true
+        diagnostico = await Galletas.diagnostico(c)
+        diagnosticando = false
     }
 
     private func compruebaFaceID() {

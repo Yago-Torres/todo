@@ -53,6 +53,12 @@ struct HoyApp: App {
             if estado.claves != nil { estado.configurando = true }
             return
         }
+        // hoy://freno?app=instagram: lo abre la automatización de Atajos cuando la app no tiene pase (Freno.swift)
+        if url.host == "freno" {
+            let nombre = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "app" }?.value
+            if let nombre, let app = AppFrenada(rawValue: nombre) { estado.freno = app }
+            return
+        }
         guard let r = URLComponents(url: url, resolvingAgainstBaseURL: false)?
                 .queryItems?.first(where: { $0.name == "r" })?.value,
               r.hasPrefix("/") else { return }
@@ -65,6 +71,8 @@ final class EstadoApp {
     var claves: Claves? = Almacen.claves
     var bloqueado: Bool = Almacen.defaults.bool(forKey: "faceID")
     var configurando = false
+    /// La pantalla de freno de apps, encima de todo (también del bloqueo: no enseña nada tuyo).
+    var freno: AppFrenada?
 }
 
 struct Raiz: View {
@@ -128,8 +136,21 @@ struct Raiz: View {
                     Configurar { estado.claves = $0 }
                 }
             }
+            if let app = estado.freno {
+                PantallaFreno(app: app) { estado.freno = nil }
+                    .id(app)
+                    .transition(.move(edge: .bottom))
+                    .zIndex(10)
+            }
         }
         .animation(.default, value: estado.bloqueado)
+        .animation(.spring(duration: 0.4), value: estado.freno)
+        // el acceso «Ajustes de Tom» del icono: la puerta a Configurar que no depende de la web
+        .onChange(of: navegador.configurar, initial: true) { _, pedido in
+            guard pedido else { return }
+            navegador.configurar = false
+            if estado.claves != nil { estado.configurando = true }
+        }
     }
 }
 

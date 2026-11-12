@@ -415,6 +415,37 @@ private final class MensajeroDebil: NSObject, WKScriptMessageHandler {
 
 /// Las cookies de la web, pedidas con un URLSession efímero para no mezclarlas con las peticiones nativas.
 enum Galletas {
+    /// Paso a paso lo mismo que nuevas(), contando qué responde cada cosa (Configurar → Diagnóstico).
+    @MainActor
+    static func diagnostico(_ claves: Claves) async -> [String] {
+        let contenedor = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: Config.grupo) != nil
+        var lineas = ["Bundle: \(Bundle.main.bundleIdentifier ?? "?")",
+                      "App group: \(Config.grupo) \(contenedor ? "✓" : "✗ sin acceso")",
+                      "Perfil: \(Firma.grupos().joined(separator: ", "))",
+                      "Red: \(Red.shared.hayRed ? "sí" : "no")"]
+        let sesion = URLSession(configuration: .ephemeral)
+        defer { sesion.finishTasksAndInvalidate() }
+        let pasos: [(String, URLRequest?)] = [
+            ("manifest", try? API.peticion("/manifest.json", claves: claves)),
+            ("login", try? API.peticion("/api/login", metodo: "POST", json: ["pass": claves.pass], claves: claves)),
+        ]
+        for (nombre, peticion) in pasos {
+            guard let peticion else { lineas.append("\(nombre): no se pudo montar"); continue }
+            do {
+                let (_, r) = try await sesion.data(for: peticion)
+                let http = r as? HTTPURLResponse
+                let galletas = sesion.configuration.httpCookieStorage?.cookies?.map(\.name).sorted() ?? []
+                lineas.append("\(nombre): \(http?.statusCode ?? 0) de \(http?.url?.host ?? "?") · cookies: \(galletas.joined(separator: ", "))")
+            } catch {
+                lineas.append("\(nombre): \(error.localizedDescription)")
+            }
+        }
+        let web = await WKWebsiteDataStore.default().httpCookieStore.allCookies()
+            .filter { $0.domain.contains("yagotg") }.map { "\($0.name) (\($0.domain))" }
+        lineas.append("En la web: \(web.isEmpty ? "ninguna" : web.joined(separator: ", "))")
+        return lineas
+    }
+
     static func nuevas(_ claves: Claves) async -> [HTTPCookie] {
         let sesion = URLSession(configuration: .ephemeral)
         defer { sesion.finishTasksAndInvalidate() }

@@ -14,11 +14,17 @@ enum Accesos {
             UIApplication.shared.shortcutItems = secciones.map {
                 UIApplicationShortcutItem(type: $0.tipo, localizedTitle: $0.titulo, localizedSubtitle: nil,
                                           icon: UIApplicationShortcutIcon(systemImageName: $0.simbolo), userInfo: nil)
-            }
+            } + [UIApplicationShortcutItem(type: "configurar", localizedTitle: "Ajustes de Tom", localizedSubtitle: nil,
+                                           icon: UIApplicationShortcutIcon(systemImageName: "gearshape"), userInfo: nil)]
         }
     }
 
     static func maneja(_ tipo: String) {
+        // los ajustes nativos, aunque la web no cargue (era la única puerta)
+        if tipo == "configurar" {
+            Task { @MainActor in Navegador.shared.configurar = true }
+            return
+        }
         guard let s = secciones.first(where: { $0.tipo == tipo }) else { return }
         Task { @MainActor in Navegador.shared.abre(s.ruta) }
     }

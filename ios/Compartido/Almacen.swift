@@ -3,9 +3,33 @@ import Foundation
 enum Config {
     static let web = URL(string: "https://todo.yagotg.dev")!
 
-    /// SideStore renombra las app groups al firmar con un Apple ID gratis y deja el id real en ALTAppGroups.
-    static var grupo: String {
-        (Bundle.main.object(forInfoDictionaryKey: "ALTAppGroups") as? [String])?.first ?? "group.dev.yagotg.hoy"
+    /// SideStore renombra la app group al firmar con un Apple ID gratis (group.dev.yagotg.hoy.<EQUIPO>) y ya no lo
+    /// apunta en ALTAppGroups. Se busca en este orden: el perfil de firma de este bundle (la app y cada extensión
+    /// llevan el suyo), ALTAppGroups (AltStore), el equipo que SideStore mete en el bundle id y, si nada, el original.
+    static let grupo: String = {
+        let base = "group.dev.yagotg.hoy"
+        let delPerfil = Firma.grupos()
+        if let g = delPerfil.first(where: { $0.hasPrefix(base) }) ?? delPerfil.first { return g }
+        if let g = (Bundle.main.object(forInfoDictionaryKey: "ALTAppGroups") as? [String])?.first { return g }
+        if let id = Bundle.main.bundleIdentifier, id.hasPrefix("dev.yagotg.hoy.") {
+            let equipo = id.dropFirst("dev.yagotg.hoy.".count).split(separator: ".").first.map(String.init) ?? ""
+            if equipo.count == 10, equipo.allSatisfy({ $0.isUppercase || $0.isNumber }) { return base + "." + equipo }
+        }
+        return base
+    }()
+}
+
+/// Lo que dice embedded.mobileprovision: un plist XML dentro de una firma CMS, que se puede recortar a mano.
+enum Firma {
+    static func grupos() -> [String] {
+        guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
+              let datos = try? Data(contentsOf: url),
+              let inicio = datos.range(of: Data("<?xml".utf8)),
+              let fin = datos.range(of: Data("</plist>".utf8), in: inicio.lowerBound..<datos.endIndex),
+              let plist = try? PropertyListSerialization.propertyList(from: datos[inicio.lowerBound..<fin.upperBound],
+                                                                       format: nil) as? [String: Any],
+              let derechos = plist["Entitlements"] as? [String: Any] else { return [] }
+        return derechos["com.apple.security.application-groups"] as? [String] ?? []
     }
 }
 
