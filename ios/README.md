@@ -162,7 +162,7 @@ Si nada de esto funciona, mira el [registro de errores](#cómo-se-compila) o el 
 Tom no puede leer el Tiempo de uso (Apple solo lo deja con cuenta de pago), así que el freno va con Atajos. Una vez por app:
 
 1. **Atajos → Automatización → Nueva → App**. Elige la app (Instagram, TikTok…), marca **Se abre** y **Ejecutar inmediatamente**.
-2. Añade la acción **Frenar app** de Tom y elige esa misma app.
+2. Añade la acción **Frenar app** de Tom (búscala por nombre: no cabe entre los 10 recuadros) y escribe el nombre de la app. Las conocidas (Instagram, TikTok, YouTube, Brawl Stars, Clash Royale…) van solas; para otra, pon su esquema de URL en **Enlace** (p. ej. `brawlstars://`).
 3. Añade **Abrir URL** (la acción de Atajos). Coge sola el resultado de la anterior.
 
 Sin pase, se abre Tom: respiras unos segundos y eliges **Mejor no** o **Entrar 5 min**. Entrar abre la app con un pase de esos minutos; cada vez que entras en el día, la espera crece 4 s. El pase, la espera y las aperturas libres al día se cambian en **Ajustes de Tom → Freno de apps**. Lo que abres no sale del iPhone.

@@ -3,55 +3,61 @@ import AppIntents
 import UIKit
 
 /// Freno de apps. Sin cuenta de pago no hay API de Tiempo de uso (FamilyControls), así que va con Atajos:
-/// una automatización «Al abrir Instagram» → acción «Frenar Instagram» de Tom → «Abrir URL» con lo que devuelve.
+/// una automatización «Al abrir Instagram» → acción «Frenar app» de Tom (nombre libre; si no la conozco, su esquema) → «Abrir URL» con lo que devuelve.
 /// Con pase (o aperturas libres que quedan) devuelve instagram://, que con Instagram ya delante no hace nada; sin pase,
 /// hoy://freno?app=instagram, que abre Tom con la pantalla de freno. Entrar da un pase de unos minutos y abre la app;
 /// esa apertura vuelve a disparar la automatización, pero ya con pase, así que no hay bucle.
 /// Todo se queda en el iPhone (app group): lo que haces con tus apps no sale de aquí.
-enum AppFrenada: String, AppEnum, CaseIterable, Codable, Identifiable {
-    case instagram, tiktok, youtube, x, facebook, reddit, whatsapp, twitch, threads, bereal
+struct AppFrenada: Codable, Hashable, Identifiable {
+    let rawValue: String   // nombre normalizado: «Brawl Stars» → brawlstars
+    let nombre: String
+    let esquema: String
 
     var id: String { rawValue }
+    var enlace: URL { URL(string: esquema) ?? URL(string: "hoy://")! }
+    var freno: URL { URL(string: "hoy://freno?app=\(rawValue)")! }
 
-    static var typeDisplayRepresentation: TypeDisplayRepresentation = "App"
-    static var caseDisplayRepresentations: [AppFrenada: DisplayRepresentation] = [
-        .instagram: "Instagram", .tiktok: "TikTok", .youtube: "YouTube", .x: "X (Twitter)", .facebook: "Facebook",
-        .reddit: "Reddit", .whatsapp: "WhatsApp", .twitch: "Twitch", .threads: "Threads", .bereal: "BeReal",
+    /// Esquemas conocidos; abrirlos no necesita LSApplicationQueriesSchemes (solo canOpenURL lo pediría).
+    static let conocidas: [String: (String, String)] = [
+        "instagram": ("Instagram", "instagram://"), "tiktok": ("TikTok", "snssdk1233://"),
+        "youtube": ("YouTube", "youtube://"), "x": ("X", "twitter://"), "twitter": ("X", "twitter://"),
+        "facebook": ("Facebook", "fb://"), "reddit": ("Reddit", "reddit://"), "whatsapp": ("WhatsApp", "whatsapp://"),
+        "twitch": ("Twitch", "twitch://"), "threads": ("Threads", "barcelona://"), "bereal": ("BeReal", "bereal://"),
+        "telegram": ("Telegram", "tg://"), "snapchat": ("Snapchat", "snapchat://"), "pinterest": ("Pinterest", "pinterest://"),
+        "discord": ("Discord", "discord://"), "linkedin": ("LinkedIn", "linkedin://"), "netflix": ("Netflix", "nflx://"),
+        "spotify": ("Spotify", "spotify://"), "tinder": ("Tinder", "tinder://"),
+        "brawlstars": ("Brawl Stars", "brawlstars://"), "clashroyale": ("Clash Royale", "clashroyale://"),
+        "clashofclans": ("Clash of Clans", "clashofclans://"),
     ]
 
-    var nombre: String {
-        switch self {
-        case .instagram: "Instagram"
-        case .tiktok: "TikTok"
-        case .youtube: "YouTube"
-        case .x: "X"
-        case .facebook: "Facebook"
-        case .reddit: "Reddit"
-        case .whatsapp: "WhatsApp"
-        case .twitch: "Twitch"
-        case .threads: "Threads"
-        case .bereal: "BeReal"
-        }
+    static func normaliza(_ texto: String) -> String {
+        texto.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+            .lowercased().filter { $0.isLetter || $0.isNumber }
     }
 
-    /// El esquema de URL de cada app (abrirla no necesita LSApplicationQueriesSchemes; solo canOpenURL lo pediría).
-    var enlace: URL {
-        let esquema = switch self {
-        case .instagram: "instagram://"
-        case .tiktok: "snssdk1233://"
-        case .youtube: "youtube://"
-        case .x: "twitter://"
-        case .facebook: "fb://"
-        case .reddit: "reddit://"
-        case .whatsapp: "whatsapp://"
-        case .twitch: "twitch://"
-        case .threads: "barcelona://"
-        case .bereal: "bereal://"
-        }
-        return URL(string: esquema)!
+    /// La que ya pasó por la acción de Atajos (se guarda al ejecutarla).
+    init?(rawValue: String) {
+        guard let a = Freno.apps()[rawValue] else { return nil }
+        self = a
     }
 
-    var freno: URL { URL(string: "hoy://freno?app=\(rawValue)")! }
+    init(rawValue: String, nombre: String, esquema: String) {
+        self.rawValue = rawValue; self.nombre = nombre; self.esquema = esquema
+    }
+
+    /// Lo que escribes en Atajos: nombre libre y, si no la conozco, su enlace (brawlstars://…).
+    static func resuelve(nombre: String, esquema: String?) -> AppFrenada? {
+        let clave = normaliza(nombre)
+        guard !clave.isEmpty else { return nil }
+        var e = esquema?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !e.isEmpty, !e.contains(":") { e += "://" }
+        if let c = conocidas[clave] {
+            return AppFrenada(rawValue: clave, nombre: c.0, esquema: e.isEmpty ? c.1 : e)
+        }
+        if e.isEmpty { e = Freno.apps()[clave]?.esquema ?? "" }
+        guard !e.isEmpty else { return nil }
+        return AppFrenada(rawValue: clave, nombre: nombre.trimmingCharacters(in: .whitespaces), esquema: e)
+    }
 }
 
 /// Lo de un día con una app.
@@ -71,6 +77,20 @@ enum Freno {
     static var libresAlDia: Int { max(0, Almacen.defaults.object(forKey: "freno.libres") as? Int ?? 0) }
 
     private static var hoy: String { Fecha.dia(Date()) }
+
+    /// Las apps que han pasado por la acción, para que la pantalla de freno sepa su nombre y su enlace.
+    static func apps() -> [String: AppFrenada] {
+        guard let datos = Almacen.defaults.data(forKey: "freno.apps"),
+              let r = try? JSONDecoder().decode([String: AppFrenada].self, from: datos) else { return [:] }
+        return r
+    }
+
+    static func recuerda(_ app: AppFrenada) {
+        var r = apps()
+        guard r[app.rawValue] != app else { return }
+        r[app.rawValue] = app
+        if let datos = try? JSONEncoder().encode(r) { Almacen.defaults.set(datos, forKey: "freno.apps") }
+    }
 
     /// {dia: {app: contador}}, solo los últimos 30 días.
     static func registro() -> [String: [String: ContadorFreno]] {
@@ -106,6 +126,7 @@ enum Freno {
 
     /// Lo que hace la acción de Atajos: el enlace que hay que abrir ahora.
     static func alAbrir(_ app: AppFrenada) -> URL {
+        recuerda(app)
         if pase(app) != nil { return app.enlace }
         apunta(app) { $0.aperturas += 1 }
         if deHoy(app).aperturas <= libresAlDia {
@@ -138,13 +159,31 @@ struct FrenoIntent: AppIntent {
     static var description = IntentDescription("Para la automatización «Al abrir una app»: pon detrás «Abrir URL» con el resultado. Con pase no pasa nada; sin pase, Tom te pregunta si de verdad quieres entrar.")
     static var openAppWhenRun = false
 
-    @Parameter(title: "App")
-    var app: AppFrenada
+    @Parameter(title: "App", description: "El nombre de la app, tal cual: Instagram, TikTok, Brawl Stars…")
+    var app: String
 
-    static var parameterSummary: some ParameterSummary { Summary("Frenar \(\.$app)") }
+    @Parameter(title: "Enlace", description: "Solo si Tom no conoce la app: su esquema de URL, como brawlstars://")
+    var enlace: String?
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("Frenar \(\.$app)") { \.$enlace }
+    }
 
     func perform() async throws -> some IntentResult & ReturnsValue<URL> {
-        .result(value: Freno.alAbrir(app))
+        guard let frenada = AppFrenada.resuelve(nombre: app, esquema: enlace) else {
+            throw FrenoError.sinEnlace(app)
+        }
+        return .result(value: Freno.alAbrir(frenada))
+    }
+}
+
+enum FrenoError: Error, CustomLocalizedStringResourceConvertible {
+    case sinEnlace(String)
+    var localizedStringResource: LocalizedStringResource {
+        switch self {
+        case .sinEnlace(let app):
+            "No sé cómo abrir «\(app)». Pon su esquema de URL en «Enlace» (por ejemplo, brawlstars://)."
+        }
     }
 }
 
@@ -243,7 +282,7 @@ struct SeccionFreno: View {
             Stepper("Pase al entrar: \(minutos) min", value: $minutos, in: 1...60)
             Stepper("Espera: \(espera) s", value: $espera, in: 3...30)
             Stepper("Aperturas libres al día: \(libres)", value: $libres, in: 0...20)
-            let hoy = AppFrenada.allCases.map { ($0, Freno.deHoy($0)) }.filter { $0.1.aperturas > 0 }
+            let hoy = Freno.apps().values.sorted { $0.nombre < $1.nombre }.map { ($0, Freno.deHoy($0)) }.filter { $0.1.aperturas > 0 }
             ForEach(hoy, id: \.0) { app, c in
                 LabeledContent(app.nombre, value: "\(c.aperturas) aperturas · \(c.entradas) entradas · \(c.minutos) min")
                     .font(.callout)
@@ -252,7 +291,7 @@ struct SeccionFreno: View {
                 Text("""
                 Una vez por app, en Atajos → Automatización → Nueva → App:
                 1. Elige la app (Instagram…), marca «Se abre» y «Ejecutar inmediatamente».
-                2. Añade la acción «Frenar app» de Tom y elige esa misma app.
+                2. Añade la acción «Frenar app» de Tom (búscala: no está entre los recuadros) y escribe el nombre de la app. Si Tom no la conoce, te pedirá su enlace en «Enlace» (p. ej. brawlstars://).
                 3. Añade «Abrir URL» (la de Atajos): coge sola el resultado de la anterior.
                 Sin pase, se abre Tom y te pregunta. Cada vez que entras hoy, la espera crece 4 s.
                 """)
