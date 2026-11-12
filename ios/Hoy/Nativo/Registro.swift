@@ -7,6 +7,12 @@ enum RegistroNativo {
     static let pantallas: [(ruta: String, vista: () -> AnyView)] = [
         ("/", { AnyView(PantallaHoy()) }),
         ("/habitos.html", { AnyView(PantallaHabitos()) }),
+        ("/comida.html", { AnyView(PantallaComida()) }),
+        ("/gastos.html", { AnyView(PantallaGastos()) }),
+        ("/pendientes.html", { AnyView(PantallaPendientes()) }),
+        ("/salud.html", { AnyView(PantallaSalud()) }),
+        ("/documentos.html", { AnyView(PantallaDocumentos()) }),
+        ("/ajustes.html", { AnyView(PantallaAjustes()) }),
         // ← cada sección nueva, aquí (una línea, en el orden de la barra)
     ]
 

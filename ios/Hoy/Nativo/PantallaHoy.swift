@@ -6,13 +6,17 @@ struct PantallaHoy: View {
     @State private var datos = DatosNativos.shared
     @State private var verOtros = false
     @State private var toques = 0
-    @State private var editando = false
 
     /// Los bloques de Hoy, con su id en la disposición "app-hoy" (orden y ocultos, Configurar → Pantallas o «Editar»).
-    static let bloques: [(String, String)] = [
-        ("anillos", "Anillos del día"), ("habitos", "Hábitos"), ("entreno", "Entreno"), ("tareas", "Para hoy"),
-        ("salud", "Salud"), ("carrera", "Carrera"), ("gastos", "Gastos"),
-    ]
+    /// «Semana» (el resumen de /api/semana) va arriba el domingo y el lunes, y abajo y plegada el resto de días.
+    static var bloques: [(String, String)] {
+        let resto: [(String, String)] = [
+            ("anillos", "Anillos del día"), ("habitos", "Hábitos"), ("entreno", "Entreno"), ("tareas", "Para hoy"),
+            ("salud", "Salud"), ("carrera", "Carrera"), ("gastos", "Gastos"),
+        ]
+        let semana = ("semana", "Semana")
+        return domingoOLunes ? [semana] + resto : resto + [semana]
+    }
 
     private var hoy: Hoy? { datos.hoy }
 
@@ -23,58 +27,18 @@ struct PantallaHoy: View {
     }
 
     var body: some View {
-        if editando {
-            edicion
-                .transition(.opacity)
-        } else {
-            contenido
-                .transition(.opacity)
-        }
-    }
-
-    /// Modo edición en la propia pantalla: asa para ordenar e interruptor para ocultar; «Listo» vuelve.
-    private var edicion: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("Editar Hoy").font(Tema.fuente(.titulo)).foregroundStyle(Tema.texto)
-                Spacer()
-                Button("Listo") { withAnimation(Tema.Muelle.pantalla) { editando = false } }
-                    .font(Tema.fuente(.destacado))
-                    .foregroundStyle(Tema.acento)
-            }
-            .padding(.horizontal, Tema.Espacio.l)
-            .padding(.top, Tema.Espacio.m)
-            EditorBloques(pantalla: "app-hoy", todos: Self.bloques, fijos: [])
-                .padding(.bottom, 90)
-        }
-    }
-
-    private var contenido: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: Tema.Espacio.l) {
-                cabecera
+        PantallaEditable(pantalla: "app-hoy", titulo: "Hoy", bloques: Self.bloques, recarga: { await datos.recarga() }) { editar in
+            VStack(alignment: .leading, spacing: Tema.Espacio.l) {
+                cabecera(editar: editar)
                 if let copia = datos.copia { avisoCopia(copia) }
-                if Self.domingoOLunes { BloqueSemana(destacado: true) }   // el resumen, arriba el domingo y el lunes
-                ForEach(Aspecto.shared.bloques("app-hoy").aplica(Self.bloques.map { $0.0 }), id: \.self) { id in
-                    bloque(id)
-                        .contextMenu {
-                            Button("Editar Hoy", systemImage: "square.and.pencil") {
-                                withAnimation(Tema.Muelle.pantalla) { editando = true }
-                            }
-                            Button("Ocultar este bloque", systemImage: "eye.slash") { oculta(id) }
-                        }
-                }
-                if !Self.domingoOLunes { BloqueSemana(destacado: false) }   // el resto de días, abajo y plegado
-                if let error = datos.error, hoy == nil {
-                    Text(error).font(Tema.fuente(.pequeno)).foregroundStyle(Tema.peligro)
-                }
             }
-            .padding(.horizontal, Tema.Espacio.l)
-            .padding(.top, Tema.Espacio.s)
-            .padding(.bottom, 120)   // el hueco de la barra
+        } bloque: { id in
+            bloque(id)
+        } pie: {
+            if let error = datos.error, hoy == nil {
+                Text(error).font(Tema.fuente(.pequeno)).foregroundStyle(Tema.peligro)
+            }
         }
-        .scrollIndicators(.hidden)
-        .refreshable { await datos.recarga() }
         .task { await datos.carga() }
         .sensoryFeedback(.success, trigger: toques)
     }
@@ -90,22 +54,16 @@ struct PantallaHoy: View {
         case "salud": cifrasSalud
         case "carrera":
             if let p = hoy?.carrera?.proxima { tarjetaCarrera(p) }
+        case "semana": BloqueSemana(destacado: Self.domingoOLunes)
         case "gastos":
             if let g = hoy?.gastos, g.total != nil { tarjetaGastos(g) }
         default: EmptyView()
         }
     }
 
-    private func oculta(_ id: String) {
-        var b = Aspecto.shared.bloques("app-hoy")
-        if b.orden.isEmpty { b.orden = Self.bloques.map { $0.0 } }
-        if !b.ocultos.contains(id) { b.ocultos.append(id) }
-        Aspecto.shared.ponBloques("app-hoy", b)
-    }
-
     // MARK: cabecera
 
-    private var cabecera: some View {
+    private func cabecera(editar: @escaping () -> Void) -> some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(Self.fechaLarga())
@@ -131,9 +89,7 @@ struct PantallaHoy: View {
                     .background(Tema.acento, in: Circle())
             }
             .accessibilityLabel("Hablar con Tom")
-            Button {
-                withAnimation(Tema.Muelle.pantalla) { editando = true }
-            } label: {
+            Button(action: editar) {
                 Image(systemName: "square.and.pencil")
                     .font(.system(size: 16, weight: .medium))
                     .foregroundStyle(Tema.suave)

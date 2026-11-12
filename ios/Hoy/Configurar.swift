@@ -126,6 +126,7 @@ struct Configurar: View {
                 }
             }
 
+            SeccionAjustesTom()
             SeccionApariencia()
             SeccionPantallas()
             SeccionFreno()
