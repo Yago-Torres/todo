@@ -3,6 +3,76 @@
 const calma = (() => {
   const quieto = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+  /* ---------- Apariencia (Ajustes → Apariencia) ----------
+     El catálogo es /apariencia.json (de ~/estilo, el mismo que usa Tom) y lo elegido viene de /api/apariencia.
+     Para no pintar ni un fotograma con los colores de antes, lo último calculado se guarda en localStorage
+     (calma-tema) y se aplica aquí mismo, en el <head>, antes de que se vea nada. Luego se pide lo nuevo. */
+  const raiz = document.documentElement;
+  const leeLocal = (k) => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
+  const ponLocal = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* sin almacenamiento */ } };
+  const oscuroSistema = matchMedia("(prefers-color-scheme: dark)");
+  let tema = leeLocal("calma-tema");
+  const conAlfa = (c, k) => {
+    const m = /^rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)$/.exec(c || "");
+    if (m) return `rgba(${m[1]}, ${m[2]}, ${m[3]}, ${Math.min(1, +m[4] * k).toFixed(3)})`;
+    const h = /^#([0-9a-f]{6})$/i.exec(c || "");
+    if (h) { const n = parseInt(h[1], 16); return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${Math.min(1, k).toFixed(3)})`; }
+    return c;
+  };
+  function pintaTema() {
+    if (!tema || !tema.claro) return;
+    const oscuro = tema.modo === "oscuro" || (tema.modo !== "claro" && oscuroSistema.matches);
+    const v = oscuro ? tema.oscuro : tema.claro;
+    for (const [k, x] of Object.entries(v)) raiz.style.setProperty(k, x);
+    for (const [k, x] of Object.entries(tema.comun)) raiz.style.setProperty(k, x);
+    raiz.style.colorScheme = tema.modo === "sistema" ? "" : (oscuro ? "dark" : "light");
+    raiz.dataset.modo = oscuro ? "oscuro" : "claro";
+    for (const m of document.querySelectorAll('meta[name="theme-color"]')) m.content = v["--fondo"];
+    dispatchEvent(new Event("calma-tema"));
+  }
+  /* catálogo + elección → las variables CSS de claro y oscuro (lo que se guarda en calma-tema) */
+  function calculaTema(cat, el) {
+    const def = cat.defecto, busca = (l, id, d) => cat[l].find(x => x.id === id) || cat[l].find(x => x.id === d);
+    const pal = busca("paletas", el.paleta, def.paleta);
+    const ac = busca("acentos", el.acento || pal.acento, pal.acento);
+    const fu = busca("fuentes", el.fuente, def.fuente), es = busca("esquinas", el.esquinas, def.esquinas);
+    const fo = busca("fondos", el.fondo, def.fondo), k = fo.intensidad;
+    const lado = (n, a, f, claro) => ({
+      "--fondo": n.fondo, "--carta": n.carta, "--carta-luz": n.carta_luz, "--carta-2": n.carta2, "--texto": n.texto,
+      "--suave": n.suave, "--tenue": n.tenue, "--linea": n.linea, "--dock": n.dock, "--dock-texto": n.dock_texto,
+      "--acento": a.acento, "--acento-texto": a.texto, "--acento-suave": a.suave, "--franja": claro ? n.texto : n.fondo,
+      "--ascii": conAlfa(n.ascii, k * .5), "--ascii-vivo": conAlfa(a.acento, (claro ? .45 : .4) * Math.min(1.4, k)),
+      "--peligro": f.peligro, "--peligro-suave": f.peligro_suave, "--aviso": f.aviso, "--aviso-suave": f.aviso_suave,
+    });
+    return {modo: el.modo || "sistema", fondo: fo.id, intensidad: k,
+            claro: lado(pal.claro, ac.claro, cat.fijos.claro, true), oscuro: lado(pal.oscuro, ac.oscuro, cat.fijos.oscuro, false),
+            comun: {"--gota": ac.gota, "--gota-texto": ac.gota_texto, "--r": es.carta + "px", "--r-s": es.boton + "px", "--r-xs": es.celda + "px",
+                    "--fuente": `${fu.css}, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`}};
+  }
+  pintaTema();
+  oscuroSistema.addEventListener?.("change", pintaTema);
+  let catalogo = null;
+  const pideCatalogo = () => catalogo ? Promise.resolve(catalogo)
+    : fetch("/apariencia.json", {credentials: "same-origin"}).then(r => r.ok ? r.json() : Promise.reject()).then(c => (catalogo = c));
+  /* aplica una elección (de /api/apariencia o de Ajustes, al momento) y la recuerda */
+  async function ponApariencia(el) {
+    const cat = await pideCatalogo();
+    tema = calculaTema(cat, el || {});
+    tema.eleccion = el || {};
+    ponLocal("calma-tema", tema);
+    pintaTema();
+    return tema;
+  }
+  // lo guardado en el servidor; sin red o sin /api/apariencia, lo de la última vez
+  const disposicionLista = fetch("/api/apariencia", {credentials: "same-origin"})
+    .then(r => r.ok ? r.json() : Promise.reject())
+    .then(d => {
+      if (d.apariencia && JSON.stringify(d.apariencia) !== JSON.stringify(tema?.eleccion)) ponApariencia(d.apariencia).catch(() => {});
+      if (d.disposicion) ponLocal("calma-disposicion", d.disposicion);
+      return d.disposicion || leeLocal("calma-disposicion") || {};
+    })
+    .catch(() => leeLocal("calma-disposicion") || {});
+
   /* Páginas con <meta name="calma-entrada">: el contenido espera oculto hasta que llegan los datos y
      anima.entra() lo hace entrar una sola vez, sin pintarse antes con «—» ni dar saltos. Con la red
      caída sale igual a los 8 s. (Este fichero va en el <head>: actúa antes de que se pinte nada.) */
@@ -327,6 +397,7 @@ const calma = (() => {
     arranca();
     let tm;
     const otraVez = () => { clearTimeout(tm); tm = setTimeout(() => { medir(); pinta(performance.now()); }, 120); };
+    addEventListener("calma-tema", otraVez);   // cambió la apariencia: otros colores para los caracteres
     if (pagina) addEventListener("resize", otraVez);
     else {
       new ResizeObserver(otraVez).observe(host);   // la carta crece cuando llegan sus datos
@@ -341,6 +412,7 @@ const calma = (() => {
     // en captura: también el scroll de dentro de una carta o una hoja
     addEventListener("scroll", () => { calla = toque = performance.now(); calla += 250; }, {passive: true, capture: true});
     addEventListener("pointerup", () => setTimeout(() => { px = py = -9999; }, 600));
+    if (tema && tema.intensidad === 0) return;   // Apariencia → Fondo: apagado
     fondo(document.body);
     document.querySelectorAll("[data-fondo]:not(body)").forEach(fondo);
   }
@@ -370,7 +442,125 @@ const calma = (() => {
     };
     requestAnimationFrame(vuelta);
   }
-  const listo = () => { menu(); islaReal(); fondos(); medidor(); };
+  /* ---------- Disposición: el orden y lo escondido de las secciones de cada pantalla ----------
+     Las secciones son las cartas de la página (section, article, .c-carta, [data-mod]…) que comparten padre.
+     Su id es data-bloque, o sale de su título. Se guarda por pantalla en /api/apariencia (y en localStorage).
+     Para editar: ?editar=1, mantener pulsado el título de la página, o calma.editaPantalla(). */
+  const SEL_BLOQUE = "section, article, .c-carta, [data-mod], .escena3d, [data-bloque]";
+  const pantalla = () => {
+    const app = location.hostname.split(".")[0];
+    let p = location.pathname.replace(/^\/+|\.html$/g, "");
+    if (app === "todo" || app === "localhost" || /^\d/.test(app)) {
+      if (p === "" || p === "hoy") p = "hoy"; else if (p === "index" || p === "habitos") p = "habitos";
+      return p;
+    }
+    return (app + "-" + (p || "inicio")).replace(/[^a-z0-9-]/g, "").slice(0, 40);
+  };
+  const slug = t => (t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 32);
+  function grupos() {
+    const app = document.querySelector(".app") || document.body;
+    const padres = new Map();
+    for (const el of app.querySelectorAll(SEL_BLOQUE)) {
+      if (el.closest("header.top, nav, .c-hoja, dialog") || el.parentElement.closest(SEL_BLOQUE)) continue;
+      const l = padres.get(el.parentElement) || [];
+      l.push(el); padres.set(el.parentElement, l);
+    }
+    const vistos = new Set(), fuera = [];
+    for (const [padre, els] of padres) {
+      if (els.length < 2) continue;
+      for (const el of els) {
+        if (!el.dataset.bloque) {
+          const titulo = el.getAttribute("aria-label") || el.querySelector("h2, h3, .c-eti, small")?.textContent || el.dataset.mod || el.id || "bloque";
+          let id = slug(titulo) || "bloque", n = 2;
+          while (vistos.has(id)) id = slug(titulo) + "-" + n++;
+          el.dataset.bloque = id;
+        }
+        vistos.add(el.dataset.bloque);
+        el.dataset.nombre = el.dataset.nombre || (el.getAttribute("aria-label") || el.querySelector("h2, h3, .c-eti")?.textContent || el.dataset.bloque).trim().replace(/\s+/g, " ").slice(0, 40);
+      }
+      fuera.push({padre, els});
+    }
+    return fuera;
+  }
+  function ordena(gs, d) {
+    const orden = d?.orden || [], ocultos = new Set(d?.ocultos || []);
+    for (const {els} of gs) {
+      const pos = id => { const i = orden.indexOf(id); return i < 0 ? 1e6 : i; };
+      const nuevo = els.map((el, i) => ({el, i})).sort((a, b) => (pos(a.el.dataset.bloque) - pos(b.el.dataset.bloque)) || (a.i - b.i)).map(x => x.el);
+      const huecos = els.map(el => { const m = document.createComment(""); el.before(m); return m; });
+      nuevo.forEach((el, i) => huecos[i].replaceWith(el));
+      els.splice(0, els.length, ...nuevo);
+      for (const el of els) el.classList.toggle("c-oculto", ocultos.has(el.dataset.bloque));
+    }
+  }
+  let todaDisposicion = {};
+  async function disposicion() {
+    todaDisposicion = await disposicionLista;
+    const gs = grupos();
+    ordena(gs, todaDisposicion[pantalla()]);
+    if (new URLSearchParams(location.search).has("editar")) editaPantalla();
+    const h1 = document.querySelector(".app h1, h1");
+    let tm;
+    h1?.addEventListener("pointerdown", () => { tm = setTimeout(editaPantalla, 650); });
+    for (const ev of ["pointerup", "pointerleave", "pointercancel"]) h1?.addEventListener(ev, () => clearTimeout(tm));
+  }
+  async function guardaDisposicion(p, d) {
+    todaDisposicion = {...todaDisposicion, [p]: d};
+    if (!d) delete todaDisposicion[p];
+    ponLocal("calma-disposicion", todaDisposicion);
+    try {
+      const r = await fetch("/api/apariencia", {method: "POST", credentials: "same-origin", headers: {"Content-Type": "application/json"},
+                                                body: JSON.stringify({disposicion: todaDisposicion})});
+      return r.ok;
+    } catch { return false; }
+  }
+  function editaPantalla() {
+    if (raiz.classList.contains("c-editando")) return;
+    const gs = grupos();
+    if (!gs.length) return;
+    vibra();
+    raiz.classList.add("c-editando");
+    const barra = document.createElement("div");
+    barra.className = "c-edita-barra";
+    barra.innerHTML = '<span>Ordena y esconde secciones</span><button type="button" class="c-btn mini" data-e="reset">Restablecer</button><button type="button" class="c-btn mini pri" data-e="listo">Listo</button>';
+    document.body.append(barra);
+    const herramientas = [];
+    for (const {els} of gs) for (const el of els) {
+      const t = document.createElement("div");
+      t.className = "c-edita-bloque";
+      t.innerHTML = '<button type="button" data-e="sube" aria-label="Subir"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button>'
+        + '<button type="button" data-e="baja" aria-label="Bajar"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>'
+        + '<button type="button" data-e="ver" aria-label="Mostrar u ocultar"><svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button>';
+      t.addEventListener("click", e => {
+        const b = e.target.closest("button"); if (!b) return;
+        e.preventDefault(); e.stopPropagation();
+        const g = gs.find(x => x.els.includes(el)), i = g.els.indexOf(el);
+        if (b.dataset.e === "ver") el.classList.toggle("c-oculto");
+        else {
+          const j = b.dataset.e === "sube" ? i - 1 : i + 1;
+          if (j < 0 || j >= g.els.length) return;
+          const otro = g.els[j];
+          transicion(() => { if (j < i) otro.before(el); else otro.after(el); });
+          g.els.splice(i, 1); g.els.splice(j, 0, el);
+        }
+        vibra();
+      });
+      el.append(t); herramientas.push(t);
+    }
+    const sal = () => { herramientas.forEach(t => t.remove()); barra.remove(); raiz.classList.remove("c-editando"); };
+    barra.addEventListener("click", async e => {
+      const b = e.target.closest("button"); if (!b) return;
+      if (b.dataset.e === "reset") { sal(); await guardaDisposicion(pantalla(), null); location.replace(location.pathname); return; }
+      const todos = gs.flatMap(g => g.els);
+      const d = {orden: todos.map(x => x.dataset.bloque), ocultos: todos.filter(x => x.classList.contains("c-oculto")).map(x => x.dataset.bloque)};
+      sal();
+      const ok = await guardaDisposicion(pantalla(), d);
+      if (!ok) console.warn("disposición guardada solo en este dispositivo");
+      if (location.search.includes("editar")) history.replaceState(null, "", location.pathname);
+    });
+  }
+
+  const listo = () => { menu(); islaReal(); fondos(); medidor(); disposicion(); };
   document.readyState === "loading" ? addEventListener("DOMContentLoaded", listo) : listo();
 
   /* Al irse a otra página: el contenido baja un poco mientras se desvanece (.c-saliendo en calma.css)
@@ -433,5 +623,7 @@ const calma = (() => {
     c.style.setProperty("--y", e.clientY - r.top + "px");
   }, {passive: true});
 
-  return {transicion, cuenta, fiesta, vibra, onda, perfil, ponPerfil, saludo, ocupado, entrePaginas};
+  return {transicion, cuenta, fiesta, vibra, onda, perfil, ponPerfil, saludo, ocupado, entrePaginas,
+          ponApariencia, pideCatalogo, calculaTema, editaPantalla, pantalla, grupos, guardaDisposicion,
+          tema: () => tema, disposicionGuardada: () => disposicionLista};
 })();

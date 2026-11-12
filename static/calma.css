@@ -13,6 +13,31 @@
 @font-face { font-family: "Instrument Sans"; font-style: italic; font-weight: 400 700; font-stretch: 75% 100%; font-display: swap;
   src: url("/fuentes/instrument-sans-italic-latin.woff2?v=1") format("woff2");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+/* las otras letras de Ajustes → Apariencia: solo se descargan si se eligen */
+@font-face { font-family: "Inter"; font-style: normal; font-weight: 300 800; font-display: swap;
+  src: url("/fuentes/inter-normal-latin.woff2?v=1") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Inter"; font-style: normal; font-weight: 300 800; font-display: swap;
+  src: url("/fuentes/inter-normal-latin-ext.woff2?v=1") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1E00-1E9F, U+20A0-20AB, U+20AD-20C0, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Manrope"; font-style: normal; font-weight: 300 800; font-display: swap;
+  src: url("/fuentes/manrope-normal-latin.woff2?v=1") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Manrope"; font-style: normal; font-weight: 300 800; font-display: swap;
+  src: url("/fuentes/manrope-normal-latin-ext.woff2?v=1") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1E00-1E9F, U+20A0-20AB, U+20AD-20C0, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Geist"; font-style: normal; font-weight: 300 800; font-display: swap;
+  src: url("/fuentes/geist-normal-latin.woff2?v=1") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Geist"; font-style: normal; font-weight: 300 800; font-display: swap;
+  src: url("/fuentes/geist-normal-latin-ext.woff2?v=1") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1E00-1E9F, U+20A0-20AB, U+20AD-20C0, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "IBM Plex Sans"; font-style: normal; font-weight: 300 800; font-display: swap;
+  src: url("/fuentes/ibm-plex-sans-normal-latin.woff2?v=1") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "IBM Plex Sans"; font-style: normal; font-weight: 300 800; font-display: swap;
+  src: url("/fuentes/ibm-plex-sans-normal-latin-ext.woff2?v=1") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1E00-1E9F, U+20A0-20AB, U+20AD-20C0, U+2C60-2C7F, U+A720-A7FF; }
 
 :root {
   color-scheme: light dark;
@@ -320,3 +345,20 @@ body:has(nav.c-dock):not(:has(.app)) { padding-bottom: calc(108px + env(safe-are
 .c-h-pie .c-h-borrar span { display: none; white-space: nowrap; font-weight: 600; }
 .c-h-pie .c-h-borrar.seguro span { display: inline; }
 @media (prefers-reduced-motion: reduce) { .c-hoja, .c-hoja.on, .c-velo, .c-pil { transition: none; } }
+
+/* ---------- disposición de cada pantalla (calma.js → editaPantalla) ---------- */
+.c-oculto { display: none !important; }
+.c-editando .c-oculto { display: revert !important; opacity: .35; }
+.c-editando [data-bloque] { position: relative; outline: 2px dashed color-mix(in srgb, var(--acento) 55%, transparent); outline-offset: 3px; }
+.c-editando [data-bloque] > :not(.c-edita-bloque) { pointer-events: none; }
+.c-edita-bloque { position: absolute; top: 8px; right: 8px; z-index: 5; display: flex; gap: 4px; padding: 4px; border-radius: 999px;
+                  background: var(--texto); box-shadow: var(--sombra); }
+.c-edita-bloque button { width: 32px; height: 32px; border: 0; border-radius: 50%; background: transparent; color: var(--fondo); display: grid; place-items: center; }
+.c-edita-bloque button:active { background: color-mix(in srgb, var(--fondo) 20%, transparent); }
+.c-edita-bloque svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.c-oculto .c-edita-bloque [data-e="ver"] { background: var(--acento); color: var(--acento-texto); }
+.c-edita-barra { position: fixed; z-index: 160; left: 50%; transform: translateX(-50%); bottom: calc(86px + env(safe-area-inset-bottom, 0px));
+                 width: min(460px, calc(100% - 16px)); display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 16px;
+                 border-radius: 999px; background: var(--texto); color: var(--fondo); box-shadow: var(--sombra); font-size: var(--t-pequeno); font-weight: 500; }
+.c-edita-barra span { flex: 1; min-width: 0; }
+.c-edita-barra .c-btn:not(.pri) { background: transparent; color: var(--fondo); border-color: color-mix(in srgb, var(--fondo) 30%, transparent); }

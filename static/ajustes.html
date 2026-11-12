@@ -14,12 +14,12 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Ajustes">
 <link rel="preload" href="/fuentes/instrument-sans-normal-latin.woff2?v=1" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/calma.css?v=f8384bb4">
-<script src="/calma.js?v=f8384bb4"></script>
+<link rel="stylesheet" href="/calma.css?v=25cdb21b">
+<script src="/calma.js?v=25cdb21b"></script>
 <script src="/tom.js?v=1"></script>
 <script src="/mascota.js?v=6"></script>
 <script src="/anime-4.5.0.min.js"></script>
-<script src="/anima.js?v=f8384bb4"></script>
+<script src="/anima.js?v=25cdb21b"></script>
 <style>
   /* de una página a otra, la cabecera vuela y la barra de abajo se queda quieta (calma.css, calma.js) */
   @view-transition { navigation: auto; }
@@ -65,6 +65,28 @@
   .opcion small { display: block; margin-top: 2px; font-size: var(--t-pequeno); font-weight: 400; color: var(--suave); }
   .opcion-app { width: 100%; margin-top: 12px; min-height: 44px; }
   .opcion-app[hidden] { display: none; }
+  /* Apariencia */
+  .ap-previa { display: grid; gap: 8px; padding: 14px; margin-bottom: 14px; border-radius: var(--r); background: var(--fondo); border: 1px solid var(--linea); }
+  .ap-previa .fila { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: var(--r-s); background: var(--carta); font-weight: 500; }
+  .ap-previa .bx { width: 20px; height: 20px; border-radius: 50%; background: var(--acento); flex: none; }
+  .ap-previa .cifra { font-size: var(--t-seccion); font-weight: 700; font-variant-numeric: tabular-nums; margin-left: auto; }
+  .ap-grupo { display: grid; gap: 8px; margin-top: 14px; }
+  .ap-grupo > b { font-size: var(--t-etiqueta); font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--suave); }
+  .ap-pals { display: grid; grid-template-columns: repeat(auto-fill, minmax(42px, 1fr)); gap: 7px; }
+  .ap-pals button { position: relative; aspect-ratio: 1; border-radius: 10px; border: 1px solid var(--linea); padding: 0; overflow: hidden; }
+  .ap-pals button span { position: absolute; inset: 0; }
+  .ap-pals button span + span { clip-path: polygon(100% 0, 100% 100%, 0 100%); }
+  .ap-pals button i { position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; }
+  .ap-pals button[aria-pressed="true"] { outline: 2.5px solid var(--texto); outline-offset: 2px; }
+  .ap-pals button[hidden] { display: none; }
+  .ap-ops { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ap-ops .c-btn[aria-pressed="true"] { background: var(--texto); color: var(--fondo); border-color: var(--texto); }
+  .ap-ops .pt { width: 12px; height: 12px; border-radius: 50%; }
+  #ap-desc { font-size: var(--t-pequeno); color: var(--suave); margin: 0; }
+  .pantallas { display: grid; gap: 6px; }
+  .pantallas a { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; padding: 0 12px;
+                 border-radius: var(--r-s); background: var(--carta-2); color: inherit; text-decoration: none; font-weight: 500; }
+  .pantallas a small { color: var(--suave); font-weight: 400; font-size: var(--t-pequeno); }
 </style>
 <body>
 
@@ -85,6 +107,32 @@
   </header>
 
   <div class="col">
+    <section class="carta c-carta" aria-labelledby="t-ap" data-bloque="apariencia">
+      <h2 id="t-ap">Apariencia</h2>
+      <p class="pista">Se aplica al momento en todas las apps (todo, gastos, comida, limpieza) y en Tom.</p>
+      <div class="ap-previa" aria-hidden="true">
+        <div class="fila"><span class="bx"></span>Leer 20 min<span class="cifra">7 h 12</span></div>
+        <div class="fila"><span class="bx" style="background:var(--carta-2)"></span>2 litros de agua<span class="c-chip ok" style="margin-left:auto">3 de 5</span></div>
+        <button class="c-btn pri" type="button" tabindex="-1">Empezar entreno</button>
+      </div>
+      <div class="ap-grupo"><b>Modo</b><div class="ap-ops" id="ap-modo"></div></div>
+      <div class="ap-grupo"><b>Paleta · <span id="ap-nombre" style="text-transform:none;letter-spacing:0;color:var(--texto)"></span></b>
+        <div class="ap-ops" id="ap-familias"></div>
+        <div class="ap-pals" id="ap-paletas" role="group" aria-label="Paletas"></div>
+        <p id="ap-desc"></p></div>
+      <div class="ap-grupo"><b>Acento</b><div class="ap-ops" id="ap-acento"></div></div>
+      <div class="ap-grupo"><b>Letra</b><div class="ap-ops" id="ap-fuente"></div></div>
+      <div class="ap-grupo"><b>Esquinas</b><div class="ap-ops" id="ap-esquinas"></div></div>
+      <div class="ap-grupo"><b>Fondo de caracteres</b><div class="ap-ops" id="ap-fondo"></div></div>
+      <div class="ap-grupo"><button class="c-btn" type="button" id="ap-reset">Restablecer apariencia</button></div>
+    </section>
+
+    <section class="carta c-carta" aria-labelledby="t-pan" data-bloque="pantallas">
+      <h2 id="t-pan">Pantallas</h2>
+      <p class="pista">Cambia el orden de las secciones de cada pantalla o esconde las que no uses. También puedes mantener pulsado el título de cualquier pantalla.</p>
+      <div class="pantallas" id="pantallas"></div>
+    </section>
+
     <section class="carta c-carta" aria-labelledby="t-tu">
       <h2 id="t-tu">Tú</h2>
       <input class="c-campo" id="nombre" maxlength="30" placeholder="Cómo te saludo" aria-label="Tu nombre">
@@ -265,6 +313,76 @@ $("#f-clave").onsubmit = async e => {
   else puerta(true, r && r.status === 401 ? "Contraseña incorrecta" : "No se pudo conectar");
 };
 cargar();
+</script>
+<script>
+/* Apariencia y pantallas: catálogo /apariencia.json, se guarda en POST /api/apariencia y calma.js lo aplica al momento */
+(async () => {
+  const $a = id => document.getElementById(id);
+  let cat;
+  try { cat = await calma.pideCatalogo(); } catch { $a("t-ap").closest("section").hidden = true; return; }
+  let el = {...cat.defecto, ...(calma.tema()?.eleccion || {})};
+  try { const r = await fetch("/api/apariencia", {credentials: "same-origin"}); if (r.ok) el = {...el, ...(await r.json()).apariencia}; } catch {}
+  let espera;
+  const guarda = () => {
+    calma.ponApariencia(el);
+    pinta();
+    clearTimeout(espera);
+    espera = setTimeout(() => fetch("/api/apariencia", {method: "POST", credentials: "same-origin", headers: {"Content-Type": "application/json"},
+                                                        body: JSON.stringify({apariencia: el})}).catch(() => {}), 400);
+  };
+  const opciones = (caja, lista, clave, extra) => {
+    $a(caja).innerHTML = "";
+    for (const o of lista) {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "c-btn mini"; b.dataset.id = o.id;
+      b.innerHTML = (extra ? extra(o) : "") + o.nombre;
+      if (!clave.startsWith("_")) b.addEventListener("click", () => { el[clave] = o.id; guarda(); });
+      $a(caja).append(b);
+    }
+  };
+  opciones("ap-modo", [{id: "sistema", nombre: "Como el sistema"}, {id: "claro", nombre: "Claro"}, {id: "oscuro", nombre: "Oscuro"}], "modo");
+  const acentoDe = id => cat.acentos.find(a => a.id === id);
+  opciones("ap-acento", [{id: "", nombre: "El de la paleta"}, ...cat.acentos.filter(a => !a.id.startsWith("p-"))], "acento",
+           o => o.id ? `<i class="pt" style="background:${o.claro.acento}"></i>` : "");
+  opciones("ap-fuente", cat.fuentes, "fuente");
+  [...$a("ap-fuente").children].forEach((b, i) => { b.style.fontFamily = cat.fuentes[i].css; });
+  opciones("ap-esquinas", cat.esquinas, "esquinas");
+  opciones("ap-fondo", cat.fondos, "fondo");
+  const familias = ["Todas", ...new Set(cat.paletas.map(p => p.familia))];
+  opciones("ap-familias", familias.map(f => ({id: f, nombre: f})), "_familia");
+  [...$a("ap-familias").children].forEach(b => b.onclick = () => {
+    [...$a("ap-familias").children].forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    [...$a("ap-paletas").children].forEach(x => { x.hidden = b.dataset.id !== "Todas" && x.dataset.familia !== b.dataset.id; });
+  });
+  $a("ap-familias").children[0].setAttribute("aria-pressed", "true");
+  for (const p of cat.paletas) {
+    const b = document.createElement("button"), a = acentoDe(p.acento);
+    b.type = "button"; b.dataset.id = p.id; b.dataset.familia = p.familia; b.title = p.nombre; b.setAttribute("aria-label", p.nombre);
+    b.innerHTML = `<span style="background:${p.claro.fondo}"></span><span style="background:${p.oscuro.fondo}"></span><i style="background:${a.claro.acento};box-shadow:0 0 0 3px ${a.gota}"></i>`;
+    b.addEventListener("click", () => { el.paleta = p.id; el.acento = ""; guarda(); });
+    $a("ap-paletas").append(b);
+  }
+  $a("ap-reset").addEventListener("click", () => { el = {...cat.defecto}; guarda(); });
+  function pinta() {
+    for (const [caja, clave] of [["ap-modo", "modo"], ["ap-acento", "acento"], ["ap-fuente", "fuente"], ["ap-esquinas", "esquinas"], ["ap-fondo", "fondo"], ["ap-paletas", "paleta"]])
+      for (const b of $a(caja).children) b.setAttribute("aria-pressed", String(b.dataset.id === (el[clave] ?? "")));
+    const p = cat.paletas.find(x => x.id === el.paleta) || cat.paletas[0];
+    $a("ap-nombre").textContent = p.nombre; $a("ap-desc").textContent = p.descripcion;
+  }
+  pinta();
+
+  // pantallas que se pueden ordenar
+  const PANTALLAS = [["/", "Hoy"], ["/habitos.html", "Hábitos"], ["/entreno.html", "Entreno"], ["/carrera.html", "Carrera"], ["/salud.html", "Salud"],
+                     ["/pendientes.html", "Pendientes"], ["/documentos.html", "Documentos"], ["/ajustes.html", "Ajustes"]];
+  const disp = await calma.disposicionGuardada();
+  const clave = r => r === "/" ? "hoy" : r.replace(/^\/|\.html$/g, "");
+  for (const [ruta, nombre] of PANTALLAS) {
+    const d = disp[clave(ruta)], a = document.createElement("a");
+    a.href = ruta + "?editar=1";
+    a.innerHTML = `<span>${nombre}</span><small>${d ? (d.ocultos.length ? d.ocultos.length + " escondida" + (d.ocultos.length > 1 ? "s" : "") : "orden propio") : "como viene"} · Editar</small>`;
+    $a("pantallas").append(a);
+  }
+})();
 </script>
 </body>
 </html>

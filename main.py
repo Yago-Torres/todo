@@ -348,7 +348,52 @@ def limpia_ajustes(v):
             "sonidos": v.get("sonidos") is True,
             # sin la clave, los de siempre; con ella aunque esté vacía (es que no quiere ninguno)
             "limites": {" ".join(str(k).split())[:30]: int(n) for k, x in list(dct(v.get("limites")).items())[:30]
-                        if (n := real(x, 1, 600)) is not None} if isinstance(v.get("limites"), dict) else dict(LIMITES)}
+                        if (n := real(x, 1, 600)) is not None} if isinstance(v.get("limites"), dict) else dict(LIMITES),
+            "apariencia": limpia_apariencia(v.get("apariencia")),
+            "disposicion": limpia_disposicion(v.get("disposicion"))}
+
+
+# ---------- apariencia (Ajustes → Apariencia) y orden de las secciones de cada pantalla ----------
+# El catálogo (paletas, acentos, fuentes…) es ~/estilo/apariencia.json, copiado a static/ por aplica.sh; lo leen
+# calma.js y Tom. Aquí solo se guarda qué eligió y se comprueba que exista. Comida, gastos y limpieza lo leen de
+# GET /api/apariencia de cada una (que mira este mismo ajustes.json), así todo se ve igual.
+CATALOGO = HERE / "static" / "apariencia.json"
+ID = re.compile(r"[a-z0-9-]{1,40}")
+
+
+def catalogo():
+    try:
+        return json.loads(CATALOGO.read_text("utf-8"))
+    except Exception:
+        return {"defecto": {"modo": "sistema", "paleta": "hormigon", "acento": "salvia", "fuente": "instrument",
+                            "esquinas": "suaves", "fondo": "sutil"}}
+
+
+def limpia_apariencia(v):
+    v, c = dct(v), catalogo()
+    d = dict(c["defecto"])
+    validos = {"paleta": "paletas", "acento": "acentos", "fuente": "fuentes", "esquinas": "esquinas", "fondo": "fondos"}
+    for k, lista in validos.items():
+        if v.get(k) in {x["id"] for x in c.get(lista, [])}:
+            d[k] = v[k]
+    if v.get("modo") in ("sistema", "claro", "oscuro"):
+        d["modo"] = v["modo"]
+    # acento vacío: el que trae la paleta
+    if v.get("acento") == "":
+        d["acento"] = ""
+    return d
+
+
+def limpia_disposicion(v):
+    """{pantalla: {orden: [id…], ocultos: [id…]}}: el orden y lo escondido de las secciones de cada pantalla."""
+    fuera = {}
+    for pantalla, x in list(dct(v).items())[:40]:
+        if not ID.fullmatch(str(pantalla)):
+            continue
+        x = dct(x)
+        ids = lambda l: list(dict.fromkeys(str(i) for i in (l if isinstance(l, list) else []) if ID.fullmatch(str(i))))[:60]
+        fuera[pantalla] = {"orden": ids(x.get("orden")), "ocultos": ids(x.get("ocultos"))}
+    return fuera
 
 
 def lee_ajustes():
@@ -361,9 +406,34 @@ def get_ajustes(todo_sesion: str = Cookie(None), authorization: str = Header(Non
     return {**lee_ajustes(), "sin_app": [m for m in MODULOS if not conectada(m)]}
 
 
+@app.get("/api/apariencia")
+def get_apariencia(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """Lo que necesita calma.js en cada página: la apariencia y el orden de las secciones."""
+    exige(todo_sesion, authorization)
+    a = lee_ajustes()
+    return {"apariencia": a["apariencia"], "disposicion": a["disposicion"]}
+
+
+@app.post("/api/apariencia")
+def post_apariencia(x: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """Cambia solo apariencia y/o disposición (lo que no venga se queda como estaba)."""
+    exige(todo_sesion, authorization)
+    a = lee_ajustes()
+    if "apariencia" in x:
+        a["apariencia"] = x["apariencia"]
+    if "disposicion" in x:
+        a["disposicion"] = x["disposicion"]
+    limpio = limpia_ajustes(a)
+    guarda(AJUSTES, json.dumps(limpio, ensure_ascii=False))
+    return {"apariencia": limpio["apariencia"], "disposicion": limpio["disposicion"]}
+
+
 @app.post("/api/ajustes")
 def post_ajustes(a: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
     exige(todo_sesion, authorization)
+    viejo = lee_ajustes()
+    # quien no mande apariencia o disposición (una versión vieja de ajustes.html, Tom) no las borra
+    a = {**a, **{k: viejo[k] for k in ("apariencia", "disposicion") if k not in dct(a)}}
     limpio = limpia_ajustes(a)
     guarda(AJUSTES, json.dumps(limpio, ensure_ascii=False))
     return limpio
