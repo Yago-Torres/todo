@@ -1,13 +1,14 @@
 import SwiftUI
 
+/// Los colores del widget: los de la apariencia elegida en Tom (en oscuro), que la app deja en el app group.
 enum Paleta {
     static let hab = Color(hex: "#1baf7a")
     static let pas = Color(hex: "#eb6834")
     static let sue = Color(hex: "#3987e5")
-    static let fondo = Color(hex: "#111111")
-    static let campo = Color(hex: "#252525")
-    static let texto = Color(hex: "#EDEDED")
-    static let suave = Color(hex: "#9A9A9A")
+    static var fondo: Color { ColoresGuardados.oscuro("fondo", "#111111") }
+    static var campo: Color { ColoresGuardados.oscuro("carta2", "#252525") }
+    static var texto: Color { ColoresGuardados.oscuro("texto", "#EDEDED") }
+    static var suave: Color { ColoresGuardados.oscuro("suave", "#9A9A9A") }
     static let aviso = Color(hex: "#E8B04A")
 }
 

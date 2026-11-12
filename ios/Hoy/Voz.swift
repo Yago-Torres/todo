@@ -12,11 +12,11 @@ struct Voz: View {
     @Environment(\.accessibilityReduceMotion) private var sinMovimiento
     @State private var charla = Conversacion()
 
-    private let acento = Color.accentColor   // el acento Calma (oliva / lima en oscuro), como la web
+    private var acento: Color { Tema.acento }   // el acento elegido (Configurar → Apariencia)
 
     var body: some View {
         ZStack {
-            Color("Fondo").ignoresSafeArea()
+            Tema.fondo.ignoresSafeArea()
             VStack(spacing: 20) {
                 HStack {
                     Spacer()
@@ -63,7 +63,7 @@ struct Voz: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(acento)
-                .foregroundStyle(Color("AcentoTexto"))
+                .foregroundStyle(Tema.acentoTexto)
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 12)
@@ -113,10 +113,10 @@ private struct Burbuja: View {
         HStack {
             if !turno.deTom { Spacer(minLength: 40) }
             Text(turno.texto)
-                .foregroundStyle(turno.deTom ? Color.primary : Color("AcentoTexto"))
+                .foregroundStyle(turno.deTom ? Color.primary : Tema.acentoTexto)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .background(turno.deTom ? Color("Carta") : acento,
+                .background(turno.deTom ? Tema.carta : acento,
                             in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             if turno.deTom { Spacer(minLength: 40) }
         }

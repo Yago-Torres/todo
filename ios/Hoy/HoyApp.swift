@@ -21,6 +21,7 @@ struct HoyApp: App {
             case .active:
                 Accesos.instala()
                 guard estado.claves != nil else { return }
+                Task { await Aspecto.shared.sincroniza() }
                 Navegador.shared.recogeVoz()
                 // los hábitos de hoy como valores de «Marca … en Tom»
                 AtajosHoy.updateAppShortcutParameters()
@@ -145,6 +146,9 @@ struct Raiz: View {
         }
         .animation(.default, value: estado.bloqueado)
         .animation(.spring(duration: 0.4), value: estado.freno)
+        // modo y acento de la apariencia elegida (Configurar → Apariencia, o la web)
+        .preferredColorScheme(Aspecto.shared.esquema)
+        .tint(Tema.acento)
         // el acceso «Ajustes de Tom» del icono: la puerta a Configurar que no depende de la web
         .onChange(of: navegador.configurar, initial: true) { _, pedido in
             guard pedido else { return }

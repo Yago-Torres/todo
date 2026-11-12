@@ -665,10 +665,10 @@ struct HojaEscalada: View {
                     }
                 }
                 }
-                .listRowBackground(Color("Carta"))
+                .listRowBackground(Tema.carta)
             }
             .scrollContentBackground(.hidden)
-            .background(Color("Fondo"))
+            .background(Tema.fondo)
             .navigationTitle("Subir intento")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

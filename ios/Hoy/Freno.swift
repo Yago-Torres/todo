@@ -277,7 +277,7 @@ struct PantallaFreno: View {
                 .multilineTextAlignment(.center)
             ZStack {
                 Circle()
-                    .fill(Color.accentColor.opacity(0.18))
+                    .fill(Tema.acento.opacity(0.18))
                     .frame(width: 180, height: 180)
                     .scaleEffect(respira ? 1 : 0.55)
                 Text(queda > 0 ? "\(queda)" : "¿Seguro?")
@@ -298,7 +298,7 @@ struct PantallaFreno: View {
                     Text("Mejor no").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
-                .foregroundStyle(Color("AcentoTexto"))
+                .foregroundStyle(Tema.acentoTexto)
                 .controlSize(.large)
 
                 Button {
@@ -315,7 +315,7 @@ struct PantallaFreno: View {
             .padding(.bottom, 24)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color("Fondo").ignoresSafeArea())
+        .background(Tema.fondo.ignoresSafeArea())
         .onAppear {
             withAnimation(.easeInOut(duration: 4).repeatForever(autoreverses: true)) { respira = true }
         }

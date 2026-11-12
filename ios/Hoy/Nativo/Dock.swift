@@ -4,6 +4,7 @@ import SwiftUI
 /// desliza con muelle hasta la sección actual. Hoy y Hábitos son pantallas nativas; el resto abre la web en su ruta.
 struct Dock: View {
     struct Entrada: Identifiable {
+        let clave: String   // el id en la disposición "app-dock" (orden y ocultos, Configurar → Pantallas)
         let href: String
         let nombre: String
         let icono: String
@@ -11,23 +12,30 @@ struct Dock: View {
     }
 
     static let entradas: [Entrada] = [
-        Entrada(href: "/", nombre: "Hoy", icono: "sun.max"),
-        Entrada(href: "/habitos.html", nombre: "Hábitos", icono: "checkmark.circle"),
-        Entrada(href: "/pendientes.html", nombre: "Pendientes", icono: "list.bullet"),
-        Entrada(href: "/entreno.html", nombre: "Entreno", icono: "dumbbell"),
-        Entrada(href: "/salud.html", nombre: "Salud", icono: "heart"),
-        Entrada(href: "/comida.html", nombre: "Comida", icono: "fork.knife"),
-        Entrada(href: "/gastos.html", nombre: "Gastos", icono: "creditcard"),
-        Entrada(href: "/documentos.html", nombre: "Docs", icono: "doc.text"),
+        Entrada(clave: "hoy", href: "/", nombre: "Hoy", icono: "sun.max"),
+        Entrada(clave: "habitos", href: "/habitos.html", nombre: "Hábitos", icono: "checkmark.circle"),
+        Entrada(clave: "pendientes", href: "/pendientes.html", nombre: "Pendientes", icono: "list.bullet"),
+        Entrada(clave: "entreno", href: "/entreno.html", nombre: "Entreno", icono: "dumbbell"),
+        Entrada(clave: "salud", href: "/salud.html", nombre: "Salud", icono: "heart"),
+        Entrada(clave: "comida", href: "/comida.html", nombre: "Comida", icono: "fork.knife"),
+        Entrada(clave: "gastos", href: "/gastos.html", nombre: "Gastos", icono: "creditcard"),
+        Entrada(clave: "documentos", href: "/documentos.html", nombre: "Docs", icono: "doc.text"),
     ]
 
     let actual: String
     let toca: (String) -> Void
     @Namespace private var espacio
 
+    /// Las entradas en el orden elegido, sin las ocultas (Hoy no se puede ocultar).
+    static func visibles() -> [Entrada] {
+        var b = Aspecto.shared.bloques("app-dock")
+        b.ocultos.removeAll { $0 == "hoy" }
+        return b.aplica(entradas.map(\.clave)).compactMap { c in entradas.first { $0.clave == c } }
+    }
+
     var body: some View {
         HStack(spacing: 0) {
-            ForEach(Self.entradas) { e in
+            ForEach(Self.visibles()) { e in
                 let activa = e.href == actual
                 Button {
                     toca(e.href)

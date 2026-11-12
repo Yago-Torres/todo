@@ -6,6 +6,13 @@ struct PantallaHoy: View {
     @State private var datos = DatosNativos.shared
     @State private var verOtros = false
     @State private var toques = 0
+    @State private var editando = false
+
+    /// Los bloques de Hoy, con su id en la disposición "app-hoy" (orden y ocultos, Configurar → Pantallas o «Editar»).
+    static let bloques: [(String, String)] = [
+        ("anillos", "Anillos del día"), ("habitos", "Hábitos"), ("entreno", "Entreno"), ("tareas", "Para hoy"),
+        ("salud", "Salud"), ("carrera", "Carrera"), ("gastos", "Gastos"),
+    ]
 
     private var hoy: Hoy? { datos.hoy }
 
@@ -16,17 +23,46 @@ struct PantallaHoy: View {
     }
 
     var body: some View {
+        if editando {
+            edicion
+                .transition(.opacity)
+        } else {
+            contenido
+                .transition(.opacity)
+        }
+    }
+
+    /// Modo edición en la propia pantalla: asa para ordenar e interruptor para ocultar; «Listo» vuelve.
+    private var edicion: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Editar Hoy").font(Tema.fuente(.titulo)).foregroundStyle(Tema.texto)
+                Spacer()
+                Button("Listo") { withAnimation(Tema.Muelle.pantalla) { editando = false } }
+                    .font(Tema.fuente(.destacado))
+                    .foregroundStyle(Tema.acento)
+            }
+            .padding(.horizontal, Tema.Espacio.l)
+            .padding(.top, Tema.Espacio.m)
+            EditorBloques(pantalla: "app-hoy", todos: Self.bloques, fijos: [])
+                .padding(.bottom, 90)
+        }
+    }
+
+    private var contenido: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: Tema.Espacio.l) {
                 cabecera
                 if let copia = datos.copia { avisoCopia(copia) }
-                anillos
-                seccionHabitos
-                if let entreno = hoy?.entreno, !entreno.isEmpty { seccionEntreno(entreno) }
-                if !datos.tareasDeHoy.isEmpty { seccionTareas }
-                cifrasSalud
-                if let p = hoy?.carrera?.proxima { tarjetaCarrera(p) }
-                if let g = hoy?.gastos, g.total != nil { tarjetaGastos(g) }
+                ForEach(Aspecto.shared.bloques("app-hoy").aplica(Self.bloques.map { $0.0 }), id: \.self) { id in
+                    bloque(id)
+                        .contextMenu {
+                            Button("Editar Hoy", systemImage: "square.and.pencil") {
+                                withAnimation(Tema.Muelle.pantalla) { editando = true }
+                            }
+                            Button("Ocultar este bloque", systemImage: "eye.slash") { oculta(id) }
+                        }
+                }
                 if let error = datos.error, hoy == nil {
                     Text(error).font(Tema.fuente(.pequeno)).foregroundStyle(Tema.peligro)
                 }
@@ -39,6 +75,30 @@ struct PantallaHoy: View {
         .refreshable { await datos.recarga() }
         .task { await datos.carga() }
         .sensoryFeedback(.success, trigger: toques)
+    }
+
+    @ViewBuilder private func bloque(_ id: String) -> some View {
+        switch id {
+        case "anillos": anillos
+        case "habitos": seccionHabitos
+        case "entreno":
+            if let entreno = hoy?.entreno, !entreno.isEmpty { seccionEntreno(entreno) }
+        case "tareas":
+            if !datos.tareasDeHoy.isEmpty { seccionTareas }
+        case "salud": cifrasSalud
+        case "carrera":
+            if let p = hoy?.carrera?.proxima { tarjetaCarrera(p) }
+        case "gastos":
+            if let g = hoy?.gastos, g.total != nil { tarjetaGastos(g) }
+        default: EmptyView()
+        }
+    }
+
+    private func oculta(_ id: String) {
+        var b = Aspecto.shared.bloques("app-hoy")
+        if b.orden.isEmpty { b.orden = Self.bloques.map { $0.0 } }
+        if !b.ocultos.contains(id) { b.ocultos.append(id) }
+        Aspecto.shared.ponBloques("app-hoy", b)
     }
 
     // MARK: cabecera
@@ -58,6 +118,16 @@ struct PantallaHoy: View {
                     .animation(Tema.Muelle.pantalla, value: progreso)
             }
             Spacer()
+            Button {
+                withAnimation(Tema.Muelle.pantalla) { editando = true }
+            } label: {
+                Image(systemName: "square.and.pencil")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(Tema.suave)
+                    .frame(width: 40, height: 40)
+                    .background(Tema.carta, in: Circle())
+            }
+            .accessibilityLabel("Editar Hoy")
             Button {
                 Navegador.shared.abre("/ajustes.html")
             } label: {

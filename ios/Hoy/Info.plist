@@ -96,6 +96,10 @@
 	<key>UIAppFonts</key>
 	<array>
 		<string>InstrumentSans.ttf</string>
+		<string>Inter.ttf</string>
+		<string>Manrope.ttf</string>
+		<string>Geist.ttf</string>
+		<string>IBMPlexSans.ttf</string>
 	</array>
 </dict>
 </plist>

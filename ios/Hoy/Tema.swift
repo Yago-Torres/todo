@@ -1,17 +1,21 @@
 import SwiftUI
 import UIKit
 
-/// El estilo de las pantallas nativas, en un solo sitio: Calma con paleta «Hormigón» + acento «Salvia» (elegido el 12/11),
-/// calcado de ~/estilo/calma.css (los mismos nombres que sus
-/// tokens): las vistas nativas solo usan lo de aquí, nunca un color o un tamaño suelto. Para otro tema, otra `Paleta`
-/// y otras `Fuentes`, y se cambia `Tema.actual` (pensado para elegirlo luego desde Configurar).
+/// El estilo de las pantallas nativas, en un solo sitio, con los nombres de los tokens de ~/estilo/calma.css. Los valores
+/// por defecto son «Hormigón» + «Salvia»; los de verdad salen de Aspecto (catálogo + lo elegido). Las vistas nativas solo
+/// usan lo de aquí, nunca un color o un tamaño suelto.
 struct Paleta {
-    /// Cada token con su valor en claro y en oscuro (hex de calma.css).
+    /// Cada token con su valor en claro y en oscuro ("#hex" o "rgba(…)", como en el catálogo). El color se resuelve
+    /// una vez al crearlo, no en cada acceso.
     struct Token {
         let claro: String
         let oscuro: String
-        var color: Color {
-            Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? UIColor(hex: oscuro) : UIColor(hex: claro) })
+        let color: Color
+
+        init(claro: String, oscuro: String) {
+            self.claro = claro
+            self.oscuro = oscuro
+            color = Color(uiColor: .dinamico(claro: claro, oscuro: oscuro))
         }
     }
 
@@ -34,7 +38,7 @@ struct Paleta {
     var gota = Token(claro: "#A8D5BA", oscuro: "#A8D5BA")
     var gotaTexto = Token(claro: "#173325", oscuro: "#173325")
     /// Los caracteres del fondo (calma.js): tenues, y los densos en acento.
-    var ascii = Token(claro: "#141414", oscuro: "#EDEDED")
+    var ascii = Token(claro: "rgba(20, 20, 20, .08)", oscuro: "rgba(237, 237, 237, .06)")
 }
 
 /// Familias de letra (nombre de familia). nil = la del sistema (SF Pro). Instrument Sans va empaquetada (variable,
@@ -48,12 +52,22 @@ struct Fuentes {
     var diseno: Font.Design = .default
 }
 
+struct Radios {
+    var carta: Double = 12
+    var boton: Double = 8
+    var celda: Double = 6
+}
+
 struct Tema {
     var paleta = Paleta()
     var fuentes = Fuentes()
+    var radios = Radios()
+    /// La intensidad del fondo de caracteres (0 = apagado, 0,5 sutil, 1 normal, 1,6 más presente).
+    var fondo: Double = 0.5
 
-    /// El tema en uso. Hoy solo hay uno (Calma); el día que haya más, se elige aquí desde Configurar.
-    static var actual = Tema()
+    /// El tema en uso: lo construye Aspecto con el catálogo y lo elegido (Configurar → Apariencia, o la web).
+    /// Leerlo dentro de un body hace que la vista se repinte cuando cambia.
+    static var actual: Tema { Aspecto.shared.tema }
 
     // MARK: colores (atajos)
     static var fondo: Color { actual.paleta.fondo.color }
@@ -76,11 +90,11 @@ struct Tema {
 
     // MARK: medidas (las de calma.css)
     enum Radio {
-        static let carta: CGFloat = 12     // esquinas «suaves»
-        static let boton: CGFloat = 8      // botones y campos
-        static let celda: CGFloat = 8
+        static var carta: CGFloat { Tema.actual.radios.carta }
+        static var boton: CGFloat { Tema.actual.radios.boton }     // botones y campos
+        static var celda: CGFloat { Tema.actual.radios.celda }
         static let pastilla: CGFloat = 999
-        static let dock: CGFloat = 20
+        static var dock: CGFloat { min(22, Tema.actual.radios.carta + 8) }
     }
 
     enum Espacio {

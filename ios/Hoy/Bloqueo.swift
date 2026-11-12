@@ -15,7 +15,7 @@ struct Bloqueo: View {
 
     var body: some View {
         ZStack {
-            Color("Fondo").ignoresSafeArea()
+            Tema.fondo.ignoresSafeArea()
             VStack(spacing: 20) {
                 Image(systemName: "faceid")
                     .font(.system(size: 56))
@@ -33,7 +33,7 @@ struct Bloqueo: View {
                     Task { await pide() }
                 }
                 .buttonStyle(.borderedProminent)
-                .foregroundStyle(Color("AcentoTexto"))
+                .foregroundStyle(Tema.acentoTexto)
                 .disabled(pidiendo)
             }
             .padding(32)

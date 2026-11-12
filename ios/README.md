@@ -168,8 +168,8 @@ esconde (la nativa la sustituye). Un enlace de la web a `/` o a `/habitos.html` 
 - `Datos.swift`: lee `/api/hoy` y `/api/state` (sin red, la copia de Local) y marca al momento; sin red, a la cola.
 - `PantallaHoy.swift`: anillos del día, hábitos de hoy, entreno, «Para hoy», salud, carrera y gastos.
 - `PantallaHabitos.swift`: la semana de cada hábito; tocar un día lo marca (desliza para ver semanas anteriores).
-- `FondoCalma.swift`: el plasma de caracteres de calma.js en Canvas (15 fps, quieto con «reducir movimiento»);
-  se apaga en Configurar → «Fondo de caracteres en Hoy».
+- `FondoCalma.swift`: el plasma de caracteres de calma.js en Canvas (15 fps, quieto con «reducir movimiento»), con la
+  intensidad del fondo elegido en Configurar → Apariencia.
 
 **El tema está en un solo sitio: `Hoy/Tema.swift`.** Paleta «Hormigón» (grises) + acento «Salvia», letra Instrument
 Sans (variable, `Hoy/InstrumentSans.ttf` en `UIAppFonts`), esquinas suaves (12/8/pastilla). Colores claro/oscuro, radios,
@@ -177,6 +177,25 @@ espacios, muelles y letra. Las vistas nativas solo usan `Tema.*`. Para cambiar l
 `Hoy/`, añádelo a `UIAppFonts` en `Info.plist` y pon su nombre PostScript en `Fuentes` (`texto`, `titulo`,
 `cifras`); sin familia, SF Pro (`diseno` elige `.rounded`, `.serif`…). Otro tema = otra `Paleta`/`Fuentes` en
 `Tema.actual`.
+
+## Apariencia y orden de pantallas (Configurar)
+
+La apariencia es la misma que la de la web y se guarda en el servidor: cambiarla en un sitio cambia el otro.
+
+- **Catálogo**: `GET /apariencia.json` (45 paletas en 7 familias, 48 acentos, letras, esquinas, fondos). Se guarda en el
+  app group y hay copia en el bundle (`Hoy/apariencia.json`, sale de `~/estilo/apariencia.json`) para arrancar sin red.
+- **Lo elegido**: `GET/POST /api/apariencia` → `{apariencia:{modo,paleta,acento,fuente,esquinas,fondo}, disposicion}`.
+  `Hoy/Aspecto.swift` lo guarda en el app group, sincroniza al arrancar y al volver a primer plano y manda cada cambio
+  (si no hay red, queda marcado y sale en la próxima sincronización, sin pisarlo con lo del servidor).
+- **Tema dinámico**: `Tema.actual` lo construye Aspecto (@Observable): al cambiar algo se repintan todas las pantallas
+  nativas con un fundido. El modo (Sistema/Claro/Oscuro) es `preferredColorScheme` en la raíz. El widget y la Live
+  Activity leen los colores elegidos que la app deja en el app group (`ColoresGuardados`, en oscuro).
+- **Letras** empaquetadas (variables, en `UIAppFonts`): Instrument Sans, Inter, Manrope, Geist, IBM Plex Sans; «sistema» = SF Pro.
+- **Configurar → Apariencia**: vista previa, modo, paleta (rejilla mitad claro/mitad oscuro con filtro por familia),
+  acento («El de la paleta» o uno de la lista), letra (cada nombre en su fuente), esquinas, fondo y «Restablecer».
+- **Configurar → Pantallas**: «Barra de abajo» (disposición `app-dock`: hoy, habitos, pendientes, entreno, salud, comida,
+  gastos, documentos; Hoy no se oculta) y «Hoy (app)» (`app-hoy`: anillos, habitos, entreno, tareas, salud, carrera,
+  gastos). En Hoy también: botón de editar arriba o mantener pulsado un bloque (editar / ocultar este bloque).
 
 ## Freno de apps
 

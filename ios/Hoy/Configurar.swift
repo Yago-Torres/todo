@@ -10,7 +10,6 @@ struct Configurar: View {
     @Environment(\.dismiss) private var cerrar
     @AppStorage("faceID", store: Almacen.defaults) private var faceID = false
     @AppStorage("salud", store: Almacen.defaults) private var salud = false
-    @AppStorage("fondosNativos", store: Almacen.defaults) private var fondos = true
     @AppStorage("avisos", store: Almacen.defaults) private var avisos = false
 
     @State private var cfId = ""
@@ -78,7 +77,6 @@ struct Configurar: View {
                     .onChange(of: salud) { _, activo in
                         if activo { Task { await activaSalud() } }
                     }
-                Toggle("Fondo de caracteres en Hoy", isOn: $fondos)
                 Toggle("Avisos en el iPhone", isOn: $avisos)
                     .onChange(of: avisos) { _, activo in
                         Task { await cambiaAvisos(activo) }
@@ -116,6 +114,8 @@ struct Configurar: View {
                 }
             }
 
+            SeccionApariencia()
+            SeccionPantallas()
             SeccionFreno()
 
             if hayClaves {
@@ -143,10 +143,10 @@ struct Configurar: View {
                 }
             }
             }
-            .listRowBackground(Color("Carta"))
+            .listRowBackground(Tema.carta)
         }
         .scrollContentBackground(.hidden)
-        .background(Color("Fondo"))
+        .background(Tema.fondo)
         .navigationTitle("Configurar Tom")
         .toolbar {
             if hayClaves {

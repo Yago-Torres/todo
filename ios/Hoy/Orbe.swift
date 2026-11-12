@@ -32,7 +32,7 @@ struct Orbe: View {
             if case .parada = fase {
                 Image(systemName: "mic.slash")
                     .font(.system(size: 40, weight: .semibold))
-                    .foregroundStyle(Color("Fondo"))
+                    .foregroundStyle(Tema.fondo)
             }
         }
         .accessibilityHidden(true)
@@ -53,8 +53,8 @@ struct Orbe: View {
             ))
     }
 
-    /// Acento Calma: oliva en claro, lima en oscuro.
-    private var acento: Color { esquema == .dark ? Color(hex: "#9FD3B4") : Color(hex: "#4E7A62") }
+    /// El acento elegido (se resuelve solo en claro u oscuro).
+    private var acento: Color { Tema.acento }
     private static let azul = Color(hex: "#2a78d6")
     private static let ambar = Color(hex: "#E7B04A")
 }
