@@ -31,6 +31,9 @@ struct Catalogo: Codable {
         var esquinas: String
         var fondo: String
         var modo: String?
+        /// Solo Tom: el fondo animado (FondoTema) y el juego de sonidos (Sonidos) del tema.
+        var decoracion: String?
+        var sonido: String?
     }
 
     struct Sugerencias: Codable, Hashable {

@@ -22,7 +22,9 @@
    "titulos": "instrument",
    "esquinas": "suaves",
    "fondo": "sutil",
-   "modo": "sistema"
+   "modo": "sistema",
+   "decoracion": "ascii",
+   "sonido": "campanas"
   },
   {
    "id": "shibuya",
@@ -34,7 +36,9 @@
    "titulos": "shippori",
    "esquinas": "rectas",
    "fondo": "sutil",
-   "modo": "sistema"
+   "modo": "sistema",
+   "decoracion": "washi",
+   "sonido": "madera"
   },
   {
    "id": "kioto",
@@ -46,7 +50,9 @@
    "titulos": "shippori",
    "esquinas": "suaves",
    "fondo": "apagado",
-   "modo": "oscuro"
+   "modo": "oscuro",
+   "decoracion": "kintsugi",
+   "sonido": "bambu"
   },
   {
    "id": "sakura",
@@ -58,7 +64,9 @@
    "titulos": "shippori",
    "esquinas": "redondas",
    "fondo": "sutil",
-   "modo": "sistema"
+   "modo": "sistema",
+   "decoracion": "petalos",
+   "sonido": "campanas"
   },
   {
    "id": "calma",
@@ -70,7 +78,9 @@
    "titulos": "inter",
    "esquinas": "actuales",
    "fondo": "normal",
-   "modo": "sistema"
+   "modo": "sistema",
+   "decoracion": "ascii",
+   "sonido": "campanas"
   },
   {
    "id": "terminal",
@@ -82,7 +92,9 @@
    "titulos": "jetbrains",
    "esquinas": "rectas",
    "fondo": "presente",
-   "modo": "oscuro"
+   "modo": "oscuro",
+   "decoracion": "barrido",
+   "sonido": "8bit"
   },
   {
    "id": "prensa",
@@ -94,7 +106,9 @@
    "titulos": "fraunces",
    "esquinas": "rectas",
    "fondo": "apagado",
-   "modo": "claro"
+   "modo": "claro",
+   "decoracion": "papel",
+   "sonido": "clic"
   },
   {
    "id": "fiordo",
@@ -106,7 +120,9 @@
    "titulos": "manrope",
    "esquinas": "suaves",
    "fondo": "sutil",
-   "modo": "sistema"
+   "modo": "sistema",
+   "decoracion": "curvas",
+   "sonido": "bambu"
   },
   {
    "id": "cafe",
@@ -118,7 +134,9 @@
    "titulos": "fraunces",
    "esquinas": "suaves",
    "fondo": "sutil",
-   "modo": "sistema"
+   "modo": "sistema",
+   "decoracion": "manchas",
+   "sonido": "madera"
   },
   {
    "id": "bauhaus",
@@ -130,7 +148,9 @@
    "titulos": "space-grotesk",
    "esquinas": "rectas",
    "fondo": "apagado",
-   "modo": "claro"
+   "modo": "claro",
+   "decoracion": "formas",
+   "sonido": "clic"
   },
   {
    "id": "miami",
@@ -142,7 +162,9 @@
    "titulos": "space-grotesk",
    "esquinas": "redondas",
    "fondo": "normal",
-   "modo": "oscuro"
+   "modo": "oscuro",
+   "decoracion": "rejilla-neon",
+   "sonido": "sintetizador"
   },
   {
    "id": "matcha",
@@ -154,7 +176,9 @@
    "titulos": "dm-sans",
    "esquinas": "redondas",
    "fondo": "sutil",
-   "modo": "sistema"
+   "modo": "sistema",
+   "decoracion": "manchas",
+   "sonido": "campanas"
   },
   {
    "id": "lavanda",
@@ -166,7 +190,9 @@
    "titulos": "manrope",
    "esquinas": "redondas",
    "fondo": "sutil",
-   "modo": "sistema"
+   "modo": "sistema",
+   "decoracion": "manchas",
+   "sonido": "campanas"
   },
   {
    "id": "medianoche",
@@ -178,7 +204,9 @@
    "titulos": "plex",
    "esquinas": "suaves",
    "fondo": "sutil",
-   "modo": "oscuro"
+   "modo": "oscuro",
+   "decoracion": "estrellas",
+   "sonido": "campanas"
   },
   {
    "id": "braun",
@@ -190,7 +218,9 @@
    "titulos": "plex",
    "esquinas": "suaves",
    "fondo": "apagado",
-   "modo": "claro"
+   "modo": "claro",
+   "decoracion": "rejilla-fina",
+   "sonido": "clic"
   },
   {
    "id": "bosque",
@@ -202,7 +232,9 @@
    "titulos": "geist",
    "esquinas": "suaves",
    "fondo": "normal",
-   "modo": "sistema"
+   "modo": "sistema",
+   "decoracion": "curvas",
+   "sonido": "madera"
   },
   {
    "id": "arena",
@@ -214,7 +246,9 @@
    "titulos": "fraunces",
    "esquinas": "redondas",
    "fondo": "sutil",
-   "modo": "sistema"
+   "modo": "sistema",
+   "decoracion": "manchas",
+   "sonido": "madera"
   },
   {
    "id": "grafito",
@@ -226,7 +260,9 @@
    "titulos": "geist",
    "esquinas": "rectas",
    "fondo": "presente",
-   "modo": "oscuro"
+   "modo": "oscuro",
+   "decoracion": "ascii",
+   "sonido": "8bit"
   }
  ],
  "sugerencias": {
