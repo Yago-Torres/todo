@@ -146,6 +146,8 @@ enum Sincro {
         if c.cuerpo != nil {
             p.setValue(c.cabeceras["content-type"] ?? "application/json", forHTTPHeaderField: "Content-Type")
         }
+        // un documento subido sin red: sus datos (nombre, tipo, caducidad…) viajan en esta cabecera
+        if let doc = c.cabeceras["x-doc"] { p.setValue(doc, forHTTPHeaderField: "X-Doc") }
         switch await pide(p) {
         case .ok:
             return .hecho

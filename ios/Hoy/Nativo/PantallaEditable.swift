@@ -8,6 +8,9 @@ enum PantallasEditables {
     static var bloques: [String: [(String, String)]] = [
         "app-hoy": PantallaHoy.bloques,
         "app-entreno": PantallaEntreno.bloques,
+        "app-comida": PantallaComida.bloques,
+        "app-gastos": PantallaGastos.bloques,
+        "app-salud": PantallaSalud.bloques,
         // ← cada pantalla nueva con PantallaEditable, aquí
     ]
 
