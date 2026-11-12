@@ -30,6 +30,8 @@ final class Escalada {
     var progreso: Double?
     var aviso: String?
     var fallidas: [DatosIntento] = []
+    /// Lo último que se sabe de cada subida en curso (lo mismo que el evento «tom-escalada»), para la pantalla nativa.
+    var vivos: [String: (fase: String, progreso: Double?, texto: String, color: String, nombre: String)] = [:]
 
     private init() {}
 
@@ -161,6 +163,8 @@ final class Escalada {
     /// window.dispatchEvent(new CustomEvent("tom-escalada", {detail: {intento, fase, progreso, texto, color, nombre}})).
     func emite(_ intento: String, _ fase: String, progreso: Double? = nil, texto: String = "", datos: DatosIntento? = nil) {
         Isla.subida(fase: fase, progreso: progreso, texto: texto)   // el progreso en la isla, también con la app fuera
+        let antes = vivos[intento]
+        vivos[intento] = (fase, progreso, texto, datos?.color ?? antes?.color ?? "", datos?.nombre ?? antes?.nombre ?? "")
         guard let web else { return }
         var detalle: [String: Any] = ["intento": intento, "fase": fase, "texto": texto]
         if let progreso, progreso.isFinite { detalle["progreso"] = min(1, max(0, progreso)) }

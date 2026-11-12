@@ -4,8 +4,12 @@ import UIKit
 import UserNotifications
 import WebKit
 
-/// La Live Activity del modo serie a serie de /entreno.html. La web manda por el puente {accion:"entreno", estado}
-/// al abrir la sesión, en cada serie y al empezar o acabar un descanso, y {accion:"entrenoFin"} al salir.
+/// La Live Activity del modo serie a serie. La alimenta la pantalla nativa de Entreno (Hoy/Nativo/Entreno,
+/// muestraNativo y `nativo`) y, por si acaso, la web de /entreno.html sigue pudiendo: manda por el puente
+/// {accion:"entreno", estado} al abrir la sesión, en cada serie y al empezar o acabar un descanso, y {accion:"entrenoFin"}.
+///
+/// Con la sesión nativa abierta, «Serie hecha» la marca la propia pantalla nativa, también con la app en segundo plano
+/// (el intent corre en el proceso de la app). Lo de abajo es para la web:
 ///
 /// «Serie hecha» desde la isla o la pantalla de bloqueo:
 /// - app delante: se pulsa la serie en la web (window.HoyEntreno.serieHecha()) y la web devuelve el estado nuevo.
@@ -17,6 +21,8 @@ final class Entreno {
     static let shared = Entreno()
 
     weak var web: WKWebView?
+    /// La sesión nativa abierta: marca la serie que toca (false si no se pudo, p. ej. faltan las repes).
+    var nativo: (() -> Bool)?
     private var actividad: Activity<EntrenoActividad>?
     private var cola: Task<Void, Never>?   // en orden: dos mensajes seguidos no pueden adelantarse el uno al otro
 
@@ -26,9 +32,13 @@ final class Entreno {
                                                object: nil, queue: .main) { _ in
             Task { @MainActor in Entreno.shared.encola { await $0.aplicaPendientes() } }
         }
-        // las que quedaran de antes (app cerrada a medias): si la sesión sigue, la web la reabre y manda el estado
+        // las que quedaran de antes (app cerrada a medias): si la sesión sigue, se reabre y manda el estado
         for vieja in Activity<EntrenoActividad>.activities {
             Task { await vieja.end(nil, dismissalPolicy: .immediate) }
+        }
+        // iOS mató la app con una sesión o una rutina guiada en marcha (nativas): se vuelve a Entreno, que la reabre
+        if SesionEnCurso.hayEnMarcha || GuiaEnCurso.hayEnMarcha {
+            Task { @MainActor in Navegador.shared.abre("/entreno.html") }
         }
     }
 
@@ -50,6 +60,22 @@ final class Entreno {
             await yo.muestra(nombre, estado)
             await yo.aplicaPendientes()
         }
+    }
+
+    /// La pantalla nativa: el estado nuevo (al abrir, en cada serie y al empezar o acabar un descanso).
+    func muestraNativo(_ nombre: String, _ estado: EntrenoActividad.ContentState) {
+        EntrenoPuente.programaAviso(estado)
+        encola { yo in await yo.muestra(nombre, estado) }
+    }
+
+    /// Las «Serie hecha» que se pulsaron con la app cerrada (EntrenoPuente.avanzaSinWeb las cuenta): con la sesión
+    /// nativa abierta, se marcan aquí.
+    func aplicaPendientesNativas() {
+        guard let nativo else { return }
+        let d = Almacen.defaults
+        var quedan = d.integer(forKey: EntrenoPuente.clavePendientes)
+        d.removeObject(forKey: EntrenoPuente.clavePendientes)
+        while quedan > 0, nativo() { quedan -= 1 }
     }
 
     func termina() {
@@ -80,6 +106,10 @@ final class Entreno {
     // MARK: «Serie hecha»
 
     private func serieHecha() async {
+        if let nativo {
+            _ = nativo()
+            return
+        }
         if UIApplication.shared.applicationState == .active, web != nil,
            (await evalua("window.HoyEntreno ? (window.HoyEntreno.serieHecha(), true) : false") as? Bool) == true {
             return   // la web la marcó (o enfocó las repes que faltan) y ya mandó el estado nuevo
@@ -90,6 +120,7 @@ final class Entreno {
     /// Las series marcadas con la web dormida. serieHecha() de la web: true = marcada, false = no se pudo (sin repes:
     /// se descartan, no vaya a quedarse reintentando), null = aún no hay sesión abierta (se guardan para luego).
     private func aplicaPendientes() async {
+        if nativo != nil { return aplicaPendientesNativas() }
         guard UIApplication.shared.applicationState == .active, web != nil else { return }
         let d = Almacen.defaults
         var quedan = d.integer(forKey: EntrenoPuente.clavePendientes)

@@ -10,6 +10,8 @@ enum RegistroNativo {
         ("/comida.html", { AnyView(PantallaComida()) }),
         ("/gastos.html", { AnyView(PantallaGastos()) }),
         ("/pendientes.html", { AnyView(PantallaPendientes()) }),
+        ("/entreno.html", { AnyView(PantallaEntreno()) }),
+        ("/carrera.html", { AnyView(PantallaCarrera()) }),
         ("/salud.html", { AnyView(PantallaSalud()) }),
         ("/documentos.html", { AnyView(PantallaDocumentos()) }),
         ("/ajustes.html", { AnyView(PantallaAjustes()) }),
