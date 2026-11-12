@@ -106,6 +106,12 @@ struct Dock: View {
                 })
         }
         .frame(height: 62)
+        // mantener pulsada la barra: hablar con Tom
+        .simultaneousGesture(LongPressGesture(minimumDuration: 0.55).onEnded { _ in
+            Haptica.shared.toca(.dia)
+            Navegador.shared.voz = true
+        })
+        .accessibilityAction(named: "Hablar con Tom") { Navegador.shared.voz = true }
         .shadow(color: .black.opacity(0.2), radius: 14, y: 8)
         .frame(maxWidth: 560)
         .padding(.horizontal, 8)

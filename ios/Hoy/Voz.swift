@@ -152,7 +152,10 @@ final class Conversacion: NSObject, AVSpeechSynthesizerDelegate {
     private static let trasHablar: Double = 1.6   // s de silencio después de hablar: la frase ha terminado
 
     private let reconocedor = SFSpeechRecognizer(locale: Locale(identifier: "es-ES"))
-    private let motor = AVAudioEngine()
+    /// Un motor nuevo en cada escucha, creado DESPUÉS de activar la sesión .playAndRecord: el inputNode coge su formato
+    /// al crearse, y si nace con la sesión en .ambient (sin entrada) se queda en 0 Hz / 0 canales («No encuentro el micrófono»).
+    @ObservationIgnored private var motor: AVAudioEngine?
+    @ObservationIgnored private var tapPuesto = false
     private let sintetizador = AVSpeechSynthesizer()
     @ObservationIgnored private var peticion: SFSpeechAudioBufferRecognitionRequest?
     @ObservationIgnored private var tarea: SFSpeechRecognitionTask?
@@ -222,7 +225,7 @@ final class Conversacion: NSObject, AVSpeechSynthesizerDelegate {
 
     // MARK: escuchar
 
-    private func escucha() {
+    private func escucha(intento: Int = 0) {
         guard activa else { return }
         guard let reconocedor, reconocedor.isAvailable else {
             fase = .parada("El reconocimiento de voz no está disponible ahora. Toca para reintentar.")
@@ -233,27 +236,42 @@ final class Conversacion: NSObject, AVSpeechSynthesizerDelegate {
             let sesion = AVAudioSession.sharedInstance()
             try sesion.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth, .duckOthers])
             try sesion.setActive(true, options: .notifyOthersOnDeactivation)
+            let m = AVAudioEngine()
 
             let p = SFSpeechAudioBufferRecognitionRequest()
             p.shouldReportPartialResults = true
             p.addsPunctuation = true
             // sin exigir el modelo del iPhone: si no está descargado, el reconocimiento falla al instante sin oír nada
 
-            let entrada = motor.inputNode
+            let entrada = m.inputNode
+            let deEntrada = entrada.inputFormat(forBus: 0)
             let formato = entrada.outputFormat(forBus: 0)
-            guard formato.sampleRate > 0, formato.channelCount > 0 else {
-                fase = .parada("No encuentro el micrófono. Toca para reintentar.")
+            guard formato.sampleRate > 0, formato.channelCount > 0, deEntrada.sampleRate > 0 else {
+                if intento == 0 {
+                    // a veces la ruta de audio tarda un instante en tener entrada: un reintento a los 0,3 s
+                    Task { [weak self] in
+                        try? await Task.sleep(for: .milliseconds(300))
+                        self?.escucha(intento: 1)
+                    }
+                    return
+                }
+                let detalle = "\(Int(formato.sampleRate)) Hz, \(formato.channelCount) canales; entrada \(Int(deEntrada.sampleRate)) Hz; "
+                    + "sesión \(sesion.category.rawValue.replacingOccurrences(of: "AVAudioSessionCategory", with: "")), "
+                    + "entrada disponible: \(sesion.isInputAvailable ? "sí" : "no")"
+                fase = .parada("No encuentro el micrófono (\(detalle)). Toca para reintentar.")
                 return
             }
+            motor = m
             nivel = 0
             escuchoAlgo = false
+            tapPuesto = true
             Self.conecta(entrada, formato, p) { [weak self] valor in
                 guard let self else { return }
                 self.nivel += (valor - self.nivel) * 0.5   // suavizado; el orbe vuelve a suavizar por fotograma
                 if valor > 0.35 { self.escuchoAlgo = true }
             }
-            motor.prepare()
-            try motor.start()
+            m.prepare()
+            try m.start()
 
             ronda += 1
             let estaRonda = ronda
@@ -336,8 +354,12 @@ final class Conversacion: NSObject, AVSpeechSynthesizerDelegate {
         reloj?.cancel()
         reloj = nil
         ronda += 1
-        if motor.isRunning { motor.stop() }
-        motor.inputNode.removeTap(onBus: 0)
+        if let m = motor {
+            if m.isRunning { m.stop() }
+            if tapPuesto { m.inputNode.removeTap(onBus: 0) }   // sin tap no se toca inputNode (lo crearía)
+        }
+        motor = nil
+        tapPuesto = false
         nivel = 0
         peticion?.endAudio()
         tarea?.cancel()

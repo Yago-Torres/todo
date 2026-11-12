@@ -119,6 +119,17 @@ struct PantallaHoy: View {
             }
             Spacer()
             Button {
+                Haptica.shared.toca(.marcar)
+                Navegador.shared.voz = true
+            } label: {
+                Image(systemName: "mic.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Tema.acentoTexto)
+                    .frame(width: 40, height: 40)
+                    .background(Tema.acento, in: Circle())
+            }
+            .accessibilityLabel("Hablar con Tom")
+            Button {
                 withAnimation(Tema.Muelle.pantalla) { editando = true }
             } label: {
                 Image(systemName: "square.and.pencil")

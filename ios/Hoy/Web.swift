@@ -344,6 +344,9 @@ final class Coordinador: NSObject, WKNavigationDelegate, WKUIDelegate {
             Entreno.shared.termina()
         case "escalada-subir":
             Escalada.shared.hojaVisible = true
+        case "voz":
+            // {accion:"voz"}: el modo voz de Tom (un botón de micro en la web)
+            Navegador.shared.voz = true
         case "descanso":
             // {accion:"descanso", segundos, siguiente}: la cuenta atrás en la isla (segundos 0 = quitarla)
             let seg = (datos["segundos"] as? NSNumber)?.intValue ?? 0

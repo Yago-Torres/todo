@@ -88,7 +88,27 @@ enum Freno {
     private static func clavePase(_ app: AppFrenada) -> String { "freno.pase.\(app.rawValue)" }
 
     static var minutosPase: Int { max(1, Almacen.defaults.object(forKey: "freno.minutos") as? Int ?? 5) }
-    static var esperaBase: Int { max(3, Almacen.defaults.object(forKey: "freno.espera") as? Int ?? 8) }
+    /// La espera de la primera entrada de la hora y lo que crece con cada entrada más en esa misma hora.
+    static var esperaInicial: Int { max(1, Almacen.defaults.object(forKey: "freno.esperaInicial") as? Int ?? 5) }
+    static var esperaPaso: Int { max(0, Almacen.defaults.object(forKey: "freno.esperaPaso") as? Int ?? 3) }
+
+    private static func claveEntradas(_ app: AppFrenada) -> String { "freno.entradas.\(app.rawValue)" }
+
+    /// Las veces que has dado a «Entrar» en esta app durante la hora de reloj en curso (de 17:00 a 17:59…).
+    static func entradasEnEstaHora(_ app: AppFrenada) -> Int {
+        let cal = Calendar.current
+        guard let inicioHora = cal.dateInterval(of: .hour, for: Date())?.start else { return 0 }
+        let marcas = Almacen.defaults.array(forKey: claveEntradas(app)) as? [Double] ?? []
+        return marcas.filter { $0 >= inicioHora.timeIntervalSince1970 }.count
+    }
+
+    /// Apunta la hora de un «Entrar» (solo se guardan las de hoy).
+    private static func apuntaEntrada(_ app: AppFrenada) {
+        let inicioDia = Calendar.current.startOfDay(for: Date()).timeIntervalSince1970
+        var marcas = (Almacen.defaults.array(forKey: claveEntradas(app)) as? [Double] ?? []).filter { $0 >= inicioDia }
+        marcas.append(Date().timeIntervalSince1970)
+        Almacen.defaults.set(marcas, forKey: claveEntradas(app))
+    }
     static var libresAlDia: Int { max(0, Almacen.defaults.object(forKey: "freno.libres") as? Int ?? 0) }
     /// Minutos de uso real al día por app (0: sin límite). Pasado, la espera es la máxima y no hay aperturas libres.
     static var limiteDiario: Int { max(0, Almacen.defaults.object(forKey: "freno.limite") as? Int ?? 0) }
@@ -179,13 +199,15 @@ enum Freno {
         return app.freno
     }
 
-    /// Cada entrada de más hoy alarga la espera 4 s, hasta 30; pasado el límite diario, 30 directamente.
+    /// Primera entrada de la hora: la espera inicial (5 s); cada entrada más en la misma hora, +3 s; tope 30.
+    /// Al cambiar la hora vuelve a empezar. Pasado el límite diario, 30 directamente.
     static func espera(_ app: AppFrenada) -> Int {
-        pasadoDeLimite(app) ? 30 : min(30, esperaBase + 4 * deHoy(app).entradas)
+        pasadoDeLimite(app) ? 30 : min(30, esperaInicial + esperaPaso * entradasEnEstaHora(app))
     }
 
     static func entra(_ app: AppFrenada, minutos: Int) {
         daPase(app, minutos: minutos)
+        apuntaEntrada(app)
         apunta(app) { $0.entradas += 1; $0.minutos += minutos }
         Task { @MainActor in
             Isla.pase(app.nombre, minutos: minutos)   // «Instagram · 4:59» en la isla hasta que caduque
@@ -350,7 +372,8 @@ struct PantallaFreno: View {
 /// En Configurar: los ajustes del freno, lo de hoy y cómo se monta la automatización.
 struct SeccionFreno: View {
     @AppStorage("freno.minutos", store: Almacen.defaults) private var minutos = 5
-    @AppStorage("freno.espera", store: Almacen.defaults) private var espera = 8
+    @AppStorage("freno.esperaInicial", store: Almacen.defaults) private var esperaInicial = 5
+    @AppStorage("freno.esperaPaso", store: Almacen.defaults) private var esperaPaso = 3
     @AppStorage("freno.libres", store: Almacen.defaults) private var libres = 0
     @AppStorage("freno.limite", store: Almacen.defaults) private var limite = 0
     @State private var ayuda = false
@@ -358,7 +381,8 @@ struct SeccionFreno: View {
     var body: some View {
         Section {
             Stepper("Pase al entrar: \(minutos) min", value: $minutos, in: 1...60)
-            Stepper("Espera: \(espera) s", value: $espera, in: 3...30)
+            Stepper("Espera inicial: \(esperaInicial) s", value: $esperaInicial, in: 1...30)
+            Stepper("Cada vez más: +\(esperaPaso) s", value: $esperaPaso, in: 0...10)
             Stepper("Aperturas libres al día: \(libres)", value: $libres, in: 0...20)
             Stepper(limite == 0 ? "Límite diario: sin límite" : "Límite diario: \(limite) min",
                     value: $limite, in: 0...240, step: 5)
@@ -375,7 +399,7 @@ struct SeccionFreno: View {
                 1. Elige la app (Instagram…), marca «Se abre» y «Ejecutar inmediatamente».
                 2. Añade la acción «Frenar app» de Tom (búscala: no está entre los recuadros) y escribe el nombre de la app. Si Tom no la conoce, te pedirá su enlace en «Enlace» (p. ej. brawlstars://).
                 3. Añade «Abrir URL» (la de Atajos): coge sola el resultado de la anterior.
-                Sin pase, se abre Tom y te pregunta. Cada vez que entras hoy, la espera crece 4 s.
+                Sin pase, se abre Tom y te pregunta. La primera vez de cada hora esperas \(esperaInicial) s; cada vez que vuelves a entrar en esa misma hora, \(esperaPaso) s más (hasta 30). Al cambiar la hora vuelve a empezar.
 
                 Para medir el uso real (y el límite diario), otra automatización por app:
                 App → la misma, marca solo «Se cierra» y «Ejecutar inmediatamente» → acción «App cerrada» de Tom con el mismo nombre.

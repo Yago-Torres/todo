@@ -201,6 +201,11 @@ fondo}`. Elegir un tema copia sus valores; tocar cualquiera después lo deja en 
 en las nativas). En la web, solo desde los bordes de la pantalla (el «atrás» de WebKit está quitado). En la barra,
 arrastrar el dedo mueve la gota con él (vibra al pasar por cada sección) y al soltar va a la de debajo; tocar sigue igual.
 
+**Modo voz desde la app**: el botón de micro en la cabecera de Hoy, mantener pulsada la barra de abajo, o desde la web
+con `postMessage({accion:"voz"})`. El micro crea un `AVAudioEngine` nuevo en cada escucha, después de activar la sesión
+`.playAndRecord` (si no, el inputNode nace sin entrada: 0 Hz); si aun así no hay entrada, reintenta a los 0,3 s y el
+error dice Hz, canales y categoría de la sesión.
+
 **Isla dinámica** (`Hoy/Isla.swift`, `Compartido/AvisoActividad.swift`, `HoyWidget/AvisoLiveActivity.swift`), además
 del entreno serie a serie. Las cuentas atrás son `Text(timerInterval:)`: no despiertan la app; caducan solas y se
 terminan al acabar o al volver a la app.
@@ -220,7 +225,7 @@ Tom no puede leer el Tiempo de uso (Apple solo lo deja con cuenta de pago), así
 
 Para medir el **uso real** (y poder ponerle un límite diario en Configurar → Freno de apps), otra automatización por app: la misma app, solo **Se cierra** y **Ejecutar inmediatamente**, con la acción **App cerrada** de Tom y el mismo nombre. Tom cuenta de abrir a cerrar; pasado el límite del día, la espera es de 30 s y no quedan aperturas libres.
 
-Sin pase, se abre Tom: respiras unos segundos y eliges **Mejor no** o **Entrar 5 min**. Entrar abre la app con un pase de esos minutos; cada vez que entras en el día, la espera crece 4 s. El pase, la espera y las aperturas libres al día se cambian en **Ajustes de Tom → Freno de apps**. Lo que abres no sale del iPhone.
+Sin pase, se abre Tom: respiras unos segundos y eliges **Mejor no** o **Entrar 5 min**. Entrar abre la app con un pase de esos minutos; la espera depende de cuántas veces has entrado en esa app en la hora de reloj en curso: la primera, 5 s; luego +3 s cada vez (8, 11…, tope 30), y al cambiar la hora vuelve a 5. Pasado el límite diario, 30 s. El pase, la **espera inicial**, lo que crece **cada vez más** y las aperturas libres al día se cambian en **Ajustes de Tom → Freno de apps**. Lo que abres no sale del iPhone.
 
 Conocidas (sin Enlace): Instagram, TikTok, YouTube, X, Facebook, Reddit, WhatsApp, Twitch, Threads, BeReal, Telegram, Snapchat, Pinterest, Discord, LinkedIn, Netflix, Spotify, Tinder, Brawl Stars, Clash Royale y Clash of Clans.
 
