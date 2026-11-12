@@ -502,9 +502,6 @@ private struct GraficaRitmo: View {
                 let tipos = InformeCarrera.tipos.filter { t in cs.contains { $0.tipo == t.0 } }
                 Leyenda(items: tipos.map { ($0.1, InformeCarrera.color($0.0), false) }
                         + [("Banda suave", Tema.suave, true), ("Ritmo objetivo", Tema.suave, true)])
-                let ritmos = cs.compactMap(\.ritmo) + [r.ritmos.suave.last ?? 0, r.ritmos.objetivo]
-                let lo = floor(((ritmos.min() ?? 240) - 15) / 30) * 30
-                let hi = ceil(((ritmos.max() ?? 420) + 15) / 30) * 30
                 Chart {
                     ForEach(cs) { c in
                         PointMark(x: .value("Día", FormatoEnt.fecha(c.dia)), y: .value("Ritmo", c.ritmo ?? 0))
@@ -521,7 +518,7 @@ private struct GraficaRitmo: View {
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 3]))
                 }
                 // arriba lo rápido
-                .chartYScale(domain: hi...lo)
+                .chartYScale(domain: .automatic(includesZero: false, reversed: true))
                 .chartYAxis {
                     AxisMarks(position: .leading, values: .stride(by: 30)) { v in
                         AxisGridLine().foregroundStyle(Tema.linea)

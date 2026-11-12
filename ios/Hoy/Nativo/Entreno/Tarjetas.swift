@@ -307,9 +307,9 @@ struct TarjetaCarreraSemana: View {
         let lunes = FormatoEnt.lunes(hoy)
         let filas: [(dia: String, h: String, r: RutinaGym)] = (0..<7).flatMap { i -> [(dia: String, h: String, r: RutinaGym)] in
             let d = FormatoEnt.mas(lunes, i)
-            return (e.sesion[d] ?? [:]).sorted { $0.key < $1.key }.compactMap { h, rid in
-                guard let r = e.rutina(rid), r.tipo == "carrera" else { return nil }
-                return (dia: d, h: h, r: r)
+            return (e.sesion[d] ?? [:]).sorted { $0.key < $1.key }.compactMap { par -> (dia: String, h: String, r: RutinaGym)? in
+                guard let r = e.rutina(par.value), r.tipo == "carrera" else { return nil }
+                return (dia: d, h: par.key, r: r)
             }
         }
         VStack(alignment: .leading, spacing: Tema.Espacio.s) {
