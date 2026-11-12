@@ -37,6 +37,11 @@ struct Pestanas: View {
                 .simultaneousGesture(DragGesture(minimumDistance: 24).onEnded { g in
                     let dx = g.translation.width, dy = g.translation.height
                     guard abs(dx) > 80, abs(dx) > abs(dy) * 2 else { return }
+                    // en las listas con filas que se deslizan (completar, borrar…), solo desde los bordes, como en la web
+                    if Self.conFilasDeslizables.contains(navegador.pestana) {
+                        let x = g.startLocation.x, ancho = UIScreen.main.bounds.width
+                        guard x < 28 || x > ancho - 28 else { return }
+                    }
                     paso(dx < 0 ? 1 : -1)
                 })
             }
@@ -61,6 +66,8 @@ struct Pestanas: View {
             if nueva == .active { Task { await DatosNativos.shared.carga(margen: 60) } }
         }
     }
+
+    private static let conFilasDeslizables: Set<String> = ["/pendientes.html", "/documentos.html", "/gastos.html"]
 
     private static func indice(_ pestana: String) -> Int {
         Dock.visibles().firstIndex { $0.href == Navegador.seccion(pestana) } ?? 0
