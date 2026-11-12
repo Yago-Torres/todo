@@ -128,7 +128,7 @@ struct PendientesWidget: Widget {
 
 // MARK: próximo entreno
 
-struct EntrenoVista: View {
+struct ProximoEntrenoVista: View {
     @Environment(\.widgetFamily) private var familia
     @Environment(\.widgetRenderingMode) private var modo
     let entrada: EntradaEstado
@@ -233,7 +233,7 @@ struct FilaEntreno: View {
 struct EntrenoWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "HoyEntreno", provider: ProveedorEstado()) { entrada in
-            EntrenoVista(entrada: entrada)
+            ProximoEntrenoVista(entrada: entrada)
         }
         .configurationDisplayName("Próximo entreno")
         .description("La sesión que toca, hoy o el próximo día con entreno. Marca la de hoy desde el widget.")

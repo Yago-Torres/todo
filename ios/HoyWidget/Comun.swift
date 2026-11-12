@@ -140,8 +140,7 @@ enum DiasSemana {
 
     /// Lunes a domingo de la semana en curso, como "yyyy-MM-dd".
     static func semana(de dia: String) -> [String] {
-        var cal = Calendar(identifier: .gregorian)
-        cal.firstWeekday = 2
+        let cal = Calendar(identifier: .iso8601)   // semanas de lunes a domingo
         guard let d = fecha(dia), let lunes = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: d)) else { return [] }
         return (0..<7).compactMap { cal.date(byAdding: .day, value: $0, to: lunes) }.map(Fecha.dia)
     }
