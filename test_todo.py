@@ -666,6 +666,36 @@ def test_tom():
     assert main.texto_presupuesto({**g, "presu": 0}) == "Llevas 935 € este ciclo."
 
 
+def test_semana():
+    hoy = "2026-11-11"   # miércoles: la semana va del 9 al 15, la pasada del 2 al 8
+    s = clean({"habits": [{"id": "g", "n": "Gimnasio", "goal": 3}, {"id": "w", "n": "Agua", "goal": 7},
+                          {"id": "e", "n": "Escalar", "goal": 1, "cada": 2}],
+               "rutinas": [{"id": "pa", "n": "Push A", "tipo": "pesas", "hab": "g"}],
+               "plan": {"2026-11-03": ["g"], "2026-11-05": ["g"], "2026-11-09": ["g"], "2026-11-11": ["g"], "2026-11-13": ["g"]},
+               "log": {"2026-11-03": ["g", "w"], "2026-11-04": ["w"], "2026-11-09": ["g", "w"], "2026-11-10": ["w"], "2026-11-11": ["w"]},
+               "salud": {"2026-11-03": {"sueno": 420, "pasos": 8000}, "2026-11-05": {"sueno": 480, "pasos": 10000},
+                         "2026-11-09": {"sueno": 450, "pasos": 9000}, "2026-11-10": {"sueno": 510}},
+               "peso": {"2026-11-02": 80.0, "2026-11-09": 79.6, "2026-11-11": 79.2}})
+    r = main.resumen_semana(s, hoy, {"total": 900.0, "presu": 1400.0})
+    a, p = r["actual"], r["pasada"]
+    assert (a["desde"], a["hasta"], p["desde"], p["hasta"]) == ("2026-11-09", "2026-11-15", "2026-11-02", "2026-11-08"), r
+    # solo cuentan los días que ya han llegado; Escalar (quincenal) no cuenta si no se hizo esa semana
+    h = {x["id"]: x for x in a["habitos"]}
+    assert (h["g"]["hechos"], h["g"]["objetivo"], h["w"]["hechos"], h["w"]["racha"], h["e"]["objetivo"]) == (1, 3, 3, 3, 0), a
+    assert (a["hechos"], a["objetivo"], p["hechos"], p["objetivo"]) == (4, 10, 3, 10), (a, p)
+    assert a["entrenos"] == {"hechos": 1, "planificados": 2} and p["entrenos"] == {"hechos": 1, "planificados": 2}, (a, p)
+    assert a["sueno"] == {"media": 480, "noches": 2} and p["sueno"] == {"media": 450, "noches": 2}, (a, p)
+    assert a["pasos"] == {"media": 9000, "dias": 1} and r["cambio"] == {"sueno": 30, "pasos": 0}, r["cambio"]
+    assert a["peso"] == {"inicio": 79.6, "fin": 79.2} and p["peso"] == {"inicio": 80.0, "fin": 80.0}, (a, p)
+    assert 1 <= len(r["resumen"]) <= 3 and r["resumen"][0].startswith("Esta semana llevas 4 de 10 hábitos (la pasada, 3 de 10)"), r["resumen"]
+    assert any("30 min más" in f for f in r["resumen"]), r["resumen"]
+    assert r["resumen"][-1] == "Del ciclo te quedan 500 € de 1400 €.", r["resumen"]
+    # sin gastos conectados ni datos: no se rompe y dice algo
+    vacio = main.resumen_semana(clean({}), hoy, {"error": "Sin conectar"})
+    assert vacio["resumen"] == ["Aún no hay datos para resumir la semana."] and vacio["cambio"] == {"sueno": None, "pasos": None}, vacio
+    assert main.semana_de(clean({}), date(2026, 11, 16), hoy)["habitos"] == []   # una semana futura, vacía
+
+
 def test_movimiento():
     """movimiento.js (GSAP) y tom.js: el orden de Hoy, el cuentakilómetros, el cielo, la planta y las cifras, con node."""
     import shutil
@@ -805,5 +835,6 @@ if __name__ == "__main__":
     test_documentos()
     test_pantalla()
     test_tom()
+    test_semana()
     test_escalada()
     print("ok")

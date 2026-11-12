@@ -1582,6 +1582,86 @@ def portada(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
     }
 
 
+# ---------- resumen semanal (GET /api/semana) ----------
+def media_dias(por_dia, clave, dias):
+    xs = [por_dia[d][clave] for d in dias if por_dia.get(d, {}).get(clave)]
+    return (round(sum(xs) / len(xs)), len(xs)) if xs else (None, 0)
+
+
+def semana_de(s, lunes, hoy):
+    """Una semana de lunes a domingo (los días que aún no han llegado no cuentan): hábitos, entrenos, sueño, pasos y peso."""
+    dias = [d.isoformat() for d in (lunes + timedelta(days=i) for i in range(7)) if d.isoformat() <= hoy]
+    habitos = []
+    for h in s["habits"]:
+        hechos = sum(h["id"] in s["log"].get(d, []) for d in dias)
+        # un hábito quincenal no cuenta como meta fallida en su semana de descanso
+        objetivo = h["goal"] if h["cada"] == 1 or hechos else 0
+        habitos.append({"id": h["id"], "n": h["n"], "c": h["c"], "hechos": hechos, "objetivo": objetivo,
+                        "racha": racha(s["log"], h["id"], dias[-1]) if dias else 0})
+    entrenos = [(d, h) for d in dias for h in s["plan"].get(d, []) if es_entreno(s, h)]
+    sueno, noches = media_dias(s["salud"], "sueno", dias)
+    pasos, con_pasos = media_dias(s["salud"], "pasos", dias)
+    pesos = [(d, s["peso"][d]) for d in dias if d in s["peso"]]
+    return {"desde": lunes.isoformat(), "hasta": (lunes + timedelta(days=6)).isoformat(), "habitos": habitos,
+            "hechos": sum(min(h["hechos"], h["objetivo"]) for h in habitos), "objetivo": sum(h["objetivo"] for h in habitos),
+            "entrenos": {"hechos": sum(h in s["log"].get(d, []) for d, h in entrenos), "planificados": len(entrenos)},
+            "sueno": {"media": sueno, "noches": noches}, "pasos": {"media": pasos, "dias": con_pasos},
+            "peso": {"inicio": pesos[0][1] if pesos else None, "fin": pesos[-1][1] if pesos else None}}
+
+
+def frases_semana(actual, pasada, gastos, hoy):
+    """Dos o tres frases del resumen, sin LLM: lo hecho, el sueño y el dinero."""
+    frases = []
+    prev = pasada["hechos"] if pasada["objetivo"] else None
+    if actual["objetivo"]:
+        f = f"Esta semana llevas {actual['hechos']} de {actual['objetivo']} hábitos"
+        if prev is not None:
+            f += f" (la pasada, {prev} de {pasada['objetivo']})"
+        e = actual["entrenos"]
+        if e["planificados"]:
+            f += f" y {e['hechos']} de {e['planificados']} entrenos"
+        frases.append(f + ".")
+    partes = []
+    if (m := actual["sueno"]["media"]) is not None:
+        t = f"duermes {m // 60} h {m % 60:02d} de media"
+        if (p := pasada["sueno"]["media"]) is not None and abs(m - p) >= 10:
+            t += f", {abs(m - p)} min {'más' if m > p else 'menos'} que la semana pasada"
+        partes.append(t)
+    if (n := actual["pasos"]["media"]) is not None:
+        partes.append(f"das {n:,} pasos al día".replace(",", "."))
+    if partes:
+        frases.append(("Esta semana " + partes[0] if not frases else partes[0][:1].upper() + partes[0][1:]) +
+                      (" y " + partes[1] if len(partes) > 1 else "") + ".")
+    extra = []
+    pi, pf = actual["peso"]["inicio"], actual["peso"]["fin"]
+    if pi is not None and pf is not None and abs(pf - pi) >= 0.1:
+        extra.append(f"El peso ha {'bajado' if pf < pi else 'subido'} {abs(pf - pi):.1f}".replace(".", ",") + " kg esta semana.")
+    if isinstance(gastos, dict) and gastos.get("presu") and "error" not in gastos:
+        queda = round(gastos["presu"] - gastos["total"])
+        extra.insert(0, f"Del ciclo te quedan {queda} € de {round(gastos['presu'])} €." if queda >= 0
+                     else f"Te has pasado {-queda} € del presupuesto del ciclo.")   # el dinero antes que el peso si no caben las dos
+    frases += extra
+    return frases[:3] or ["Aún no hay datos para resumir la semana."]
+
+
+def resumen_semana(s, hoy, gastos):
+    d = date.fromisoformat(hoy)
+    lunes = d - timedelta(days=d.weekday())
+    actual, pasada = semana_de(s, lunes, hoy), semana_de(s, lunes - timedelta(days=7), hoy)
+    cambio = {k: (actual[k]["media"] - pasada[k]["media"]) if actual[k]["media"] is not None and pasada[k]["media"] is not None else None
+              for k in ("sueno", "pasos")}
+    return {"hoy": hoy, "actual": actual, "pasada": pasada, "cambio": cambio, "gastos": gastos,
+            "resumen": frases_semana(actual, pasada, gastos, hoy)}
+
+
+@app.get("/api/semana")
+def semana(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """La semana pasada y la actual (lunes a domingo) y 2-3 frases de resumen. La app las enseña en Hoy y avisa el domingo."""
+    exige(todo_sesion, authorization)
+    s = clean(dct(json.loads(DB.read_text("utf-8")))) if DB.exists() else clean({})
+    return resumen_semana(s, date.today().isoformat(), trozo(hoy_gastos))
+
+
 # ---------- Tom: Siri y el modo voz de la app de iPhone ----------
 # Las frases rápidas de Siri (sin Claude) van a /api/mueve, /api/toca y /api/presupuesto, que devuelven el texto ya
 # listo para leerlo en voz alta. Lo dicho en libre («Dile a Tom…») va a /api/tom, que lo reenvía al bot de Telegram

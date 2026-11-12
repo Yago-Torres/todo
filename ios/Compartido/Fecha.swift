@@ -16,5 +16,15 @@ enum Fecha {
 
     static func dia(_ d: Date) -> String { texto(d, "yyyy-MM-dd") }
 
+    /// "yyyy-MM-dd" → el día a las 00:00 (hora local); nil si no es una fecha.
+    static func fecha(_ dia: String) -> Date? {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.calendar = Calendar(identifier: .gregorian)
+        f.timeZone = .current
+        f.dateFormat = "yyyy-MM-dd"
+        return f.date(from: dia)
+    }
+
     static func minuto(_ d: Date) -> String { texto(d, "yyyy-MM-dd'T'HH:mm") }
 }

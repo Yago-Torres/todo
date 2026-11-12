@@ -2,7 +2,8 @@ import SwiftUI
 
 /// Los colores del widget: los de la apariencia elegida en Tom (en oscuro), que la app deja en el app group.
 enum Paleta {
-    static let hab = Color(hex: "#1baf7a")
+    /// El acento del tema elegido en Tom (en oscuro); sin tema guardado, el verde de siempre.
+    static var hab: Color { ColoresGuardados.oscuro("acento", "#1baf7a") }
     static let pas = Color(hex: "#eb6834")
     static let sue = Color(hex: "#3987e5")
     static var fondo: Color { ColoresGuardados.oscuro("fondo", "#111111") }
@@ -109,6 +110,7 @@ struct Anillos: View {
                                 .trim(from: 0, to: p)
                                 .stroke(valores[i].1, style: StrokeStyle(lineWidth: grosor, lineCap: .round))
                                 .rotationEffect(.degrees(-90))
+                                .widgetAccentable()   // con el tinte de iOS 18 y en StandBy, los arcos toman el acento
                         }
                     }
                     .padding(margen)

@@ -73,7 +73,7 @@ struct HoyWidget: Widget {
             HoyWidgetVista(entrada: entrada)
         }
         .configurationDisplayName("Tom")
-        .description("Hábitos, pasos y sueño del día, y lo que vence hoy.")
+        .description("Anillos de hábitos, pasos y sueño con su leyenda; marca hábitos y completa tareas desde el widget.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge,
                             .accessoryCircular, .accessoryRectangular, .accessoryInline])
     }
@@ -84,10 +84,19 @@ struct HoyWidgets: WidgetBundle {
     var body: some Widget {
         HoyWidget()
         HoyDatoWidget()
+        PendientesWidget()
+        EntrenoWidget()
+        PresupuestoWidget()
+        SuenoWidget()
+        RachaWidget()
+        SemanaWidget()
         EntrenoLiveActivity()
         AvisoLiveActivity()
         if #available(iOS 18.0, *) {
             HablaConTomControl()
+            ApuntaTareaControl()
+            MarcaHabitoControl()
+            AbreSeccionControl()
         }
     }
 }

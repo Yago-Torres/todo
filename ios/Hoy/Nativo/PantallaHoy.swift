@@ -54,6 +54,7 @@ struct PantallaHoy: View {
             LazyVStack(alignment: .leading, spacing: Tema.Espacio.l) {
                 cabecera
                 if let copia = datos.copia { avisoCopia(copia) }
+                if Self.domingoOLunes { BloqueSemana(destacado: true) }   // el resumen, arriba el domingo y el lunes
                 ForEach(Aspecto.shared.bloques("app-hoy").aplica(Self.bloques.map { $0.0 }), id: \.self) { id in
                     bloque(id)
                         .contextMenu {
@@ -63,6 +64,7 @@ struct PantallaHoy: View {
                             Button("Ocultar este bloque", systemImage: "eye.slash") { oculta(id) }
                         }
                 }
+                if !Self.domingoOLunes { BloqueSemana(destacado: false) }   // el resto de días, abajo y plegado
                 if let error = datos.error, hoy == nil {
                     Text(error).font(Tema.fuente(.pequeno)).foregroundStyle(Tema.peligro)
                 }
@@ -406,6 +408,9 @@ struct PantallaHoy: View {
     }
 
     // MARK: formatos
+
+    /// Weekday de Calendar: 1 = domingo, 2 = lunes.
+    static var domingoOLunes: Bool { [1, 2].contains(Calendar.current.component(.weekday, from: Date())) }
 
     static func hm(_ minutos: Int) -> String { "\(minutos / 60) h \(String(format: "%02d", minutos % 60))" }
 

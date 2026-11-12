@@ -12,6 +12,7 @@ struct Configurar: View {
     @AppStorage("salud", store: Almacen.defaults) private var salud = false
     @AppStorage("islaDia", store: Almacen.defaults) private var islaDia = false
     @AppStorage("avisos", store: Almacen.defaults) private var avisos = false
+    @AppStorage("avisoSemana", store: Almacen.defaults) private var avisoSemana = true
 
     @State private var cfId = ""
     @State private var cfSecret = ""
@@ -86,6 +87,12 @@ struct Configurar: View {
                     .onChange(of: avisos) { _, activo in
                         Task { await cambiaAvisos(activo) }
                     }
+                if avisos {
+                    Toggle("Resumen de la semana (domingo, 20:00)", isOn: $avisoSemana)
+                        .onChange(of: avisoSemana) { _, _ in
+                            Task { await Avisos.programa() }
+                        }
+                }
             } header: {
                 Text("Ajustes")
             } footer: {

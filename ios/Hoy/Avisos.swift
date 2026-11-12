@@ -13,18 +13,35 @@ enum Avisos {
     static var tareaId: String { (Bundle.main.bundleIdentifier ?? "dev.yagotg.hoy") + ".refresco" }
     private static let prefijo = "hoy."
     private static let categoriaHecho = "hecho"
+    private static let categoriaTarea = "tarea"
+    private static let categoriaEntreno = "entreno"
     private static let accionHecho = "hecho"
+    fileprivate static let accionTareaHecha = "tarea.hecha"
+    fileprivate static let accionPospone = "tarea.pospone"
+    fileprivate static let accionManana = "tarea.manana"
+    fileprivate static let accionMueve = "entreno.mueve"
+    /// El resumen de la semana, el domingo a las 20:00 (se apaga en Configurar → avisos). Por defecto, activado.
+    static let claveSemana = "avisoSemana"
 
     static func pidePermiso() async -> Bool {
         let ok = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
         return ok ?? false
     }
 
+    /// Los botones de los avisos. Ninguno lleva .foreground: se resuelven sin abrir la app (AvisosDelegado).
     private static func registraCategorias() {
-        let hecho = UNNotificationAction(identifier: accionHecho, title: "Hecho", options: [])   // sin .foreground: no abre la app
-        let categoria = UNNotificationCategory(identifier: categoriaHecho, actions: [hecho],
-                                               intentIdentifiers: [], options: [])
-        UNUserNotificationCenter.current().setNotificationCategories([categoria])
+        func accion(_ id: String, _ titulo: String) -> UNNotificationAction {
+            UNNotificationAction(identifier: id, title: titulo, options: [])
+        }
+        let hecho = UNNotificationCategory(identifier: categoriaHecho, actions: [accion(accionHecho, "Hecho")],
+                                           intentIdentifiers: [], options: [])
+        let tarea = UNNotificationCategory(identifier: categoriaTarea,
+                                           actions: [accion(accionTareaHecha, "Hecho"), accion(accionPospone, "Posponer 1 h"),
+                                                     accion(accionManana, "Mañana")],
+                                           intentIdentifiers: [], options: [])
+        let entreno = UNNotificationCategory(identifier: categoriaEntreno, actions: [accion(accionMueve, "Mover a mañana")],
+                                             intentIdentifiers: [], options: [])
+        UNUserNotificationCenter.current().setNotificationCategories([hecho, tarea, entreno])
     }
 
     private static func borraPendientes() async {
@@ -68,7 +85,7 @@ enum Avisos {
                 sesionDia[hid].flatMap { rutina[$0] } ?? nombre[hid] ?? "algo"
             }
             func aviso(_ tag: String, _ hora: Int, _ minuto: Int, _ titulo: String, _ cuerpo: String,
-                       _ ruta: String, _ hids: [String]) {
+                       _ ruta: String, _ hids: [String], categoria: String? = nil) {
                 guard let cuando = cal.date(bySettingHour: hora, minute: minuto, second: 0, of: dia),
                       cuando > Date() else { return }   // las horas pasadas de hoy, fuera
                 let c = UNMutableNotificationContent()
@@ -76,12 +93,12 @@ enum Avisos {
                 c.body = cuerpo
                 c.sound = .default
                 c.threadIdentifier = tag
-                var info: [String: String] = ["ruta": ruta]
+                var info: [String: String] = ["ruta": ruta, "dia": clave]
                 if hids.count == 1 {
                     info["habito"] = hids[0]
-                    info["dia"] = clave
                     c.categoryIdentifier = categoriaHecho
                 }
+                if let categoria { c.categoryIdentifier = categoria }
                 c.userInfo = info
                 let comp = cal.dateComponents([.year, .month, .day, .hour, .minute], from: cuando)
                 let disparo = UNCalendarNotificationTrigger(dateMatching: comp, repeats: false)
@@ -103,7 +120,7 @@ enum Avisos {
                 default: (h, m) = (11, 0)
                 }
                 let texto = pendientes.map(comoSeLlama).joined(separator: " y ")
-                aviso("antes", h, m, "En un rato entrenas", "Toca \(texto).", "/entreno.html", pendientes)
+                aviso("antes", h, m, "En un rato entrenas", "Toca \(texto).", "/entreno.html", pendientes, categoria: categoriaEntreno)
             }
             // 22:00 repaso. Con un solo pendiente, tocar el aviso lo marca directo
             if !pendientes.isEmpty {
@@ -113,8 +130,68 @@ enum Avisos {
             }
         }
 
+        nuevos += await avisosDeTareas(cal: cal, hoy0: hoy0)
+        nuevos += await avisoDeSemana(cal: cal, hoy0: hoy0)
+
         await borraPendientes()
-        for n in nuevos { try? await UNUserNotificationCenter.current().add(n) }
+        // iOS guarda como mucho 64 pendientes: primero los más próximos
+        func cuando(_ n: UNNotificationRequest) -> Date {
+            (n.trigger as? UNCalendarNotificationTrigger)?.nextTriggerDate() ?? Date.distantFuture
+        }
+        nuevos.sort { cuando($0) < cuando($1) }
+        for n in nuevos.prefix(60) { try? await UNUserNotificationCenter.current().add(n) }
+    }
+
+    /// Las tareas con fecha de los próximos 7 días, a su hora (o a las 9:00 si no tienen), con Hecho / Posponer 1 h / Mañana.
+    private static func avisosDeTareas(cal: Calendar, hoy0: Date) async -> [UNNotificationRequest] {
+        guard let crudo = try? await API.datos("/api/bandeja?solo=tareas"),
+              let objeto = (try? JSONSerialization.jsonObject(with: crudo)) as? [String: Any],
+              let lista = objeto["tareas"] as? [[String: Any]] else { return [] }
+        let limite = Fecha.dia(cal.date(byAdding: .day, value: 7, to: hoy0) ?? hoy0)
+        let hoy = Fecha.dia(hoy0)
+        var salida: [UNNotificationRequest] = []
+        for tarea in lista {
+            guard let id = tarea["id"] as? String, let texto = tarea["t"] as? String,
+                  let due = tarea["due"] as? String, due >= hoy, due < limite,
+                  let dia = Fecha.fecha(due) else { continue }
+            let horaTexto = (tarea["hora"] as? String) ?? ""
+            let hora: String? = horaTexto.count == 5 ? horaTexto : nil
+            let h = hora == nil ? 9 : (Int(horaTexto.prefix(2)) ?? 9)
+            let m = hora == nil ? 0 : (Int(horaTexto.suffix(2)) ?? 0)
+            guard let cuando = cal.date(bySettingHour: h, minute: m, second: 0, of: dia), cuando > Date() else { continue }
+            let c = UNMutableNotificationContent()
+            c.title = hora == nil ? "Para hoy" : "A las \(hora ?? "")"
+            c.body = texto
+            c.sound = .default
+            c.threadIdentifier = "tareas"
+            c.categoryIdentifier = categoriaTarea
+            c.userInfo = ["ruta": "/pendientes.html", "tarea": id, "texto": texto, "hora": hora ?? "", "dia": due]
+            let comp = cal.dateComponents([.year, .month, .day, .hour, .minute], from: cuando)
+            salida.append(UNNotificationRequest(identifier: "\(prefijo)\(due).tarea.\(id)", content: c,
+                                                trigger: UNCalendarNotificationTrigger(dateMatching: comp, repeats: false)))
+            if salida.count >= 20 { break }
+        }
+        return salida
+    }
+
+    /// El domingo a las 20:00, el resumen de la semana (GET /api/semana). Se recalcula cada vez que se programa.
+    private static func avisoDeSemana(cal: Calendar, hoy0: Date) async -> [UNNotificationRequest] {
+        guard (Almacen.defaults.object(forKey: claveSemana) as? Bool) ?? true else { return [] }
+        let domingo = (0..<7).compactMap { cal.date(byAdding: .day, value: $0, to: hoy0) }
+            .first { cal.component(.weekday, from: $0) == 1 }
+        guard let domingo, let cuando = cal.date(bySettingHour: 20, minute: 0, second: 0, of: domingo), cuando > Date(),
+              let crudo = try? await API.datos("/api/semana"),
+              let objeto = (try? JSONSerialization.jsonObject(with: crudo)) as? [String: Any],
+              let frases = objeto["resumen"] as? [String], !frases.isEmpty else { return [] }
+        let c = UNMutableNotificationContent()
+        c.title = "Tu semana en Tom"
+        c.body = frases.joined(separator: " ")
+        c.sound = .default
+        c.threadIdentifier = "semana"
+        c.userInfo = ["ruta": "/"]
+        let comp = cal.dateComponents([.year, .month, .day, .hour, .minute], from: cuando)
+        return [UNNotificationRequest(identifier: "\(prefijo)\(Fecha.dia(domingo)).semana", content: c,
+                                      trigger: UNCalendarNotificationTrigger(dateMatching: comp, repeats: false))]
     }
 
     // MARK: segundo plano
@@ -148,7 +225,7 @@ enum Avisos {
 
     fileprivate static func avisaDeError(_ texto: String) {
         let c = UNMutableNotificationContent()
-        c.title = "No se ha podido marcar"
+        c.title = "No se ha podido hacer"
         c.body = texto
         c.sound = .default
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "\(prefijo)error", content: c, trigger: nil))
@@ -167,11 +244,47 @@ final class AvisosDelegado: NSObject, UNUserNotificationCenterDelegate {
         let dia = info["dia"] as? String ?? Fecha.hoy()
         let accion = response.actionIdentifier
 
+        let tarea = info["tarea"] as? String
+        let texto = info["texto"] as? String ?? ""
+        let hora = info["hora"] as? String
+
         if accion == "hecho", let habito {
             Task {
                 do {
                     try await API.marcaOEncola(habito: habito, hecho: true, dia: dia)   // sin red, a la cola
                     await Avisos.programa()   // el repaso de esta noche ya no hace falta
+                    WidgetCenter.shared.reloadAllTimelines()
+                } catch {
+                    Avisos.avisaDeError(error.localizedDescription)
+                }
+                completionHandler()
+            }
+        } else if [Avisos.accionTareaHecha, Avisos.accionPospone, Avisos.accionManana].contains(accion), let tarea {
+            Task {
+                do {
+                    switch accion {
+                    case Avisos.accionTareaHecha:
+                        Optimista.quitaTarea(id: tarea)
+                        try await API.tareaHechaOEncola(id: tarea)
+                    case Avisos.accionPospone:
+                        try await API.pospone1hOEncola(id: tarea, texto: texto)
+                    default:
+                        try await API.tareaAMananaOEncola(id: tarea, texto: texto, hora: hora)
+                    }
+                    await Avisos.programa()   // el id de la tarea cambia al editarla: se vuelven a programar
+                    WidgetCenter.shared.reloadAllTimelines()
+                } catch {
+                    Avisos.avisaDeError(error.localizedDescription)
+                }
+                completionHandler()
+            }
+        } else if accion == Avisos.accionMueve {
+            Task {
+                do {
+                    let base = Fecha.fecha(dia) ?? Date()
+                    let manana = Calendar.current.date(byAdding: .day, value: 1, to: base) ?? base.addingTimeInterval(86_400)
+                    try await API.mueveEntrenoOEncola(a: Fecha.dia(manana), de: dia)
+                    await Avisos.programa()
                     WidgetCenter.shared.reloadAllTimelines()
                 } catch {
                     Avisos.avisaDeError(error.localizedDescription)

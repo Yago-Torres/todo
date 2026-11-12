@@ -61,6 +61,7 @@ struct MarcaHabitoIntent: AppIntent {
     }
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
+        Optimista.marcaHabito(id: habito, hecho: hecho)   // el widget lo enseña ya, también sin red
         let encolado = try await API.marcaOEncola(habito: habito, hecho: hecho)
         WidgetCenter.shared.reloadAllTimelines()
         let texto = "\(nombre) \(hecho ? "hecho" : "sin hacer")" + (encolado ? ". \(API.avisoEncolado)" : "")

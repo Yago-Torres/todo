@@ -31,8 +31,8 @@ struct HoyWidgetVista: View {
 
     private func rutaPara(_ f: WidgetFamily) -> String {
         switch f {
-        case .systemMedium: return "/pendientes.html"
-        case .systemLarge: return "/habitos.html"
+        case .systemMedium: return "/"
+        case .systemLarge: return "/"
         default: return "/"
         }
     }
@@ -49,8 +49,8 @@ struct HoyWidgetVista: View {
             case .accessoryInline: LineaVista(r: r)
             case .accessoryCircular: Anillos(valores: r.progresos, grosor: 5, separacion: 2).padding(4)
             case .accessoryRectangular: RectangularVista(r: r)
-            case .systemMedium: MedianoVista(r: r)
-            case .systemLarge: GrandeVista(r: r)
+            case .systemMedium: MedianoVista(r: r, hoy: h.hoy)
+            case .systemLarge: GrandeVista(r: r, hoy: h.hoy)
             default: PequenoVista(r: r)
             }
         }
@@ -84,25 +84,23 @@ struct PequenoVista: View {
     }
 }
 
+/// «Para hoy» con una casilla por tarea: tocarla la completa desde el propio widget (CompletaTareaIntent).
 struct PendienteVista: View {
     let r: Resumen
     let cuantas: Int
+    var hoy: String = Fecha.hoy()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(r.tareas.isEmpty ? "Pendiente" : "Pendiente · \(r.tareas.count)")
+        VStack(alignment: .leading, spacing: 3) {
+            Text(r.tareas.isEmpty ? "Para hoy" : "Para hoy · \(r.tareas.count)")
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(Paleta.suave)
-                .padding(.bottom, 2)
+                .padding(.bottom, 1)
             if r.tareas.isEmpty {
                 Text("Nada que venza hoy").font(.system(size: 13)).foregroundStyle(Paleta.texto)
             }
             ForEach(Array(r.tareas.prefix(cuantas).enumerated()), id: \.offset) { _, t in
-                Text("→ " + Resumen.linea(t))
-                    .font(.system(size: 13))
-                    .foregroundStyle(Paleta.texto)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+                FilaTareaWidget(tarea: t, hoy: hoy)
             }
             if r.tareas.count > cuantas {
                 Text("y \(r.tareas.count - cuantas) más").font(.system(size: 11)).foregroundStyle(Paleta.suave)
@@ -111,17 +109,58 @@ struct PendienteVista: View {
     }
 }
 
+/// Qué es cada anillo: hábitos de hoy, pasos de ayer, sueño de anoche (el mismo orden, de fuera a dentro).
+struct LeyendaAnillos: View {
+    let r: Resumen
+    /// En vertical y con nombres (el grande); en una línea y solo con símbolo (el mediano).
+    var detallada: Bool
+
+    private var filas: [(Color, String, String, String)] {
+        [(Paleta.hab, "checkmark.circle.fill", "Hábitos", "\(r.hechos)/\(r.habitos.count)"),
+         (Paleta.pas, "figure.walk", "Pasos", r.textoPasos),
+         (Paleta.sue, "bed.double.fill", "Sueño", r.textoSueno)]
+    }
+
+    var body: some View {
+        if detallada {
+            VStack(alignment: .leading, spacing: 3) {
+                ForEach(Array(filas.enumerated()), id: \.offset) { _, f in
+                    HStack(spacing: 5) {
+                        Image(systemName: f.1).font(.system(size: 11)).foregroundStyle(f.0).frame(width: 14)
+                        Text(f.2).font(.system(size: 12)).foregroundStyle(Paleta.suave)
+                        Spacer(minLength: 4)
+                        Text(f.3).font(.system(size: 13, weight: .bold)).foregroundStyle(Paleta.texto).monospacedDigit()
+                    }
+                }
+                Text("de fuera adentro · pasos de ayer, sueño de anoche")
+                    .font(.system(size: 9)).foregroundStyle(Paleta.suave).lineLimit(1).minimumScaleFactor(0.7)
+            }
+        } else {
+            HStack(spacing: 8) {
+                ForEach(Array(filas.enumerated()), id: \.offset) { _, f in
+                    HStack(spacing: 2) {
+                        Image(systemName: f.1).font(.system(size: 10)).foregroundStyle(f.0)
+                        Text(f.3).font(.system(size: 11, weight: .semibold)).foregroundStyle(Paleta.texto)
+                            .monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
+                    }
+                }
+            }
+        }
+    }
+}
+
 struct MedianoVista: View {
     let r: Resumen
+    var hoy: String = Fecha.hoy()
+
     var body: some View {
-        HStack(alignment: .center, spacing: 16) {
+        HStack(alignment: .center, spacing: 14) {
             Anillos(valores: r.progresos, grosor: 10)
-                .frame(width: 100, height: 100)
+                .frame(width: 96, height: 96)
             VStack(alignment: .leading, spacing: 6) {
-                Link(destination: rutaURL("/pendientes.html")) {
-                    PendienteVista(r: r, cuantas: r.textoGastos == nil ? 3 : 2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
+                LeyendaAnillos(r: r, detallada: false)
+                PendienteVista(r: r, cuantas: r.textoGastos == nil ? 3 : 2, hoy: hoy)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 if let gastos = r.textoGastos {
                     LineaGastos(texto: gastos, pasado: r.gastosPasados)
                 }
@@ -133,30 +172,33 @@ struct MedianoVista: View {
 
 struct GrandeVista: View {
     let r: Resumen
+    var hoy: String = Fecha.hoy()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top, spacing: 14) {
+            HStack(alignment: .center, spacing: 14) {
                 Anillos(valores: r.progresos, grosor: 8)
                     .frame(width: 84, height: 84)
-                Link(destination: rutaURL("/pendientes.html")) {
-                    PendienteVista(r: r, cuantas: 4)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
+                LeyendaAnillos(r: r, detallada: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
+            PendienteVista(r: r, cuantas: 3, hoy: hoy)
+                .padding(.top, 8)
             if let gastos = r.textoGastos {
                 LineaGastos(texto: gastos, pasado: r.gastosPasados)
-                    .padding(.top, 8)
+                    .padding(.top, 6)
             }
             Text("Hábitos · \(r.hechos)/\(r.habitos.count)" + (r.enJuego ? " · racha en juego" : ""))
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(r.enJuego ? Paleta.aviso : Paleta.suave)
-                .padding(.top, 10)
-                .padding(.bottom, 4)
-            ForEach(Array(r.habitos.prefix(r.textoGastos == nil ? 10 : 9))) { h in
+                .padding(.top, 8)
+                .padding(.bottom, 3)
+            ForEach(Array(r.habitos.prefix(r.textoGastos == nil ? 6 : 5))) { h in
                 FilaHabito(h: h, enJuego: r.enJuego)
             }
             Spacer(minLength: 0)
+            Text("Toca un círculo para marcar o completar")
+                .font(.system(size: 9)).foregroundStyle(Paleta.suave)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
@@ -182,38 +224,29 @@ struct LineaGastos: View {
     }
 }
 
+/// Un hábito con su casilla: Toggle de iOS 17 (cambia al instante, marca o desmarca) con MarcaHabitoIntent.
 struct FilaHabito: View {
     let h: Habito
     let enJuego: Bool
 
     var body: some View {
-        if h.hecho {
-            fila
-        } else {
-            Button(intent: MarcaHabitoIntent(habito: h.id, nombre: h.n, hecho: true)) { fila }
-                .buttonStyle(.plain)
-        }
-    }
-
-    private var fila: some View {
-        HStack(spacing: 0) {
-            Text(h.hecho ? "✓ " : "○ ")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(h.hecho ? Color(hex: h.c) : Paleta.suave)
-            Text(h.n)
-                .font(.system(size: 13, weight: !h.hecho && h.plan ? .bold : .regular))
-                .foregroundStyle(h.hecho ? Paleta.suave : Paleta.texto)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-            Spacer(minLength: 4)
-            if h.racha > 0 {
-                Text("\(h.racha) d")
-                    .font(.system(size: 12))
-                    .foregroundStyle(h.racha >= 2 && !h.hecho && enJuego ? Paleta.aviso : Paleta.suave)
+        Toggle(isOn: h.hecho, intent: MarcaHabitoIntent(habito: h.id, nombre: h.n, hecho: !h.hecho)) {
+            HStack(spacing: 0) {
+                Text(h.n)
+                    .font(.system(size: 13, weight: !h.hecho && h.plan ? .bold : .regular))
+                    .foregroundStyle(h.hecho ? Paleta.suave : Paleta.texto)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                Spacer(minLength: 4)
+                if h.racha > 0 {
+                    Text("\(h.racha) d")
+                        .font(.system(size: 12))
+                        .foregroundStyle(h.racha >= 2 && !h.hecho && enJuego ? Paleta.aviso : Paleta.suave)
+                }
             }
         }
+        .toggleStyle(CasillaStyle(color: h.hecho ? Color(hex: h.c) : Paleta.suave))
         .padding(.vertical, 1)
-        .contentShape(Rectangle())
     }
 }
 
