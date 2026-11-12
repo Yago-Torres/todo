@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Las pantallas nativas, una línea cada una: la ruta de su sección (la misma que en la barra y en la web) y su vista.
-/// Lo que no esté aquí se abre en la web. Para pasar una sección a nativo: su vista en Hoy/Nativo/<Seccion>/ y una
-/// línea en `pantallas`. Navegador.nativas y Pestanas leen de aquí; no hace falta tocar nada más.
+/// Las pantallas nativas, una línea cada una: la ruta de su sección (la misma que en la barra y en la web del
+/// ordenador) y su vista. Una ruta que no esté aquí abre Hoy. Para una sección nueva: su vista en
+/// Hoy/Nativo/<Seccion>/ y una línea en `pantallas`. Navegador.nativas y Pestanas leen de aquí.
 enum RegistroNativo {
     static let pantallas: [(ruta: String, vista: () -> AnyView)] = [
         ("/", { AnyView(PantallaHoy()) }),

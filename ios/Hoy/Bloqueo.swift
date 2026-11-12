@@ -1,7 +1,8 @@
 import SwiftUI
 import LocalAuthentication
 
-/// Tapa la web hasta que pasas Face ID (o el código del iPhone, si Face ID falla).
+/// Tapa Tom hasta que pasas Face ID (o el código del iPhone, si Face ID falla). Debajo, las pantallas ya están
+/// pintadas con su última copia: al desbloquear no hay que esperar a nada.
 struct Bloqueo: View {
     let alDesbloquear: () -> Void
 

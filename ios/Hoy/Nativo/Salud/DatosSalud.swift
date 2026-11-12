@@ -244,7 +244,7 @@ final class DatosSalud {
         do {
             let (crudo, fecha) = try await API.leeOCopia("/api/sueno")
             let nuevo = try JSONDecoder().decode(InformeSueno.self, from: crudo)
-            informe = nuevo
+            withAnimation(Tema.Muelle.pantalla) { informe = nuevo }
             copia = fecha
             error = nil
             ultimaCarga = Date()

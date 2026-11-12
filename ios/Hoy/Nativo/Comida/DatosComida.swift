@@ -184,7 +184,8 @@ final class DatosComida {
         defer { cargando = false }
         do {
             let (crudo, fecha) = try await API.leeOCopia(ruta)
-            estado = try JSONDecoder().decode(EstadoComida.self, from: crudo)
+            let nuevo = try JSONDecoder().decode(EstadoComida.self, from: crudo)
+            withAnimation(Tema.Muelle.pantalla) { estado = nuevo }
             copia = fecha
             error = nil
         } catch {

@@ -42,8 +42,8 @@ struct Paleta {
 }
 
 /// Familias de letra (nombre de familia). nil = la del sistema (SF Pro). Instrument Sans va empaquetada (variable,
-/// Hoy/InstrumentSans.ttf, en UIAppFonts): los pesos salen de .weight(). Para otra, el .ttf en Hoy/, UIAppFonts y su
-/// nombre aquí. Si no carga, SF Pro.
+/// Hoy/InstrumentSans.ttf, registrada al usarla: Letras.swift): los pesos salen de .weight(). Para otra, el .ttf en
+/// Hoy/, su línea en Letras y su nombre aquí. Si no carga, SF Pro.
 struct Fuentes {
     var texto: String? = "Instrument Sans"
     var titulo: String? = "Instrument Sans"
@@ -65,7 +65,8 @@ struct Tema {
     /// La intensidad del fondo de caracteres (0 = apagado, 0,5 sutil, 1 normal, 1,6 más presente).
     var fondo: Double = 0.5
 
-    /// El tema en uso: lo construye Aspecto con el catálogo y lo elegido (Configurar → Apariencia, o la web).
+    /// El tema en uso: lo construye Aspecto con el catálogo y lo elegido (Configurar → Apariencia, o la web), con el
+    /// filtro del modo noche encima cuando toca.
     /// Leerlo dentro de un body hace que la vista se repinte cuando cambia.
     static var actual: Tema { Aspecto.shared.tema }
 
@@ -120,8 +121,6 @@ struct Tema {
         case gigante, titulo, seccion, destacado, texto, pequeno, etiqueta, cifra
     }
 
-    private static let familiaCargada: Set<String> = Set(UIFont.familyNames)
-
     static func fuente(_ estilo: Estilo, peso: Font.Weight? = nil) -> Font {
         let f = actual.fuentes
         let (tam, relativo, pesoBase, familia): (CGFloat, Font.TextStyle, Font.Weight, String?) = {
@@ -137,7 +136,7 @@ struct Tema {
             }
         }()
         let base: Font
-        if let familia, familiaCargada.contains(familia) {
+        if let familia, Letras.lista(familia) {
             base = Font.custom(familia, size: tam, relativeTo: relativo)
         } else {
             base = Font.system(size: tam, design: f.diseno)

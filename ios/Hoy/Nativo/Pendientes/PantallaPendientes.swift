@@ -18,6 +18,7 @@ struct PantallaPendientes: View {
     @State private var editando: TareaVault?
     @State private var abiertos: Set<String> = []
     @FocusState private var escribiendo: Bool
+    @ObservedObject private var navegador = Navegador.shared
     @Environment(\.openURL) private var abre
 
     var body: some View {
@@ -35,6 +36,16 @@ struct PantallaPendientes: View {
         .padding(.top, Tema.Espacio.s)
         .tostada(datos.aviso) { datos.quitaAviso() }
         .task { await datos.carga() }
+        // «/pendientes.html?nueva=1» (el control «Apuntar una tarea»): directo al campo, tras entrar la pantalla
+        .onChange(of: navegador.apuntarTarea, initial: true) { _, pedido in
+            guard pedido else { return }
+            navegador.apuntarTarea = false
+            seccion = .tareas
+            Task {
+                try? await Task.sleep(for: .milliseconds(350))
+                escribiendo = true
+            }
+        }
         .environment(\.locale, FechasES.locale)
         .sheet(item: $editando) { t in
             HojaTarea(titulo: "Cambiar tarea", texto: t.t, dia: t.dia, hora: t.horaTexto,

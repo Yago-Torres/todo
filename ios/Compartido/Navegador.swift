@@ -1,28 +1,22 @@
 import Foundation
 import Combine
 
-/// Lo que pide abrir el widget, los accesos del icono, Siri o un aviso: la web navega a `ruta` («/entreno.html»,
-/// «/habitos.html?hecho=id») y la deja en nil. Si la web aún no está, se queda pendiente hasta que cargue.
+/// Lo que pide abrir el widget, los accesos del icono, Siri o un aviso: una ruta («/entreno.html»,
+/// «/habitos.html?hecho=id») que acaba siempre en su pantalla nativa; una que no se conoce, en Hoy.
 @MainActor
 final class Navegador: ObservableObject {
     static let shared = Navegador()
 
-    @Published var ruta: String?
-    /// La sección de la barra de abajo (su href en la web: "/", "/habitos.html", "/entreno.html"…). Hoy y Hábitos son
-    /// pantallas nativas; las demás, la web en esa ruta.
+    /// La pantalla que se ve: la ruta de su sección en el registro ("/", "/habitos.html", "/entreno.html"…). Carrera
+    /// tiene la suya ("/carrera.html") aunque en la barra se marque Entreno (ver `seccion`).
     @Published var pestana: String = "/"
-    /// La página que tiene cargada la web ahora (su ruta), para no recargarla al volver a su pestaña.
-    @Published var paginaWeb: String?
-    /// «/habitos.html?hecho=id» (un aviso o el widget): el hábito que la pantalla nativa tiene que marcar.
+    /// «?hecho=id» (un aviso o el widget, en Hoy o en Hábitos): el hábito que hay que marcar.
     @Published var marcaPendiente: String?
+    /// «/pendientes.html?nueva=1» (el control «Apuntar una tarea»): Pendientes enfoca el campo de apuntar.
+    @Published var apuntarTarea = false
 
     /// Lo rellena la app al arrancar con RegistroNativo.rutas (Compartido también compila en el widget, que no las tiene).
-    static var nativas: Set<String> = ["/", "/habitos.html"]
-
-    /// Hoy y Hábitos van a su pantalla nativa, salvo con «web=1» (la página de siempre, para editar y planificar).
-    static func esNativa(_ ruta: String) -> Bool {
-        nativas.contains(seccion(ruta)) && !ruta.contains("web=1")
-    }
+    static var nativas: Set<String> = ["/"]
 
     /// La entrada de la barra a la que pertenece una ruta (las mismas equivalencias que menu() de calma.js).
     static func seccion(_ ruta: String) -> String {
@@ -31,6 +25,16 @@ final class Navegador: ObservableObject {
                             "/sueno.html": "/salud.html", "": "/"]
         return equivalentes[camino] ?? camino
     }
+
+    /// La pantalla nativa de una ruta: la suya si está en el registro (Carrera), si no la de su sección, y Hoy si
+    /// no hay ninguna.
+    static func pantalla(_ ruta: String) -> String {
+        let camino = ruta.components(separatedBy: CharacterSet(charactersIn: "?#")).first ?? ruta
+        if nativas.contains(camino) { return camino }
+        let s = seccion(camino)
+        return nativas.contains(s) ? s : "/"
+    }
+
     /// El modo voz de Tom (Hoy/Voz.swift) a pantalla completa.
     @Published var voz = false
     /// Abrir Configurar desde el acceso del icono (también en frío, antes de que exista la vista).
@@ -40,26 +44,20 @@ final class Navegador: ObservableObject {
 
     func abre(_ ruta: String) {
         let r = ruta.hasPrefix("/") ? ruta : "/" + ruta
-        let s = Self.seccion(r)
-        if Self.esNativa(r) {
-            if let id = URLComponents(string: r)?.queryItems?.first(where: { $0.name == "hecho" })?.value, !id.isEmpty {
-                marcaPendiente = id
-            }
-            pestana = s
-            return
+        let destino = Self.pantalla(r)
+        let datos = URLComponents(string: r)?.queryItems ?? []
+        if let id = datos.first(where: { $0.name == "hecho" })?.value, !id.isEmpty {
+            marcaPendiente = id
         }
-        // la web de una sección nativa (Hábitos con web=1) se queda con su ruta entera, para no confundirla con la nativa
-        pestana = Self.nativas.contains(s) ? r : s
-        self.ruta = r
+        if destino == "/pendientes.html", datos.contains(where: { $0.name == "nueva" && $0.value == "1" }) {
+            apuntarTarea = true
+        }
+        pestana = destino
     }
 
-    /// Un toque en la barra: si la web ya está en esa sección, se enseña tal cual (sin recargar).
+    /// Un toque en la barra.
     func toca(_ seccion: String) {
-        if Self.nativas.contains(seccion) || (paginaWeb.map(Self.seccion) == seccion && paginaWeb.map(Self.esNativa) == false) {
-            pestana = seccion
-        } else {
-            abre(seccion)
-        }
+        pestana = Self.pantalla(seccion)
     }
 
     /// «Habla con Tom» puede correr en el proceso del widget (el botón del centro de control), donde este Navegador

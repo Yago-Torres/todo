@@ -1,6 +1,6 @@
 # Tom para iPhone, gratis con SideStore
 
-«Tom» (antes «Hoy») es la misma web de todo.yagotg.dev dentro de una app nativa. Añade lo que la web no puede: sueño, pasos, peso y entrenos que se mandan solos desde Salud, widgets, avisos locales, Siri y un modo voz para hablar con Tom como con el bot de Telegram.
+«Tom» (antes «Hoy») es todo.yagotg.dev hecho app nativa (SwiftUI, sin web dentro: la web sigue para el ordenador, con los mismos datos). Añade lo que la web no puede: sueño, pasos, peso y entrenos que se mandan solos desde Salud, widgets, avisos locales, Siri y un modo voz para hablar con Tom como con el bot de Telegram.
 
 Por dentro sigue llamándose `Hoy` (bundle `dev.yagotg.hoy`, targets y app group): cambiarlo gastaría App IDs nuevos en SideStore. Solo cambia el nombre que se ve.
 
@@ -63,7 +63,7 @@ Sácalas desde el PC:
 ssh pi@192.168.1.70 'sudo cat /etc/cloudflare-access/todo-bot.json'
 ```
 
-Después, en la pantalla de **Configuración** (la primera vez sale sola; luego, en la web, **Ajustes › Ajustes de la app**; si la web no carga, el botón **Ajustes de la app** de la pantalla «Sin conexión» o el enlace `hoy://configurar`), activa:
+Después, en la pantalla de **Configuración** (la primera vez sale sola; luego, en **Ajustes › Ajustes de la app**, manteniendo pulsado el icono → **Ajustes de Tom** o con el enlace `hoy://configurar`), activa:
 
 - **Salud**, para que la app lea sueño, pasos, peso y entrenos.
 - **Avisos**, para los recordatorios locales.
@@ -159,10 +159,24 @@ Si nada de esto funciona, mira el [registro de errores](#cómo-se-compila) o el 
 
 ## Pantallas nativas y tema
 
-**Hoy** y **Hábitos** ya no son la web: son SwiftUI (`Hoy/Nativo/`), con la barra de abajo también nativa
-(`Dock.swift`, la gota lima que se desliza con muelle). Las demás secciones (Pendientes, Entreno, Salud, Comida,
-Gastos, Docs) siguen siendo la web, que vive siempre debajo y no se recarga al ir y volver; su barra se
-esconde (la nativa la sustituye). Un enlace de la web a `/`, `/habitos.html` o `/ajustes.html` salta a la pantalla nativa.
+Todas las secciones son SwiftUI (`Hoy/Nativo/`, una línea cada una en `Registro.swift`), con la barra de abajo también
+nativa (`Dock.swift`, la gota lima que se desliza con muelle). Ya no hay WKWebView: cualquier ruta que llegue (widgets,
+controles, avisos, accesos del icono, Siri, `hoy://ruta?r=…`) abre su pantalla nativa con `Navegador.abre`, y una ruta
+desconocida abre Hoy. `/carrera.html` abre la pantalla de Carrera con Entreno marcado en la barra; `?hecho=id` marca el
+hábito y `/pendientes.html?nueva=1` enfoca el campo de apuntar.
+
+**Arranque instantáneo** (`Hoy/Arranque.swift`): cada modelo pinta al crearse su copia de Local, sin esperar a la red ni a
+Face ID (el bloqueo tapa, pero debajo ya está pintado). El tema sale de una instantánea guardada (`TemaGuardado`, sin
+decodificar el catálogo de 60 KB hasta después del primer fotograma), las letras se registran al usarlas (`Letras.swift`,
+ya no en `UIAppFonts`), y la sesión de audio, las Live Activities, las subidas, CoreMotion (1,5 s), los atajos, Salud y
+los avisos van detrás. Después, `Precarga` crea los modelos de las demás secciones de la barra, uno a uno: al cambiar de
+pestaña no hay «Cargando…». Lo que llega de la red sustituye a la copia con el muelle de pantalla.
+
+**Modo noche** (`Compartido/Noche.swift`, `Hoy/ModoNoche.swift`; Configurar → Apariencia → Modo noche): por horas (23:00 a
+7:00 por defecto) o de la puesta a la salida del sol (calculadas con la hora de Madrid o de Canarias, sin ubicación).
+Fuerza oscuro y pasa cada token del tema por un filtro cálido (menos brillo, menos azul, el acento más apagado). Entra y
+sale con un fundido de un segundo (`TransicionFundido`). El widget y las Live Activities lo aplican al leer
+`ColoresGuardados` (la próxima vez que iOS los repinte).
 
 - `Datos.swift`: lee `/api/hoy` y `/api/state` (sin red, la copia de Local) y marca al momento; sin red, a la cola.
 - `PantallaHoy.swift`: anillos del día, hábitos de hoy, entreno, «Para hoy», salud, carrera y gastos.
@@ -180,9 +194,9 @@ esconde (la nativa la sustituye). Un enlace de la web a `/`, `/habitos.html` o `
   intensidad del fondo elegido en Configurar → Apariencia.
 
 **El tema está en un solo sitio: `Hoy/Tema.swift`.** Paleta «Hormigón» (grises) + acento «Salvia», letra Instrument
-Sans (variable, `Hoy/InstrumentSans.ttf` en `UIAppFonts`), esquinas suaves (12/8/pastilla). Colores claro/oscuro, radios,
+Sans (variable, `Hoy/InstrumentSans.ttf`, registrada al usarla), esquinas suaves (12/8/pastilla). Colores claro/oscuro, radios,
 espacios, muelles y letra. Las vistas nativas solo usan `Tema.*`. Para cambiar la letra: empaqueta el `.ttf` en
-`Hoy/`, añádelo a `UIAppFonts` en `Info.plist` y pon su nombre PostScript en `Fuentes` (`texto`, `titulo`,
+`Hoy/`, añade su línea en `Letras.swift` (familia → ficheros) y pon su nombre de familia en `Fuentes` (`texto`, `titulo`,
 `cifras`); sin familia, SF Pro (`diseno` elige `.rounded`, `.serif`…). Otro tema = otra `Paleta`/`Fuentes` en
 `Tema.actual`.
 
@@ -225,10 +239,11 @@ PantallaEditable(pantalla: "app-entreno", titulo: "Entreno",
   se apaga. Lo que está en marcha (y una copia de la sesión) va en `UserDefaults` «entreno.enMarcha»: si iOS mata la app,
   `Entreno.init` vuelve a Entreno y la sesión se reabre. La rutina guiada (`GuiaEnCurso`) igual, «entreno.guiaEnMarcha».
 - **Isla**: la sesión nativa alimenta la Live Activity (`Entreno.muestraNativo`) y el «Serie hecha» de la isla la marca
-  la propia pantalla nativa (`Entreno.nativo`), también en segundo plano. El puente web (`{accion:"entreno"}`) sigue.
+  la propia pantalla nativa (`Entreno.nativo`), también en segundo plano.
 - **Monigotes y cuerpo**: `monigotes.json` y `cuerpo.json` salen de `static/monigotes.js` y del `CUERPO` de
   entreno.html (un script de node que los evalúa). Si cambian en la web, hay que regenerarlos.
-- `/carrera.html` va en su pantalla, pero `Navegador.seccion` la lleva a la pestaña Entreno: desde ahí, «Plan y gráficas».
+- `/carrera.html` abre su pantalla (`PantallaCarrera`) con Entreno marcado en la barra; desde Entreno, la tarjeta de
+  Carrera la abre en hoja.
 
 ## Apariencia, gestos e isla
 
@@ -241,7 +256,7 @@ fondo}`. Elegir un tema copia sus valores; tocar cualquiera después lo deja en 
 - `Hoy/Aspecto.swift` construye `Tema.actual` (@Observable: se repinta todo con un fundido), lo guarda en el app group,
   sincroniza al arrancar y al volver, y manda cada cambio (sin red, a la próxima sin pisarlo). Widget y Live
   Activities leen los colores resueltos (`ColoresGuardados`, en oscuro).
-- Letras (variables o regular+bold, en `UIAppFonts`): Instrument Sans, Inter, Manrope, Geist, IBM Plex Sans, DM Sans,
+- Letras (variables o regular+bold, registradas al usarlas: `Letras.swift`): Instrument Sans, Inter, Manrope, Geist, IBM Plex Sans, DM Sans,
   Space Grotesk, JetBrains Mono, Fraunces, Shippori Mincho, Zen Kaku Gothic New; «sistema» = SF Pro. `titulos` es la
   letra de los títulos.
 - Configurar → Apariencia: vista previa, rejilla de temas (nombre en su letra, claro/oscuro, vibra) y «Personalizar»
@@ -249,20 +264,18 @@ fondo}`. Elegir un tema copia sus valores; tocar cualquiera después lo deja en 
 - Configurar → Pantallas: orden y ocultos de la barra (`app-dock`) y de todas las pantallas nativas del registro (`app-hoy`…;
   las que aún no usan `PantallaEditable` salen con «pronto»); en Hoy también el botón de editar o mantener pulsado un bloque.
 
-**Gestos.** Deslizar a los lados cambia a la sección siguiente/anterior según el orden de la barra (con paso de página
-en las nativas). En la web, solo desde los bordes de la pantalla (el «atrás» de WebKit está quitado). En la barra,
-arrastrar el dedo mueve la gota con él (vibra al pasar por cada sección) y al soltar va a la de debajo; tocar sigue igual.
+**Gestos.** Deslizar a los lados cambia a la sección siguiente/anterior según el orden de la barra (con paso de página;
+en Pendientes, Docs y Gastos, solo desde los bordes, porque sus filas se deslizan). En la barra, arrastrar el dedo mueve
+la gota con él (vibra al pasar por cada sección) y al soltar va a la de debajo; tocar sigue igual.
 
-**Modo voz desde la app**: el botón de micro en la cabecera de Hoy, mantener pulsada la barra de abajo, o desde la web
-con `postMessage({accion:"voz"})`. El micro crea un `AVAudioEngine` nuevo en cada escucha, después de activar la sesión
+**Modo voz desde la app**: el botón de micro en la cabecera de Hoy, mantener pulsada la barra de abajo o `hoy://voz`. El micro crea un `AVAudioEngine` nuevo en cada escucha, después de activar la sesión
 `.playAndRecord` (si no, el inputNode nace sin entrada: 0 Hz); si aun así no hay entrada, reintenta a los 0,3 s y el
 error dice Hz, canales y categoría de la sesión.
 
 **Isla dinámica** (`Hoy/Isla.swift`, `Compartido/AvisoActividad.swift`, `HoyWidget/AvisoLiveActivity.swift`), además
 del entreno serie a serie. Las cuentas atrás son `Text(timerInterval:)`: no despiertan la app; caducan solas y se
 terminan al acabar o al volver a la app.
-- Descanso: la web manda `postMessage({accion:"descanso", segundos: 90, siguiente: "Press banca · serie 3"})`
-  (`segundos: 0` lo quita). Con el entreno serie a serie abierto, va en su actividad.
+- Descanso: va en la actividad del entreno serie a serie.
 - Freno: al «Entrar N min», «Instagram» con la cuenta atrás del pase.
 - Escalada: comprimiendo / subiendo % y «listo» (o el error) al acabar.
 - «Día en la isla» (Configurar, apagado por defecto): anillos de hábitos, pasos y sueño hasta las 22:00.
@@ -301,9 +314,9 @@ Sin pase, se abre Tom: respiras unos segundos y eliges **Mejor no** o **Entrar 5
 
 Conocidas (sin Enlace): Instagram, TikTok, YouTube, X, Facebook, Reddit, WhatsApp, Twitch, Threads, BeReal, Telegram, Snapchat, Pinterest, Discord, LinkedIn, Netflix, Spotify, Tinder, Brawl Stars, Clash Royale y Clash of Clans.
 
-## Ajustes de Tom sin pasar por la web
+## Ajustes de Tom desde el icono
 
-Mantén pulsado el icono de Tom → **Ajustes de Tom**. Ahí están las claves, Salud, los avisos, el freno y **Diagnóstico → Comprobar conexión** (si la web sale con la pantalla de Cloudflare, manda una captura de eso).
+Mantén pulsado el icono de Tom → **Ajustes de Tom**. Ahí están las claves, Salud, los avisos, el freno y **Diagnóstico → Comprobar conexión**: la firma (app group, Salud), las claves y si el servidor contesta (con qué código y en cuánto). Si algo sale con ✗, manda una captura.
 
 ## Trabajar en paralelo (ramas nativo/*)
 

@@ -75,12 +75,6 @@
 	<array>
 		<string>dev.yagotg.hoy.refresco</string>
 	</array>
-	<key>WKAppBoundDomains</key>
-	<array>
-		<string>todo.yagotg.dev</string>
-		<string>yagotg.dev</string>
-		<string>yagoraspberry.cloudflareaccess.com</string>
-	</array>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
@@ -95,21 +89,5 @@
 	<string>Tom escucha lo que le dices en el modo voz para contestarte.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Tom pasa tu voz a texto, en el iPhone si puede, para entender lo que le pides.</string>
-	<key>UIAppFonts</key>
-	<array>
-		<string>InstrumentSans.ttf</string>
-		<string>Inter.ttf</string>
-		<string>Manrope.ttf</string>
-		<string>Geist.ttf</string>
-		<string>IBMPlexSans.ttf</string>
-		<string>DMSans.ttf</string>
-		<string>SpaceGrotesk.ttf</string>
-		<string>JetBrainsMono.ttf</string>
-		<string>Fraunces.ttf</string>
-		<string>ShipporiMincho-Regular.ttf</string>
-		<string>ShipporiMincho-Bold.ttf</string>
-		<string>ZenKakuGothicNew-Regular.ttf</string>
-		<string>ZenKakuGothicNew-Bold.ttf</string>
-	</array>
 </dict>
 </plist>
