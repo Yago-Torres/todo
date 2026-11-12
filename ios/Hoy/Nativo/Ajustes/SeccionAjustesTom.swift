@@ -25,6 +25,7 @@ struct SeccionAjustesTom: View {
                     }
                 } header: { Text("Tom") }
             }
+            SeccionFondoBloqueo()
         }
         .listRowBackground(Tema.carta)
         .task { await modelo.carga() }

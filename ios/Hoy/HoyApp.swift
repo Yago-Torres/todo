@@ -30,6 +30,7 @@ struct HoyApp: App {
                 Navegador.shared.recogeVoz()
                 // los hábitos de hoy como valores de «Marca … en Tom»
                 AtajosHoy.updateAppShortcutParameters()
+                DatosFondo.alActivar()   // el entreno de hoy para el fondo de bloqueo (Hoy/Nativo/Bloqueo/)
                 Task {
                     await Salud.sincroniza()
                     await Avisos.programa()

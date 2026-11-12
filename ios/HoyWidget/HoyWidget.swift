@@ -90,6 +90,7 @@ struct HoyWidgets: WidgetBundle {
         SuenoWidget()
         RachaWidget()
         SemanaWidget()
+        MomentoWidget()
         EntrenoLiveActivity()
         AvisoLiveActivity()
         if #available(iOS 18.0, *) {
