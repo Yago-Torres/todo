@@ -7,50 +7,70 @@ struct PantallaComida: View {
     @State private var datos = DatosComida.shared
     @State private var receta: EstadoComida.Receta?
 
+    /// Los bloques (ids estables, orden y ocultos en la disposición «app-comida»).
+    static let bloques: [(String, String)] = [
+        ("objetivo", "Objetivo diario"), ("menu", "Menú de la semana"), ("generar", "Menú nuevo"),
+    ]
+
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: Tema.Espacio.l) {
-                cabecera
+        PantallaEditable(pantalla: "app-comida", titulo: "Comida", bloques: Self.bloques,
+                         recarga: { await datos.carga() }) { editar in
+            VStack(alignment: .leading, spacing: Tema.Espacio.l) {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Esta semana").estiloEtiqueta().foregroundStyle(Tema.suave)
+                        Text("Comida").font(Tema.fuente(.titulo)).foregroundStyle(Tema.texto)
+                    }
+                    Spacer()
+                    Button(action: editar) {
+                        Image(systemName: "square.and.pencil")
+                            .font(.system(size: 16, weight: .medium)).foregroundStyle(Tema.suave)
+                            .frame(width: 40, height: 40).background(Tema.carta, in: Circle())
+                    }
+                    .accessibilityLabel("Editar Comida")
+                }
+                .padding(.top, Tema.Espacio.s)
                 if let copia = datos.copia {
                     Label(API.notaCopia(copia), systemImage: "wifi.slash")
                         .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.aviso)
                 }
-                if let e = datos.estado {
-                    if let o = e.objetivo, o.kcal > 0 { ObjetivoDiario(o: o) }
-                    let conMenu = datos.dias.contains { !(e.menu[$0] ?? [:]).isEmpty }
-                    if !conMenu {
-                        Text("Todavía no hay menú para esta semana. Genera uno aquí abajo.")
-                            .font(Tema.fuente(.texto)).foregroundStyle(Tema.suave).carta()
+                if datos.estado == nil {
+                    if let error = datos.error {
+                        Text(error).font(Tema.fuente(.texto)).foregroundStyle(Tema.peligro).carta()
+                    } else {
+                        Text("Cargando…").font(Tema.fuente(.texto)).foregroundStyle(Tema.suave).carta()
                     }
-                    ForEach(datos.dias, id: \.self) { dia in
-                        DiaMenu(dia: dia, estado: e) { receta = $0 }
-                    }
-                    GenerarMenu()
-                } else if let error = datos.error {
-                    Text(error).font(Tema.fuente(.texto)).foregroundStyle(Tema.peligro).carta()
-                } else {
-                    Text("Cargando…").font(Tema.fuente(.texto)).foregroundStyle(Tema.suave).carta()
                 }
             }
-            .padding(.horizontal, Tema.Espacio.l)
-            .padding(.top, Tema.Espacio.s)
-            .padding(.bottom, 120)   // el hueco de la barra
+        } bloque: { id in
+            bloque(id)
         }
-        .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.interactively)
-        .refreshable { await datos.carga() }
         .task { await datos.carga() }
         .sheet(item: $receta) { r in
             if let e = datos.estado { DetalleReceta(receta: r, estado: e) }
         }
     }
 
-    private var cabecera: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("Esta semana").estiloEtiqueta().foregroundStyle(Tema.suave)
-            Text("Comida").font(Tema.fuente(.titulo)).foregroundStyle(Tema.texto)
+    @ViewBuilder private func bloque(_ id: String) -> some View {
+        if let e = datos.estado {
+            switch id {
+            case "objetivo":
+                if let o = e.objetivo, o.kcal > 0 { ObjetivoDiario(o: o) }
+            case "menu":
+                VStack(alignment: .leading, spacing: Tema.Espacio.l) {
+                    if !datos.dias.contains(where: { !(e.menu[$0] ?? [:]).isEmpty }) {
+                        Text("Todavía no hay menú para esta semana. Genera uno aquí abajo.")
+                            .font(Tema.fuente(.texto)).foregroundStyle(Tema.suave).carta()
+                    }
+                    ForEach(datos.dias, id: \.self) { dia in
+                        DiaMenu(dia: dia, estado: e) { receta = $0 }
+                    }
+                }
+            case "generar": GenerarMenu()
+            default: EmptyView()
+            }
         }
-        .padding(.top, Tema.Espacio.s)
     }
 }
 

@@ -9,52 +9,68 @@ struct PantallaGastos: View {
     @State private var abierto: Movimiento?
     @State private var aviso: String?
 
+    /// Los bloques (ids estables, orden y ocultos en la disposición «app-gastos»).
+    static let bloques: [(String, String)] = [
+        ("resumen", "Cifra del ciclo"), ("importante", "Lo importante"), ("apuntar", "Apuntar"),
+        ("categorias", "Por categoría"), ("graficas", "Gráficas"), ("viajes", "Viajes"),
+        ("suscripciones", "Suscripciones"), ("ingresos", "Ingresos"), ("movimientos", "Movimientos"),
+    ]
+
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: Tema.Espacio.l) {
-                CabeceraGastos()
+        PantallaEditable(pantalla: "app-gastos", titulo: "Gastos", bloques: Self.bloques,
+                         recarga: { await datos.recarga() }) { editar in
+            VStack(alignment: .leading, spacing: Tema.Espacio.l) {
+                CabeceraGastos(editar: editar)
                 if let copia = datos.copia {
                     Label(API.notaCopia(copia), systemImage: "wifi.slash")
                         .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.aviso)
                 }
-                if let r = datos.resumen {
-                    HeroGastos(r: r)
-                    if !r.insights.isEmpty { InsightsGastos(insights: r.insights) }
-                    ApuntarRapido()
-                    CategoriasGastos(r: r, filtro: $filtro, aviso: $aviso)
-                    GraficasGastos(r: r)
-                    ViajesGastos(r: r)
-                    if !r.suscripciones.isEmpty { SuscripcionesGastos(r: r) }
-                    if !r.ingresos.isEmpty { IngresosGastos(r: r) }
-                    MovimientosGastos(r: r, filtro: $filtro, abrir: { abierto = $0 })
-                } else if let error = datos.error {
-                    Text(error).font(Tema.fuente(.texto)).foregroundStyle(Tema.peligro).carta()
-                } else {
-                    Text("Cargando…").font(Tema.fuente(.texto)).foregroundStyle(Tema.suave).carta()
-                }
-                if let aviso {
-                    Text(aviso).font(Tema.fuente(.pequeno)).foregroundStyle(Tema.peligro)
-                        .transition(.opacity)
+                if datos.resumen == nil {
+                    if let error = datos.error {
+                        Text(error).font(Tema.fuente(.texto)).foregroundStyle(Tema.peligro).carta()
+                    } else {
+                        Text("Cargando…").font(Tema.fuente(.texto)).foregroundStyle(Tema.suave).carta()
+                    }
                 }
             }
-            .padding(.horizontal, Tema.Espacio.l)
-            .padding(.top, Tema.Espacio.s)
-            .padding(.bottom, 120)   // el hueco de la barra
+        } bloque: { id in
+            bloque(id)
+        } pie: {
+            if let aviso {
+                Text(aviso).font(Tema.fuente(.pequeno)).foregroundStyle(Tema.peligro)
+                    .transition(.opacity)
+            }
         }
-        .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.interactively)
-        .refreshable { await datos.recarga() }
         .task { await datos.carga() }
         .sheet(item: $abierto) { m in EditorMovimiento(movimiento: m) }
         .overlay(alignment: .bottom) { if let b = datos.borrado { DeshacerBorrado(texto: b.texto) } }
         .animation(Tema.Muelle.pantalla, value: datos.borrado == nil)
         .animation(Tema.Muelle.pantalla, value: aviso)
     }
+
+    @ViewBuilder private func bloque(_ id: String) -> some View {
+        if let r = datos.resumen {
+            switch id {
+            case "resumen": HeroGastos(r: r)
+            case "importante": if !r.insights.isEmpty { InsightsGastos(insights: r.insights) }
+            case "apuntar": ApuntarRapido()
+            case "categorias": CategoriasGastos(r: r, filtro: $filtro, aviso: $aviso)
+            case "graficas": GraficasGastos(r: r)
+            case "viajes": ViajesGastos(r: r)
+            case "suscripciones": if !r.suscripciones.isEmpty { SuscripcionesGastos(r: r) }
+            case "ingresos": if !r.ingresos.isEmpty { IngresosGastos(r: r) }
+            case "movimientos": MovimientosGastos(r: r, filtro: $filtro, abrir: { abierto = $0 })
+            default: EmptyView()
+            }
+        }
+    }
 }
 
 // MARK: cabecera: quién, y qué ciclo
 
 private struct CabeceraGastos: View {
+    let editar: () -> Void
     @State private var datos = DatosGastos.shared
 
     var body: some View {
@@ -68,6 +84,12 @@ private struct CabeceraGastos: View {
                 }
                 Spacer()
                 SelectorInstancia()
+                Button(action: editar) {
+                    Image(systemName: "square.and.pencil")
+                        .font(.system(size: 16, weight: .medium)).foregroundStyle(Tema.suave)
+                        .frame(width: 40, height: 40).background(Tema.carta, in: Circle())
+                }
+                .accessibilityLabel("Editar Gastos")
             }
             if let r = datos.resumen { navegador(r) }
         }

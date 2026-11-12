@@ -161,13 +161,21 @@ Si nada de esto funciona, mira el [registro de errores](#cómo-se-compila) o el 
 
 **Hoy** y **Hábitos** ya no son la web: son SwiftUI (`Hoy/Nativo/`), con la barra de abajo también nativa
 (`Dock.swift`, la gota lima que se desliza con muelle). Las demás secciones (Pendientes, Entreno, Salud, Comida,
-Gastos, Docs, Ajustes) siguen siendo la web, que vive siempre debajo y no se recarga al ir y volver; su barra se
-esconde (la nativa la sustituye). Un enlace de la web a `/` o a `/habitos.html` salta a la pantalla nativa; con
-`?web=1` (botón «Editar» de Hábitos) se abre la página web de siempre para editar y planificar.
+Gastos, Docs) siguen siendo la web, que vive siempre debajo y no se recarga al ir y volver; su barra se
+esconde (la nativa la sustituye). Un enlace de la web a `/`, `/habitos.html` o `/ajustes.html` salta a la pantalla nativa.
 
 - `Datos.swift`: lee `/api/hoy` y `/api/state` (sin red, la copia de Local) y marca al momento; sin red, a la cola.
 - `PantallaHoy.swift`: anillos del día, hábitos de hoy, entreno, «Para hoy», salud, carrera y gastos.
 - `PantallaHabitos.swift`: la semana de cada hábito; tocar un día lo marca (desliza para ver semanas anteriores).
+  «Editar» (`Habitos/EditorHabitos.swift`, `GestorHabitos.swift`): crear, cambiar (nombre, color, días por semana, cada
+  cuántas semanas), ordenar, borrar y planificar la semana. Escribe con `PUT /api/state` + `X-Version` (reintenta en
+  409) y **pide conexión**: no va a la cola porque reescribir el estado entero desde una copia vieja pisaría cambios.
+- `Ajustes/`: `/ajustes.html` nativo (`PantallaAjustes`) y las mismas secciones dentro de Configurar
+  (`SeccionAjustesTom`): nombre, sonidos, secciones (módulos activo/en la barra), límites del móvil y mascota
+  (`EditorMascota`). `ModeloAjustes` lee y guarda `/api/ajustes` (sin apariencia ni disposición: el servidor las
+  conserva; sin red, a la cola). La vista previa de la mascota es `HuecoVistaMascota`: cambiar su cuerpo por la mascota
+  nativa cuando exista.
+- `PantallaEditable.swift`: ver «Pantallas editables» abajo.
 - `FondoCalma.swift`: el plasma de caracteres de calma.js en Canvas (15 fps, quieto con «reducir movimiento»), con la
   intensidad del fondo elegido en Configurar → Apariencia.
 
@@ -177,6 +185,35 @@ espacios, muelles y letra. Las vistas nativas solo usan `Tema.*`. Para cambiar l
 `Hoy/`, añádelo a `UIAppFonts` en `Info.plist` y pon su nombre PostScript en `Fuentes` (`texto`, `titulo`,
 `cifras`); sin familia, SF Pro (`diseno` elige `.rounded`, `.serif`…). Otro tema = otra `Paleta`/`Fuentes` en
 `Tema.actual`.
+
+### Pantallas editables (orden y ocultos de los bloques)
+
+Cada pantalla nativa puede dejar que se ordenen y escondan sus bloques con `PantallaEditable`
+(`Hoy/Nativo/PantallaEditable.swift`). Pinta la cabecera, los bloques en el orden guardado, el modo «Editar» en la
+propia pantalla y el menú de mantener pulsado un bloque. Se guarda en la disposición `app-<seccion>` (la misma clave que
+la barra de abajo: `app-hoy`, `app-entreno`…), que el servidor ya guarda y sincroniza.
+
+```swift
+PantallaEditable(pantalla: "app-entreno", titulo: "Entreno",
+                 bloques: Self.bloques,                  // [("plan", "Plan de hoy"), ("series", "Series")]
+                 recarga: { await datos.recarga() }) { editar in
+    Cabecera(editar: editar)                              // `editar` abre el modo edición (botón propio)
+} bloque: { id in
+    switch id {
+    case "plan": Plan()
+    case "series": Series()
+    default: EmptyView()
+    }
+}
+```
+
+- **Los ids de bloque son estables**: lo que se guarda en el servidor es el id, no el nombre ni la posición. No los
+  cambies nunca; un bloque nuevo se añade al final de la lista sin tocar los demás. Un bloque que decide no pintar nada
+  (sin datos) devuelve `EmptyView()`.
+- Para que Configurar → Pantallas la muestre editable, añade su línea en `PantallasEditables.bloques`
+  (`clave: bloques`). Las pantallas del registro que no estén ahí salen allí desactivadas, con «pronto».
+- `pie:` (opcional) pinta algo tras el último bloque, `recarga:` activa tirar para recargar, y
+  `@Environment(\.editarPantalla)` permite abrir la edición desde dentro de un bloque.
 
 ## Apariencia, gestos e isla
 
@@ -194,8 +231,8 @@ fondo}`. Elegir un tema copia sus valores; tocar cualquiera después lo deja en 
   letra de los títulos.
 - Configurar → Apariencia: vista previa, rejilla de temas (nombre en su letra, claro/oscuro, vibra) y «Personalizar»
   (fondo y acento con ColorPicker y sugerencias, letra, títulos, esquinas, fondo de caracteres, modo, Restablecer).
-- Configurar → Pantallas: orden y ocultos de la barra (`app-dock`) y de Hoy (`app-hoy`); en Hoy también el botón de
-  editar o mantener pulsado un bloque.
+- Configurar → Pantallas: orden y ocultos de la barra (`app-dock`) y de todas las pantallas nativas del registro (`app-hoy`…;
+  las que aún no usan `PantallaEditable` salen con «pronto»); en Hoy también el botón de editar o mantener pulsado un bloque.
 
 **Gestos.** Deslizar a los lados cambia a la sección siguiente/anterior según el orden de la barra (con paso de página
 en las nativas). En la web, solo desde los bordes de la pantalla (el «atrás» de WebKit está quitado). En la barra,

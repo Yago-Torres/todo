@@ -9,6 +9,7 @@ enum RegistroNativo {
         ("/habitos.html", { AnyView(PantallaHabitos()) }),
         ("/comida.html", { AnyView(PantallaComida()) }),
         ("/gastos.html", { AnyView(PantallaGastos()) }),
+        ("/ajustes.html", { AnyView(PantallaAjustes()) }),
         // ← cada sección nueva, aquí (una línea, en el orden de la barra)
     ]
 
