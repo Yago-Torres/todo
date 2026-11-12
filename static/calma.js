@@ -645,7 +645,19 @@ const calma = (() => {
     });
   }
 
-  const listo = () => { menu(); islaReal(); fondos(); medidor(); disposicion(); };
+  /* dentro de Tom: un micro en la cabecera abre «Hablar con Tom» (el modo voz nativo) */
+  function botonVoz() {
+    if (!window.HoyApp || !window.webkit?.messageHandlers?.hoy) return;
+    const cab = document.querySelector("header.top");
+    if (!cab || cab.querySelector(".c-voz")) return;
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "c-voz"; b.setAttribute("aria-label", "Hablar con Tom");
+    b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
+    b.addEventListener("click", () => { vibra(); try { window.webkit.messageHandlers.hoy.postMessage({accion: "voz"}); } catch {} });
+    cab.append(b);
+  }
+
+  const listo = () => { menu(); islaReal(); fondos(); medidor(); disposicion(); botonVoz(); };
   document.readyState === "loading" ? addEventListener("DOMContentLoaded", listo) : listo();
 
   /* Al irse a otra página: el contenido baja un poco mientras se desvanece (.c-saliendo en calma.css)
