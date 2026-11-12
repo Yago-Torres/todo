@@ -46,6 +46,8 @@ final class Coordinador: NSObject, WKNavigationDelegate, WKUIDelegate {
         conf.allowsInlineMediaPlayback = true
         let contenido = WKUserContentController()
         contenido.addUserScript(WKUserScript(source: Self.puente, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        // la barra de abajo es nativa (Hoy/Nativo/Dock.swift): la de la web se esconde, pero sigue ocupando su hueco
+        contenido.addUserScript(WKUserScript(source: Self.sinDock, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         contenido.add(MensajeroDebil(self), name: "hoy")
         // los datos sin red (Offline.swift): la copia de Local y la cola de cambios
         contenido.addUserScript(WKUserScript(source: PuenteLocal.guion, injectionTime: .atDocumentStart, forMainFrameOnly: true))
@@ -87,7 +89,8 @@ final class Coordinador: NSObject, WKNavigationDelegate, WKUIDelegate {
         Task {
             await prepara(forzar: false)
             listo = true
-            carga(pendiente ?? "/")
+            // Hoy y Hábitos son nativos: la web solo carga cuando se pide una de sus secciones
+            if let pendiente { carga(pendiente) }
             pendiente = nil
         }
         return v
@@ -123,13 +126,13 @@ final class Coordinador: NSObject, WKNavigationDelegate, WKUIDelegate {
     }
 
     @objc private func recarga() {
-        if let ultima { vista?.load(URLRequest(url: ultima)) } else { carga("/") }
+        if let ultima { vista?.load(URLRequest(url: ultima)) } else { refresco.endRefreshing() }
     }
 
     private func renueva(volviendoA url: URL?) {
         Task {
             await prepara(forzar: true)
-            if let url { vista?.load(URLRequest(url: url)) } else { carga("/") }
+            if let url { vista?.load(URLRequest(url: url)) }
         }
     }
 
@@ -198,6 +201,15 @@ final class Coordinador: NSObject, WKNavigationDelegate, WKUIDelegate {
             }
             return .allow   // si renovar no bastó, que se pueda entrar a mano en Access
         }
+        // un enlace de la web a Hoy o a Hábitos: a la pantalla nativa, sin cargar nada
+        if principal, accion.navigationType != .reload, url.host == Config.web.host {
+            var ruta = url.path.isEmpty ? "/" : url.path
+            if let q = url.query { ruta += "?" + q }
+            if Navegador.esNativa(ruta) {
+                Navegador.shared.abre(ruta)
+                return .cancel
+            }
+        }
         if principal { ultima = url }
         return .allow
     }
@@ -214,6 +226,9 @@ final class Coordinador: NSObject, WKNavigationDelegate, WKUIDelegate {
     }
 
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        if let url = webView.url, url.host == Config.web.host {
+            Navegador.shared.paginaWeb = url.path.isEmpty ? "/" : url.path
+        }
         UIApplication.shared.isIdleTimerDisabled = false   // página nueva: su wake lock ya no existe
         inclinacion.pide(false)                            // ni su inclinación: si la quiere, que la vuelva a pedir
         // en el entreno, tirar hacia abajo sin querer recargaría y se perdería la serie en curso
@@ -326,6 +341,10 @@ final class Coordinador: NSObject, WKNavigationDelegate, WKUIDelegate {
         Haptica.shared.toca(.desmarcar)
         vista?.evaluateJavaScript("window.dispatchEvent(new CustomEvent(\"tom-agitar\"));true", completionHandler: nil)
     }
+
+    private static let sinDock = """
+        (function(){var s=document.createElement('style');s.textContent='nav.c-dock{visibility:hidden!important;pointer-events:none!important}';(document.head||document.documentElement).appendChild(s);})();
+        """
 
     private static func paginaError(_ motivo: String) -> String {
         let limpio = motivo.replacingOccurrences(of: "<", with: "&lt;")

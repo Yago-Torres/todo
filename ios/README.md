@@ -157,6 +157,26 @@ Si la compilación falla, el registro de errores queda descargable sin iniciar s
 
 Si nada de esto funciona, mira el [registro de errores](#cómo-se-compila) o el servidor de Discord de iloader, que es donde atienden los problemas de iloader.
 
+## Pantallas nativas y tema
+
+**Hoy** y **Hábitos** ya no son la web: son SwiftUI (`Hoy/Nativo/`), con la barra de abajo también nativa
+(`Dock.swift`, la gota lima que se desliza con muelle). Las demás secciones (Pendientes, Entreno, Salud, Comida,
+Gastos, Docs, Ajustes) siguen siendo la web, que vive siempre debajo y no se recarga al ir y volver; su barra se
+esconde (la nativa la sustituye). Un enlace de la web a `/` o a `/habitos.html` salta a la pantalla nativa; con
+`?web=1` (botón «Editar» de Hábitos) se abre la página web de siempre para editar y planificar.
+
+- `Datos.swift`: lee `/api/hoy` y `/api/state` (sin red, la copia de Local) y marca al momento; sin red, a la cola.
+- `PantallaHoy.swift`: anillos del día, hábitos de hoy, entreno, «Para hoy», salud, carrera y gastos.
+- `PantallaHabitos.swift`: la semana de cada hábito; tocar un día lo marca (desliza para ver semanas anteriores).
+- `FondoCalma.swift`: el plasma de caracteres de calma.js en Canvas (15 fps, quieto con «reducir movimiento»);
+  se apaga en Configurar → «Fondo de caracteres en Hoy».
+
+**El tema está en un solo sitio: `Hoy/Tema.swift`.** Colores claro/oscuro calcados de `~/estilo/calma.css`, radios,
+espacios, muelles y letra. Las vistas nativas solo usan `Tema.*`. Para cambiar la letra: empaqueta el `.ttf` en
+`Hoy/`, añádelo a `UIAppFonts` en `Info.plist` y pon su nombre PostScript en `Fuentes` (`texto`, `titulo`,
+`cifras`); sin familia, SF Pro (`diseno` elige `.rounded`, `.serif`…). Otro tema = otra `Paleta`/`Fuentes` en
+`Tema.actual`.
+
 ## Freno de apps
 
 Tom no puede leer el Tiempo de uso (Apple solo lo deja con cuenta de pago), así que el freno va con Atajos. Una vez por app:

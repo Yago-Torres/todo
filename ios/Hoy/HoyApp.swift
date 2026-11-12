@@ -99,13 +99,13 @@ struct Raiz: View {
 
     var body: some View {
         ZStack {
-            Color("Fondo").ignoresSafeArea()
+            Tema.fondo.ignoresSafeArea()
             if let claves = estado.claves {
                 // leído aquí, en body, para que Observation repinte al pedir la hoja (el get del Binding va fuera de body)
                 let _ = Escalada.shared.hojaVisible
-                // la web sigue viva debajo del bloqueo: al desbloquear no se recarga ni pierde lo que tenías a medias
-                Web(claves: claves)
-                    .ignoresSafeArea()
+                // Hoy y Hábitos nativos, la web para el resto y la barra nativa (Hoy/Nativo/Pestanas.swift). La web sigue
+                // viva debajo del bloqueo: al desbloquear no se recarga ni pierde lo que tenías a medias
+                Pestanas(claves: claves)
                     // agitar es ahora cosa de la web; Configurar lo pide ella ({accion:"configurar"}), hoy://configurar
                     // o el botón «Ajustes de la app» de la página sin conexión
                     .onReceive(NotificationCenter.default.publisher(for: .hoyAgitado)) { _ in
