@@ -356,47 +356,67 @@ struct VistaDescanso: View {
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 20)) { ctx in
-            let s = max(0, descanso.fin.timeIntervalSince(ctx.date))
-            let queda = Int(ceil(s))
-            let late = (quieto || s > 10) ? 0 : (sin(ctx.date.timeIntervalSinceReferenceDate * .pi * 2 * (1 + (10 - s) * 0.35)) + 1) / 2 * 0.9
-            ZStack {
-                Tema.fondo.ignoresSafeArea()
-                Tema.acentoSuave.opacity(late).ignoresSafeArea()
-                VStack(spacing: Tema.Espacio.l) {
-                    Spacer()
-                    Text("Descanso").font(Tema.fuente(.texto)).foregroundStyle(Tema.suave)
-                    Text(FormatoEnt.mmss(queda))
-                        .font(.system(size: 132, weight: .bold, design: .monospaced))
-                        .minimumScaleFactor(0.5)
-                        .lineLimit(1)
-                        .foregroundStyle(Tema.acento)
-                        .contentTransition(.numericText(countsDown: true))
-                        .animation(quieto ? nil : .snappy, value: queda)
-                        .accessibilityLabel("Quedan \(queda) segundos")
-                    Text(toca.hecho ? "Era la última: todo hecho" : "Siguiente: \(toca.ejercicio) · serie \(toca.serie) de \(toca.total)")
-                        .font(Tema.fuente(.texto)).foregroundStyle(Tema.suave)
-                        .multilineTextAlignment(.center)
-                    BarraEnt(valor: 1 - s / Double(max(1, descanso.total)))
-                        .frame(height: 8)
-                        .frame(maxWidth: 420)
-                        .padding(.horizontal, Tema.Espacio.xl)
-                    Spacer()
-                    HStack(spacing: Tema.Espacio.m) {
-                        Button("−15") { sesion.ajustaDescanso(-15) }
-                            .buttonStyle(BotonEnt(alto: 64))
-                            .accessibilityLabel("15 segundos menos")
-                        Button("+15") { sesion.ajustaDescanso(15) }
-                            .buttonStyle(BotonEnt(alto: 64))
-                            .accessibilityLabel("15 segundos más")
-                        Button("Terminar") { sesion.saltaDescanso() }
-                            .buttonStyle(BotonEnt(principal: true, alto: 64))
-                            .accessibilityLabel("Terminar el descanso")
-                    }
-                    .padding(.horizontal, Tema.Espacio.l)
-                    .padding(.bottom, Tema.Espacio.xl)
-                }
+            contenido(max(0, descanso.fin.timeIntervalSince(ctx.date)), ctx.date.timeIntervalSinceReferenceDate)
+        }
+    }
+
+    /// Cuánto late el fondo: nada hasta los últimos 10 s; luego, cada vez más rápido.
+    private func latido(_ s: Double, _ ahora: Double) -> Double {
+        if quieto || s > 10 { return 0 }
+        let frecuencia: Double = 1 + (10 - s) * 0.35
+        let onda: Double = sin(ahora * Double.pi * 2 * frecuencia)
+        return (onda + 1) / 2 * 0.9
+    }
+
+    private func contenido(_ s: Double, _ ahora: Double) -> some View {
+        let queda = Int(ceil(s))
+        let progreso: Double = 1 - s / Double(max(1, descanso.total))
+        let siguiente = toca.hecho ? "Era la última: todo hecho" : "Siguiente: \(toca.ejercicio) · serie \(toca.serie) de \(toca.total)"
+        return ZStack {
+            Tema.fondo.ignoresSafeArea()
+            Tema.acentoSuave.opacity(latido(s, ahora)).ignoresSafeArea()
+            VStack(spacing: Tema.Espacio.l) {
+                Spacer()
+                Text("Descanso").font(Tema.fuente(.texto)).foregroundStyle(Tema.suave)
+                numero(queda)
+                Text(siguiente)
+                    .font(Tema.fuente(.texto)).foregroundStyle(Tema.suave)
+                    .multilineTextAlignment(.center)
+                BarraEnt(valor: progreso)
+                    .frame(height: 8)
+                    .frame(maxWidth: 420)
+                    .padding(.horizontal, Tema.Espacio.xl)
+                Spacer()
+                botones
             }
         }
+    }
+
+    private func numero(_ queda: Int) -> some View {
+        Text(FormatoEnt.mmss(queda))
+            .font(.system(size: 132, weight: .bold, design: .monospaced))
+            .minimumScaleFactor(0.5)
+            .lineLimit(1)
+            .foregroundStyle(Tema.acento)
+            .contentTransition(.numericText(countsDown: true))
+            .animation(quieto ? nil : .snappy, value: queda)
+            .accessibilityLabel("Quedan \(queda) segundos")
+    }
+
+    private var botones: some View {
+        HStack(spacing: Tema.Espacio.m) {
+            Button("−15") { sesion.ajustaDescanso(-15) }
+                .buttonStyle(BotonEnt(alto: 64))
+                .accessibilityLabel("15 segundos menos")
+            Button("+15") { sesion.ajustaDescanso(15) }
+                .buttonStyle(BotonEnt(alto: 64))
+                .accessibilityLabel("15 segundos más")
+            Button("Terminar") { sesion.saltaDescanso() }
+                .buttonStyle(BotonEnt(principal: true, alto: 64))
+                .accessibilityLabel("Terminar el descanso")
+        }
+        .padding(.horizontal, Tema.Espacio.l)
+        .padding(.bottom, Tema.Espacio.xl)
     }
 }
 

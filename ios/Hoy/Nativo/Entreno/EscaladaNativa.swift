@@ -136,14 +136,14 @@ final class EscaladaDatos {
         }
     }
 
-    static func cuando(_ i: String) -> String {
+    nonisolated static func cuando(_ i: String) -> String {
         let c = Array(i)
         guard c.count == 15 else { return i }
         let dia = "\(String(c[0...3]))-\(String(c[4...5]))-\(String(c[6...7]))"
         return "\(FormatoEnt.diaSemana(dia)) \(FormatoEnt.corta(dia).split(separator: " ").last ?? "") · \(String(c[9...10])):\(String(c[11...12]))"
     }
 
-    static func corto(_ i: String) -> String {
+    nonisolated static func corto(_ i: String) -> String {
         let c = Array(i)
         guard c.count == 15 else { return i }
         return "\(Int(String(c[6...7])) ?? 0)/\(Int(String(c[4...5])) ?? 0) \(String(c[9...10])):\(String(c[11...12]))"
