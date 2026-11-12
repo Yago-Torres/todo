@@ -5,7 +5,7 @@
 // - Los datos (/api): de la red si contesta en 250 ms; si no, la copia ya, y cuando llega la respuesta, si es
 //   distinta, se avisa a la página para que recargue (calma.js). Sin red, la copia. Las marcas sin red, sinred.js.
 
-const CACHE = "todo-9";
+const CACHE = "todo-10";
 const FUERA = /^https:\/\/(fonts\.googleapis\.com|fonts\.gstatic\.com|cdnjs\.cloudflare\.com|cdn\.jsdelivr\.net)\//;
 // ?v= (aplica.sh), o la versión en el nombre (anime-4.5.0, Chart.js/4.4.1): si cambia, cambia la URL
 const fijo = u => FUERA.test(u.href) || u.searchParams.has("v") || /\d+\.\d+\.\d+/.test(u.pathname);

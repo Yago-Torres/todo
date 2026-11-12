@@ -30,13 +30,49 @@ const calma = (() => {
     for (const m of document.querySelectorAll('meta[name="theme-color"]')) m.content = v["--fondo"];
     dispatchEvent(new Event("calma-tema"));
   }
+  /* ---- color: hex ↔ OKLCH. genera() es LA fórmula de los temas; Tom (Aspecto.swift) la repite igual ---- */
+  const lin = c => (c /= 255) <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4;
+  const gam = x => { x = Math.max(0, Math.min(1, x)); return Math.round((x <= .0031308 ? 12.92 * x : 1.055 * x ** (1 / 2.4) - .055) * 255); };
+  function aOklch(hex) {
+    const n = parseInt(String(hex).replace("#", ""), 16) || 0;
+    const r = lin(n >> 16), g = lin((n >> 8) & 255), b = lin(n & 255);
+    const l = Math.cbrt(.4122214708 * r + .5363325363 * g + .0514459929 * b), m = Math.cbrt(.2119034982 * r + .6806995451 * g + .1073969566 * b),
+          s = Math.cbrt(.0883024619 * r + .2817188376 * g + .6299787005 * b);
+    const L = .2104542553 * l + .793617785 * m - .0040720468 * s, A = 1.9779984951 * l - 2.428592205 * m + .4505937099 * s,
+          B = .0259040371 * l + .7827717662 * m - .808675766 * s;
+    return [L * 100, Math.hypot(A, B), (Math.atan2(B, A) * 180 / Math.PI + 360) % 360];
+  }
+  function deOklch(L, C, H, alfa) {
+    const h = H * Math.PI / 180, A = C * Math.cos(h), B = C * Math.sin(h), l0 = L / 100;
+    const l = (l0 + .3963377774 * A + .2158037573 * B) ** 3, m = (l0 - .1055613458 * A - .0638541728 * B) ** 3, s = (l0 - .0894841775 * A - 1.291485548 * B) ** 3;
+    const rgb = [4.0767416621 * l - 3.3077115913 * m + .2309699292 * s, -1.2684380046 * l + 2.6097574011 * m - .3413193965 * s,
+                 -.0041960863 * l - .7034186147 * m + 1.707614701 * s].map(gam);
+    return alfa == null ? "#" + rgb.map(x => x.toString(16).padStart(2, "0")).join("").toUpperCase() : `rgba(${rgb.join(", ")}, ${alfa})`;
+  }
+  const entre = (x, a, b) => Math.max(a, Math.min(b, x));
+  function genera(base, acento) {
+    const [Lb, Cb0, Hb] = aOklch(base), cn = Cb0 < .004 ? 0 : Math.min(Cb0, .045), hn = Hb;
+    const fc = Lb >= 90 ? Math.min(Lb, 99) : 96.8, fo = Lb <= 25 ? Math.max(Lb, 7) : 18.5;
+    const N = (L, k, a) => deOklch(L, cn * k, hn, a);
+    const claro = {fondo: N(fc, .45), carta: N(Math.min(fc + 2.8, 100), .12), carta_luz: "#FFFFFF", carta2: N(fc - 3.2, .6), texto: N(22, .7),
+                   suave: N(52, .6), tenue: N(70, .5), linea: N(fc - 6.3, .55), dock: N(30, .8), dock_texto: N(78, .5), ascii: N(30, 1, .2)};
+    const oscuro = {fondo: N(fo, .6), carta: N(fo + 4.5, .7), carta_luz: N(fo + 7, .7), carta2: N(fo + 8.5, .75), texto: N(95, .3),
+                    suave: N(72, .55), tenue: N(52, .5), linea: N(fo + 13.5, .75), dock: N(Math.max(fo + 11.5, 26), .8), dock_texto: N(78, .5), ascii: N(90, 1.4, .15)};
+    const [La, Ca0, Ha] = aOklch(acento), ca = Math.min(Ca0, .25);
+    const A = (L, k) => deOklch(L, ca * k, Ha);
+    const ac = {claro: {acento: A(entre(La, 38, 58), 1), texto: "#FFFFFF", suave: A(95, .25)},
+                oscuro: {acento: A(entre(La, 72, 88), .9), texto: A(22, .6), suave: A(31, .35)},
+                gota: A(entre(La, 78, 90), .9), gota_texto: A(24, .7)};
+    return {claro, oscuro, ac};
+  }
   /* catálogo + elección → las variables CSS de claro y oscuro (lo que se guarda en calma-tema) */
   function calculaTema(cat, el) {
     const def = cat.defecto, busca = (l, id, d) => cat[l].find(x => x.id === id) || cat[l].find(x => x.id === d);
-    const pal = busca("paletas", el.paleta, def.paleta);
-    const ac = busca("acentos", el.acento || pal.acento, pal.acento);
-    const fu = busca("fuentes", el.fuente, def.fuente), es = busca("esquinas", el.esquinas, def.esquinas);
+    const hex = (x, d) => /^#[0-9a-f]{6}$/i.test(x || "") ? x : d;
+    const g = genera(hex(el.base, def.base), hex(el.acento, def.acento));
+    const fu = busca("fuentes", el.fuente, def.fuente), ti = busca("fuentes", el.titulos || el.fuente, def.titulos), es = busca("esquinas", el.esquinas, def.esquinas);
     const fo = busca("fondos", el.fondo, def.fondo), k = fo.intensidad;
+    const pila = f => `${f.css}, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
     const lado = (n, a, f, claro) => ({
       "--fondo": n.fondo, "--carta": n.carta, "--carta-luz": n.carta_luz, "--carta-2": n.carta2, "--texto": n.texto,
       "--suave": n.suave, "--tenue": n.tenue, "--linea": n.linea, "--dock": n.dock, "--dock-texto": n.dock_texto,
@@ -45,10 +81,23 @@ const calma = (() => {
       "--peligro": f.peligro, "--peligro-suave": f.peligro_suave, "--aviso": f.aviso, "--aviso-suave": f.aviso_suave,
     });
     return {modo: el.modo || "sistema", fondo: fo.id, intensidad: k,
-            claro: lado(pal.claro, ac.claro, cat.fijos.claro, true), oscuro: lado(pal.oscuro, ac.oscuro, cat.fijos.oscuro, false),
-            comun: {"--gota": ac.gota, "--gota-texto": ac.gota_texto, "--r": es.carta + "px", "--r-s": es.boton + "px", "--r-xs": es.celda + "px",
-                    "--fuente": `${fu.css}, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`}};
+            claro: lado(g.claro, g.ac.claro, cat.fijos.claro, true), oscuro: lado(g.oscuro, g.ac.oscuro, cat.fijos.oscuro, false),
+            comun: {"--gota": g.ac.gota, "--gota-texto": g.ac.gota_texto, "--r": es.carta + "px", "--r-s": es.boton + "px", "--r-xs": es.celda + "px",
+                    "--fuente": pila(fu), "--fuente-titulos": pila(ti)}};
   }
+  /* las letras que no son la de siempre: su @font-face se mete al elegirlas (y solo se descarga la que se usa) */
+  function cargaFuentes(cat, ids) {
+    for (const f of cat.fuentes.filter(x => ids.includes(x.id) && x.web)) {
+      if (document.getElementById("ff-" + f.id)) continue;
+      const fam = f.css.replace(/"/g, ""), caras = f.pesos === "estaticos"
+        ? [400, 700].map(w => `@font-face{font-family:"${fam}";font-weight:${w};font-display:swap;src:url("/fuentes/${f.web}-${w}.woff2?v=1") format("woff2")}`)
+        : [`@font-face{font-family:"${fam}";font-weight:${f.pesos};font-display:swap;src:url("/fuentes/${f.web}.woff2?v=1") format("woff2")}`];
+      if (f.web.endsWith("-latin")) continue;   // las de calma.css ya están declaradas
+      const st = Object.assign(document.createElement("style"), {id: "ff-" + f.id, textContent: caras.join("")});
+      document.head.append(st);
+    }
+  }
+  if (tema?.caras) document.head.append(Object.assign(document.createElement("style"), {id: "ff-cache", textContent: tema.caras}));
   pintaTema();
   oscuroSistema.addEventListener?.("change", pintaTema);
   let catalogo = null;
@@ -59,6 +108,8 @@ const calma = (() => {
     const cat = await pideCatalogo();
     tema = calculaTema(cat, el || {});
     tema.eleccion = el || {};
+    cargaFuentes(cat, [el?.fuente, el?.titulos].filter(Boolean));
+    tema.caras = [...document.querySelectorAll('style[id^="ff-"]')].map(x => x.textContent).join("");
     ponLocal("calma-tema", tema);
     pintaTema();
     return tema;
@@ -237,6 +288,37 @@ const calma = (() => {
       pon(a, true);
       vete(a.href, entrePaginas() ? 90 : 120);   // la gota arranca y la página se va enseguida (antes 320 ms en cada toque)
     });
+    /* arrastrar el dedo por la barra: la gota lo sigue, cada sección por la que pasa vibra y al soltar se va a esa */
+    let arrastre = null;
+    const bajo = x => [...nav.querySelectorAll("a")].find(a => { const r = a.getBoundingClientRect(); return x >= r.left && x < r.right; });
+    nav.addEventListener("pointerdown", e => { if (e.pointerType !== "mouse") arrastre = {x0: e.clientX, mueve: false, sobre: bajo(e.clientX)}; });
+    nav.addEventListener("pointermove", e => {
+      if (!arrastre) return;
+      if (!arrastre.mueve && Math.abs(e.clientX - arrastre.x0) < 8) return;
+      if (!arrastre.mueve) { arrastre.mueve = true; try { nav.setPointerCapture(e.pointerId); } catch {} }
+      const r = nav.getBoundingClientRect(), x = Math.max(r.left + 26, Math.min(r.right - 26, e.clientX));
+      gota.hidden = false; gota.style.transition = "none";
+      gota.style.transform = `translateX(${x - r.left - 26}px)`;
+      const a = bajo(e.clientX);
+      if (a && a !== arrastre.sobre) {
+        arrastre.sobre = a; vibra();
+        nav.querySelectorAll("a").forEach(x => x.toggleAttribute("aria-current", x === a));
+        nav.querySelectorAll("a[aria-current]").forEach(x => x.setAttribute("aria-current", "page"));
+      }
+    });
+    const suelta = e => {
+      if (!arrastre) return;
+      const {mueve, sobre} = arrastre;
+      arrastre = null;
+      if (!mueve) return;   // fue un toque: lo lleva el click
+      e.preventDefault();
+      if (sobre) { pon(sobre, true); if (sobre.href !== location.href) vete(sobre.href, 160); }
+      // y el click que viene detrás de soltar no cuenta
+      nav.addEventListener("click", x => x.preventDefault(), {once: true, capture: true});
+    };
+    nav.addEventListener("pointerup", suelta);
+    nav.addEventListener("pointercancel", () => { arrastre = null; coloca(); });
+    nav.style.touchAction = "none";
   }
   /* App instalada en un iPhone con isla dinámica (barra de estado de 51 px o más): los avisos salen de ella */
   function islaReal() {
@@ -624,6 +706,6 @@ const calma = (() => {
   }, {passive: true});
 
   return {transicion, cuenta, fiesta, vibra, onda, perfil, ponPerfil, saludo, ocupado, entrePaginas,
-          ponApariencia, pideCatalogo, calculaTema, editaPantalla, pantalla, grupos, guardaDisposicion,
+          ponApariencia, pideCatalogo, calculaTema, genera, aOklch, deOklch, editaPantalla, pantalla, grupos, guardaDisposicion,
           tema: () => tema, disposicionGuardada: () => disposicionLista};
 })();

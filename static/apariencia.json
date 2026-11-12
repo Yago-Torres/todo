@@ -1,12 +1,272 @@
 {
- "version": 1,
+ "version": 2,
  "defecto": {
+  "tema": "hormigon",
   "modo": "sistema",
-  "paleta": "hormigon",
-  "acento": "salvia",
+  "base": "#F2F2F2",
+  "acento": "#4E7A62",
   "fuente": "instrument",
+  "titulos": "instrument",
   "esquinas": "suaves",
-  "fondo": "sutil"
+  "fondo": "sutil",
+  "paleta": "hormigon"
+ },
+ "temas": [
+  {
+   "id": "hormigon",
+   "nombre": "Hormigón",
+   "vibra": "Grises puros y un verde salvia. Sobrio.",
+   "base": "#F2F2F2",
+   "acento": "#4E7A62",
+   "fuente": "instrument",
+   "titulos": "instrument",
+   "esquinas": "suaves",
+   "fondo": "sutil",
+   "modo": "sistema"
+  },
+  {
+   "id": "shibuya",
+   "nombre": "Shibuya",
+   "vibra": "Papel washi, tinta sumi y el rojo de un sello. Japón urbano.",
+   "base": "#F7F4EC",
+   "acento": "#C8102E",
+   "fuente": "zen-kaku",
+   "titulos": "shippori",
+   "esquinas": "rectas",
+   "fondo": "sutil",
+   "modo": "sistema"
+  },
+  {
+   "id": "kioto",
+   "nombre": "Kioto",
+   "vibra": "Índigo teñido y oro de kintsugi. Noche en un templo.",
+   "base": "#141C30",
+   "acento": "#D4AF37",
+   "fuente": "zen-kaku",
+   "titulos": "shippori",
+   "esquinas": "suaves",
+   "fondo": "apagado",
+   "modo": "oscuro"
+  },
+  {
+   "id": "sakura",
+   "nombre": "Sakura",
+   "vibra": "Cerezo en flor sobre blanco rosado. Amable.",
+   "base": "#FFF7F8",
+   "acento": "#E05C7E",
+   "fuente": "dm-sans",
+   "titulos": "shippori",
+   "esquinas": "redondas",
+   "fondo": "sutil",
+   "modo": "sistema"
+  },
+  {
+   "id": "calma",
+   "nombre": "Calma",
+   "vibra": "El de siempre: oliva y lima sobre blanco verdoso.",
+   "base": "#F4F5F0",
+   "acento": "#5E7A1E",
+   "fuente": "inter",
+   "titulos": "inter",
+   "esquinas": "actuales",
+   "fondo": "normal",
+   "modo": "sistema"
+  },
+  {
+   "id": "terminal",
+   "nombre": "Terminal",
+   "vibra": "Fósforo verde sobre negro. Para la consola.",
+   "base": "#050A05",
+   "acento": "#5CFF7A",
+   "fuente": "jetbrains",
+   "titulos": "jetbrains",
+   "esquinas": "rectas",
+   "fondo": "presente",
+   "modo": "oscuro"
+  },
+  {
+   "id": "prensa",
+   "nombre": "Prensa",
+   "vibra": "Papel de periódico, titulares en serif y rojo de portada.",
+   "base": "#FBFBF8",
+   "acento": "#B3261E",
+   "fuente": "inter",
+   "titulos": "fraunces",
+   "esquinas": "rectas",
+   "fondo": "apagado",
+   "modo": "claro"
+  },
+  {
+   "id": "fiordo",
+   "nombre": "Fiordo",
+   "vibra": "Azules nórdicos y escarcha. Frío y limpio.",
+   "base": "#ECEFF4",
+   "acento": "#5E81AC",
+   "fuente": "manrope",
+   "titulos": "manrope",
+   "esquinas": "suaves",
+   "fondo": "sutil",
+   "modo": "sistema"
+  },
+  {
+   "id": "cafe",
+   "nombre": "Café",
+   "vibra": "Tostado, crema y miel. Cálido de sobremesa.",
+   "base": "#F3EFE8",
+   "acento": "#A66300",
+   "fuente": "dm-sans",
+   "titulos": "fraunces",
+   "esquinas": "suaves",
+   "fondo": "sutil",
+   "modo": "sistema"
+  },
+  {
+   "id": "bauhaus",
+   "nombre": "Bauhaus",
+   "vibra": "Blanco roto, rojo primario y geometría seca.",
+   "base": "#F5F3EE",
+   "acento": "#D62828",
+   "fuente": "space-grotesk",
+   "titulos": "space-grotesk",
+   "esquinas": "rectas",
+   "fondo": "apagado",
+   "modo": "claro"
+  },
+  {
+   "id": "miami",
+   "nombre": "Miami",
+   "vibra": "Neón rosa sobre violeta noche. Años 80.",
+   "base": "#120016",
+   "acento": "#FF3CF2",
+   "fuente": "space-grotesk",
+   "titulos": "space-grotesk",
+   "esquinas": "redondas",
+   "fondo": "normal",
+   "modo": "oscuro"
+  },
+  {
+   "id": "matcha",
+   "nombre": "Matcha",
+   "vibra": "Verde té y crema. Fresco.",
+   "base": "#F1F6ED",
+   "acento": "#6E9A3C",
+   "fuente": "dm-sans",
+   "titulos": "dm-sans",
+   "esquinas": "redondas",
+   "fondo": "sutil",
+   "modo": "sistema"
+  },
+  {
+   "id": "lavanda",
+   "nombre": "Lavanda",
+   "vibra": "Lila suave y violeta. Tranquilo.",
+   "base": "#F3F2F7",
+   "acento": "#7C5CFF",
+   "fuente": "manrope",
+   "titulos": "manrope",
+   "esquinas": "redondas",
+   "fondo": "sutil",
+   "modo": "sistema"
+  },
+  {
+   "id": "medianoche",
+   "nombre": "Medianoche",
+   "vibra": "Azul marino profundo y oro viejo.",
+   "base": "#0F141C",
+   "acento": "#E8B04B",
+   "fuente": "plex",
+   "titulos": "plex",
+   "esquinas": "suaves",
+   "fondo": "sutil",
+   "modo": "oscuro"
+  },
+  {
+   "id": "braun",
+   "nombre": "Braun",
+   "vibra": "Gris de aparato y el naranja de un botón. Dieter Rams.",
+   "base": "#ECECE9",
+   "acento": "#FF6A13",
+   "fuente": "plex",
+   "titulos": "plex",
+   "esquinas": "suaves",
+   "fondo": "apagado",
+   "modo": "claro"
+  },
+  {
+   "id": "bosque",
+   "nombre": "Bosque",
+   "vibra": "Verde de noche en el monte y lima.",
+   "base": "#0D140B",
+   "acento": "#C6F432",
+   "fuente": "geist",
+   "titulos": "geist",
+   "esquinas": "suaves",
+   "fondo": "normal",
+   "modo": "sistema"
+  },
+  {
+   "id": "arena",
+   "nombre": "Arena",
+   "vibra": "Dunas, terracota y serif blanda.",
+   "base": "#F6EFE6",
+   "acento": "#D08C5B",
+   "fuente": "manrope",
+   "titulos": "fraunces",
+   "esquinas": "redondas",
+   "fondo": "sutil",
+   "modo": "sistema"
+  },
+  {
+   "id": "grafito",
+   "nombre": "Grafito",
+   "vibra": "Negro mate y lima eléctrica. Técnico.",
+   "base": "#111111",
+   "acento": "#C6F432",
+   "fuente": "geist",
+   "titulos": "geist",
+   "esquinas": "rectas",
+   "fondo": "presente",
+   "modo": "oscuro"
+  }
+ ],
+ "sugerencias": {
+  "acento": [
+   "#4E7A62",
+   "#5E7A1E",
+   "#C8102E",
+   "#D62828",
+   "#E05C7E",
+   "#FF3CF2",
+   "#7C5CFF",
+   "#5E81AC",
+   "#2F6FD6",
+   "#1FA37A",
+   "#6E9A3C",
+   "#C6F432",
+   "#D4AF37",
+   "#E8B04B",
+   "#A66300",
+   "#FF6A13",
+   "#D08C5B",
+   "#5CFF7A"
+  ],
+  "base": [
+   "#F2F2F2",
+   "#FFFFFF",
+   "#F7F4EC",
+   "#F4F5F0",
+   "#ECEFF4",
+   "#F3F2F7",
+   "#FFF7F8",
+   "#F1F6ED",
+   "#F6EFE6",
+   "#111111",
+   "#050A05",
+   "#0F141C",
+   "#141C30",
+   "#120016",
+   "#0D140B"
+  ]
  },
  "paletas": [
   {
@@ -2270,48 +2530,132 @@
    "id": "instrument",
    "nombre": "Instrument Sans",
    "css": "\"Instrument Sans\"",
-   "archivo_web": "instrument-sans",
-   "ttf": "InstrumentSans.ttf",
+   "web": "instrument-sans-normal-latin",
+   "pesos": "400 700",
+   "ttf": [
+    "InstrumentSans.ttf"
+   ],
    "familia_ios": "Instrument Sans"
   },
   {
    "id": "inter",
    "nombre": "Inter",
    "css": "\"Inter\"",
-   "archivo_web": "inter",
-   "ttf": "Inter.ttf",
+   "web": "inter-normal-latin",
+   "pesos": "300 800",
+   "ttf": [
+    "Inter.ttf"
+   ],
    "familia_ios": "Inter"
   },
   {
    "id": "manrope",
    "nombre": "Manrope",
    "css": "\"Manrope\"",
-   "archivo_web": "manrope",
-   "ttf": "Manrope.ttf",
+   "web": "manrope-normal-latin",
+   "pesos": "300 800",
+   "ttf": [
+    "Manrope.ttf"
+   ],
    "familia_ios": "Manrope"
   },
   {
    "id": "geist",
    "nombre": "Geist",
    "css": "\"Geist\"",
-   "archivo_web": "geist",
-   "ttf": "Geist.ttf",
+   "web": "geist-normal-latin",
+   "pesos": "300 800",
+   "ttf": [
+    "Geist.ttf"
+   ],
    "familia_ios": "Geist"
   },
   {
    "id": "plex",
    "nombre": "IBM Plex Sans",
    "css": "\"IBM Plex Sans\"",
-   "archivo_web": "ibm-plex-sans",
-   "ttf": "IBMPlexSans.ttf",
+   "web": "ibm-plex-sans-normal-latin",
+   "pesos": "300 800",
+   "ttf": [
+    "IBMPlexSans.ttf"
+   ],
    "familia_ios": "IBM Plex Sans"
+  },
+  {
+   "id": "dm-sans",
+   "nombre": "DM Sans",
+   "css": "\"DM Sans\"",
+   "web": "dm-sans",
+   "pesos": "300 800",
+   "ttf": [
+    "DMSans.ttf"
+   ],
+   "familia_ios": "DM Sans"
+  },
+  {
+   "id": "space-grotesk",
+   "nombre": "Space Grotesk",
+   "css": "\"Space Grotesk\"",
+   "web": "space-grotesk",
+   "pesos": "300 700",
+   "ttf": [
+    "SpaceGrotesk.ttf"
+   ],
+   "familia_ios": "Space Grotesk"
+  },
+  {
+   "id": "jetbrains",
+   "nombre": "JetBrains Mono",
+   "css": "\"JetBrains Mono\"",
+   "web": "jetbrains-mono",
+   "pesos": "300 800",
+   "ttf": [
+    "JetBrainsMono.ttf"
+   ],
+   "familia_ios": "JetBrains Mono"
+  },
+  {
+   "id": "fraunces",
+   "nombre": "Fraunces",
+   "css": "\"Fraunces\"",
+   "web": "fraunces",
+   "pesos": "300 900",
+   "ttf": [
+    "Fraunces.ttf"
+   ],
+   "familia_ios": "Fraunces"
+  },
+  {
+   "id": "zen-kaku",
+   "nombre": "Zen Kaku Gothic",
+   "css": "\"Zen Kaku Gothic New\"",
+   "web": "zen-kaku",
+   "pesos": "estaticos",
+   "ttf": [
+    "ZenKakuGothicNew-Regular.ttf",
+    "ZenKakuGothicNew-Bold.ttf"
+   ],
+   "familia_ios": "Zen Kaku Gothic New"
+  },
+  {
+   "id": "shippori",
+   "nombre": "Shippori Mincho",
+   "css": "\"Shippori Mincho\"",
+   "web": "shippori-mincho",
+   "pesos": "estaticos",
+   "ttf": [
+    "ShipporiMincho-Regular.ttf",
+    "ShipporiMincho-Bold.ttf"
+   ],
+   "familia_ios": "Shippori Mincho"
   },
   {
    "id": "sistema",
    "nombre": "SF Pro (sistema)",
    "css": "-apple-system, system-ui",
-   "archivo_web": "",
-   "ttf": "",
+   "web": "",
+   "pesos": "",
+   "ttf": [],
    "familia_ios": ""
   }
  ],

@@ -14,12 +14,12 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Ajustes">
 <link rel="preload" href="/fuentes/instrument-sans-normal-latin.woff2?v=1" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/calma.css?v=25cdb21b">
-<script src="/calma.js?v=25cdb21b"></script>
+<link rel="stylesheet" href="/calma.css?v=b10d0f76">
+<script src="/calma.js?v=b10d0f76"></script>
 <script src="/tom.js?v=1"></script>
 <script src="/mascota.js?v=6"></script>
 <script src="/anime-4.5.0.min.js"></script>
-<script src="/anima.js?v=25cdb21b"></script>
+<script src="/anima.js?v=b10d0f76"></script>
 <style>
   /* de una página a otra, la cabecera vuela y la barra de abajo se queda quieta (calma.css, calma.js) */
   @view-transition { navigation: auto; }
@@ -83,6 +83,20 @@
   .ap-ops .c-btn[aria-pressed="true"] { background: var(--texto); color: var(--fondo); border-color: var(--texto); }
   .ap-ops .pt { width: 12px; height: 12px; border-radius: 50%; }
   #ap-desc { font-size: var(--t-pequeno); color: var(--suave); margin: 0; }
+  .temas { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .tema { position: relative; display: grid; gap: 6px; text-align: left; padding: 12px; border-radius: var(--r-s); border: 1px solid var(--linea);
+          background: var(--t-fondo); color: var(--t-texto); cursor: pointer; overflow: hidden; min-height: 92px; }
+  .tema b { font-size: var(--t-destacado); font-weight: 700; line-height: 1.1; }
+  .tema small { font-size: var(--t-etiqueta); opacity: .75; line-height: 1.3; }
+  .tema .pts { display: flex; gap: 4px; margin-top: auto; }
+  .tema .pts i { width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(128,128,128,.3); }
+  .tema[aria-pressed="true"] { outline: 2.5px solid var(--acento); outline-offset: 2px; }
+  .ap-colores { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px 12px; align-items: center; margin-top: 8px; }
+  .ap-color { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+  .ap-color input { width: 44px; height: 36px; }
+  .ap-sug { display: flex; flex-wrap: wrap; gap: 5px; }
+  .ap-sug button { width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--linea); padding: 0; }
+  .ap-sug button[aria-pressed="true"] { outline: 2px solid var(--texto); outline-offset: 2px; }
   .pantallas { display: grid; gap: 6px; }
   .pantallas a { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; padding: 0 12px;
                  border-radius: var(--r-s); background: var(--carta-2); color: inherit; text-decoration: none; font-weight: 500; }
@@ -109,22 +123,21 @@
   <div class="col">
     <section class="carta c-carta" aria-labelledby="t-ap" data-bloque="apariencia">
       <h2 id="t-ap">Apariencia</h2>
-      <p class="pista">Se aplica al momento en todas las apps (todo, gastos, comida, limpieza) y en Tom.</p>
-      <div class="ap-previa" aria-hidden="true">
-        <div class="fila"><span class="bx"></span>Leer 20 min<span class="cifra">7 h 12</span></div>
-        <div class="fila"><span class="bx" style="background:var(--carta-2)"></span>2 litros de agua<span class="c-chip ok" style="margin-left:auto">3 de 5</span></div>
-        <button class="c-btn pri" type="button" tabindex="-1">Empezar entreno</button>
+      <p class="pista">Elige un tema o hazte el tuyo. Se aplica al momento en todas las apps y en Tom.</p>
+      <div class="temas" id="ap-temas" role="group" aria-label="Temas"></div>
+      <div class="ap-grupo"><b>Personalizar <span id="ap-propio" class="c-chip" hidden>propio</span></b></div>
+      <div class="ap-colores">
+        <label class="ap-color"><span>Fondo</span><input type="color" id="ap-base" aria-label="Color del fondo"></label>
+        <div class="ap-sug" id="ap-sug-base" role="group" aria-label="Fondos sugeridos"></div>
+        <label class="ap-color"><span>Acento</span><input type="color" id="ap-acento-c" aria-label="Color de acento"></label>
+        <div class="ap-sug" id="ap-sug-acento" role="group" aria-label="Acentos sugeridos"></div>
       </div>
-      <div class="ap-grupo"><b>Modo</b><div class="ap-ops" id="ap-modo"></div></div>
-      <div class="ap-grupo"><b>Paleta · <span id="ap-nombre" style="text-transform:none;letter-spacing:0;color:var(--texto)"></span></b>
-        <div class="ap-ops" id="ap-familias"></div>
-        <div class="ap-pals" id="ap-paletas" role="group" aria-label="Paletas"></div>
-        <p id="ap-desc"></p></div>
-      <div class="ap-grupo"><b>Acento</b><div class="ap-ops" id="ap-acento"></div></div>
       <div class="ap-grupo"><b>Letra</b><div class="ap-ops" id="ap-fuente"></div></div>
+      <div class="ap-grupo"><b>Títulos</b><div class="ap-ops" id="ap-titulos"></div></div>
       <div class="ap-grupo"><b>Esquinas</b><div class="ap-ops" id="ap-esquinas"></div></div>
       <div class="ap-grupo"><b>Fondo de caracteres</b><div class="ap-ops" id="ap-fondo"></div></div>
-      <div class="ap-grupo"><button class="c-btn" type="button" id="ap-reset">Restablecer apariencia</button></div>
+      <div class="ap-grupo"><b>Modo</b><div class="ap-ops" id="ap-modo"></div></div>
+      <div class="ap-grupo"><button class="c-btn" type="button" id="ap-reset">Restablecer</button></div>
     </section>
 
     <section class="carta c-carta" aria-labelledby="t-pan" data-bloque="pantallas">
@@ -330,44 +343,61 @@ cargar();
     espera = setTimeout(() => fetch("/api/apariencia", {method: "POST", credentials: "same-origin", headers: {"Content-Type": "application/json"},
                                                         body: JSON.stringify({apariencia: el})}).catch(() => {}), 400);
   };
-  const opciones = (caja, lista, clave, extra) => {
+  const cambia = (k, v) => { el[k] = v; if (k !== "modo") el.tema = "propio"; guarda(); };
+  const opciones = (caja, lista, clave) => {
     $a(caja).innerHTML = "";
     for (const o of lista) {
       const b = document.createElement("button");
-      b.type = "button"; b.className = "c-btn mini"; b.dataset.id = o.id;
-      b.innerHTML = (extra ? extra(o) : "") + o.nombre;
-      if (!clave.startsWith("_")) b.addEventListener("click", () => { el[clave] = o.id; guarda(); });
+      b.type = "button"; b.className = "c-btn mini"; b.dataset.id = o.id; b.textContent = o.nombre;
+      b.addEventListener("click", () => cambia(clave, o.id));
       $a(caja).append(b);
     }
   };
-  opciones("ap-modo", [{id: "sistema", nombre: "Como el sistema"}, {id: "claro", nombre: "Claro"}, {id: "oscuro", nombre: "Oscuro"}], "modo");
-  const acentoDe = id => cat.acentos.find(a => a.id === id);
-  opciones("ap-acento", [{id: "", nombre: "El de la paleta"}, ...cat.acentos.filter(a => !a.id.startsWith("p-"))], "acento",
-           o => o.id ? `<i class="pt" style="background:${o.claro.acento}"></i>` : "");
+  // las letras de los temas se ven en su propia letra: carga sus @font-face
+  const fam = id => cat.fuentes.find(f => f.id === id);
+  const caras = cat.fuentes.filter(f => f.web).map(f => {
+    const n = f.css.replace(/"/g, "");
+    if (f.pesos === "estaticos") return [400, 700].map(w => `@font-face{font-family:"${n}";font-weight:${w};src:url("/fuentes/${f.web}-${w}.woff2?v=1") format("woff2")}`).join("");
+    return f.web.endsWith("-latin") ? "" : `@font-face{font-family:"${n}";font-weight:${f.pesos};src:url("/fuentes/${f.web}.woff2?v=1") format("woff2")}`;
+  }).join("");
+  document.head.append(Object.assign(document.createElement("style"), {textContent: caras}));
+  for (const t of cat.temas) {
+    const g = calma.genera(t.base, t.acento), oscuro = t.modo === "oscuro";
+    const n = oscuro ? g.oscuro : g.claro, a = oscuro ? g.ac.oscuro : g.ac.claro;
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "tema"; b.dataset.id = t.id;
+    b.style.setProperty("--t-fondo", n.fondo); b.style.setProperty("--t-texto", n.texto);
+    b.innerHTML = `<b style="font-family:${fam(t.titulos).css.replace(/"/g, "'")}">${t.nombre}</b><small style="font-family:${fam(t.fuente).css.replace(/"/g, "'")}">${t.vibra}</small>`
+      + `<span class="pts"><i style="background:${n.carta}"></i><i style="background:${a.acento}"></i><i style="background:${g.ac.gota}"></i><i style="background:${(oscuro ? g.claro : g.oscuro).fondo}"></i></span>`;
+    b.addEventListener("click", () => { el = {tema: t.id, modo: t.modo, base: t.base, acento: t.acento, fuente: t.fuente, titulos: t.titulos, esquinas: t.esquinas, fondo: t.fondo}; guarda(); });
+    $a("ap-temas").append(b);
+  }
+  const sugerencias = (caja, lista, clave) => {
+    for (const c of lista) {
+      const b = document.createElement("button");
+      b.type = "button"; b.dataset.id = c; b.style.background = c; b.setAttribute("aria-label", c);
+      b.addEventListener("click", () => cambia(clave, c));
+      $a(caja).append(b);
+    }
+  };
+  sugerencias("ap-sug-base", cat.sugerencias.base, "base");
+  sugerencias("ap-sug-acento", cat.sugerencias.acento, "acento");
+  let tc;
+  for (const [id, clave] of [["ap-base", "base"], ["ap-acento-c", "acento"]])
+    $a(id).addEventListener("input", e => { clearTimeout(tc); tc = setTimeout(() => cambia(clave, e.target.value.toUpperCase()), 60); });
   opciones("ap-fuente", cat.fuentes, "fuente");
-  [...$a("ap-fuente").children].forEach((b, i) => { b.style.fontFamily = cat.fuentes[i].css; });
+  opciones("ap-titulos", cat.fuentes, "titulos");
+  [...$a("ap-fuente").children, ...$a("ap-titulos").children].forEach(b => { b.style.fontFamily = fam(b.dataset.id).css; });
   opciones("ap-esquinas", cat.esquinas, "esquinas");
   opciones("ap-fondo", cat.fondos, "fondo");
-  const familias = ["Todas", ...new Set(cat.paletas.map(p => p.familia))];
-  opciones("ap-familias", familias.map(f => ({id: f, nombre: f})), "_familia");
-  [...$a("ap-familias").children].forEach(b => b.onclick = () => {
-    [...$a("ap-familias").children].forEach(x => x.setAttribute("aria-pressed", String(x === b)));
-    [...$a("ap-paletas").children].forEach(x => { x.hidden = b.dataset.id !== "Todas" && x.dataset.familia !== b.dataset.id; });
-  });
-  $a("ap-familias").children[0].setAttribute("aria-pressed", "true");
-  for (const p of cat.paletas) {
-    const b = document.createElement("button"), a = acentoDe(p.acento);
-    b.type = "button"; b.dataset.id = p.id; b.dataset.familia = p.familia; b.title = p.nombre; b.setAttribute("aria-label", p.nombre);
-    b.innerHTML = `<span style="background:${p.claro.fondo}"></span><span style="background:${p.oscuro.fondo}"></span><i style="background:${a.claro.acento};box-shadow:0 0 0 3px ${a.gota}"></i>`;
-    b.addEventListener("click", () => { el.paleta = p.id; el.acento = ""; guarda(); });
-    $a("ap-paletas").append(b);
-  }
-  $a("ap-reset").addEventListener("click", () => { el = {...cat.defecto}; guarda(); });
+  opciones("ap-modo", [{id: "sistema", nombre: "Como el sistema"}, {id: "claro", nombre: "Claro"}, {id: "oscuro", nombre: "Oscuro"}], "modo");
+  $a("ap-reset").addEventListener("click", () => { const {paleta, ...d} = cat.defecto; el = {...d}; guarda(); });
   function pinta() {
-    for (const [caja, clave] of [["ap-modo", "modo"], ["ap-acento", "acento"], ["ap-fuente", "fuente"], ["ap-esquinas", "esquinas"], ["ap-fondo", "fondo"], ["ap-paletas", "paleta"]])
-      for (const b of $a(caja).children) b.setAttribute("aria-pressed", String(b.dataset.id === (el[clave] ?? "")));
-    const p = cat.paletas.find(x => x.id === el.paleta) || cat.paletas[0];
-    $a("ap-nombre").textContent = p.nombre; $a("ap-desc").textContent = p.descripcion;
+    for (const [caja, clave] of [["ap-modo", "modo"], ["ap-fuente", "fuente"], ["ap-titulos", "titulos"], ["ap-esquinas", "esquinas"], ["ap-fondo", "fondo"], ["ap-temas", "tema"],
+                                 ["ap-sug-base", "base"], ["ap-sug-acento", "acento"]])
+      for (const b of $a(caja).children) b.setAttribute("aria-pressed", String((b.dataset.id || "").toUpperCase() === String(el[clave] || "").toUpperCase()));
+    $a("ap-base").value = el.base.toLowerCase(); $a("ap-acento-c").value = el.acento.toLowerCase();
+    $a("ap-propio").hidden = el.tema !== "propio";
   }
   pinta();
 

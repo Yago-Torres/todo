@@ -369,18 +369,26 @@ def catalogo():
                             "esquinas": "suaves", "fondo": "sutil"}}
 
 
+HEX = re.compile(r"#[0-9a-fA-F]{6}")
+
+
 def limpia_apariencia(v):
+    """{tema, modo, base, acento, fuente, titulos, esquinas, fondo}: base y acento son colores libres (#RRGGBB);
+    el tema es solo de dónde salió (si luego cambias algo, se queda en «propio» en la web y en Tom)."""
     v, c = dct(v), catalogo()
     d = dict(c["defecto"])
-    validos = {"paleta": "paletas", "acento": "acentos", "fuente": "fuentes", "esquinas": "esquinas", "fondo": "fondos"}
-    for k, lista in validos.items():
-        if v.get(k) in {x["id"] for x in c.get(lista, [])}:
+    d.pop("paleta", None)
+    ids = lambda lista: {x["id"] for x in c.get(lista, [])}
+    if v.get("tema") in ids("temas") | {"propio"}:
+        d["tema"] = v["tema"]
+    for k in ("base", "acento"):
+        if HEX.fullmatch(str(v.get(k) or "")):
+            d[k] = v[k].upper()
+    for k, lista in (("fuente", "fuentes"), ("titulos", "fuentes"), ("esquinas", "esquinas"), ("fondo", "fondos")):
+        if v.get(k) in ids(lista):
             d[k] = v[k]
     if v.get("modo") in ("sistema", "claro", "oscuro"):
         d["modo"] = v["modo"]
-    # acento vacío: el que trae la paleta
-    if v.get("acento") == "":
-        d["acento"] = ""
     return d
 
 
@@ -1963,6 +1971,12 @@ def frontal(nombre):
                         '\n<style>@view-transition{navigation:auto}'
                         '@media(prefers-reduced-motion:reduce){@view-transition{navigation:none}}</style>', 1)
     html = html.replace('<html lang="es">', '<html lang="es" data-vt>', 1)
+    if nombre == "comida":
+        # dentro de todo (y de Tom) solo la comida: recetas con sus ingredientes, kcal y macros. La lista de la
+        # compra y las cuentas siguen en comida.yagotg.dev para quien haga la compra (Yago, 12/11)
+        html = html.replace('id="app" data-vista="lista"', 'id="app" data-vista="menu"', 1).replace("<h2>Menú <em", "<h2>Esta semana <em", 1)
+        html = html.replace("</title>", "</title>\n<style>#p-lista,#p-resumen,.pestanas,#m-coste{display:none!important}"
+                            "#p-menu{display:grid!important;grid-column:1/-1}</style>", 1)
     return HTMLResponse(html.replace(ancla, menu + ancla, 1))
 
 
