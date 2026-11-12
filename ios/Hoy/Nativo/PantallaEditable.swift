@@ -7,6 +7,7 @@ enum PantallasEditables {
     /// clave de la disposición («app-entreno») → [(id estable del bloque, nombre que se ve)].
     static var bloques: [String: [(String, String)]] = [
         "app-hoy": PantallaHoy.bloques,
+        "app-entreno": PantallaEntreno.bloques,
         // ← cada pantalla nueva con PantallaEditable, aquí
     ]
 
