@@ -29,7 +29,7 @@ struct Pestanas: View {
             if nativa {
                 ZStack {
                     Tema.fondo.ignoresSafeArea()
-                    FondoCalma().ignoresSafeArea()
+                    FondoTema().ignoresSafeArea()   // el fondo de cada tema (Decoracion/)
                     pantalla
                         .id(navegador.pestana)
                         // como pasar páginas: la nueva entra por un lado y la vieja sale por el otro

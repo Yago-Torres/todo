@@ -102,6 +102,14 @@ struct HuecoVistaMascota: View {
     let mascota: MascotaAjustes
 
     var body: some View {
+        MascotaVista(ajustes: mascota)
+            .frame(height: 150)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 20)
+    }
+
+    /// El dibujo provisional de antes (ya no se usa).
+    private var provisional: some View {
         ZStack {
             if mascota.tipo == "flor" {
                 Image(systemName: "camera.macro")

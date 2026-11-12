@@ -252,6 +252,26 @@ terminan al acabar o al volver a la app.
 - Escalada: comprimiendo / subiendo % y «listo» (o el error) al acabar.
 - «Día en la isla» (Configurar, apagado por defecto): anillos de hábitos, pasos y sueño hasta las 22:00.
 
+## Decoración por tema, sonidos y mascota
+
+- **Fondo de cada tema** (`Hoy/Nativo/Decoracion/FondoTema.swift`, detrás de todas las pantallas nativas desde
+  Pestanas): la clave `decoracion` de cada tema del catálogo (~/estilo/herramientas/catalogo.py; la web la ignora).
+  Washi con olas (Shibuya), kintsugi (Kioto), pétalos (Sakura), barrido (Terminal), papel (Prensa), rejilla neón (Miami),
+  formas (Bauhaus), curvas de nivel (Bosque, Fiordo), manchas (Matcha, Lavanda, Arena, Café), estrellas (Medianoche),
+  rejilla fina (Braun) y el ASCII de siempre (Hormigón, Calma, Grafito). Canvas a 8–24 fps; los quietos solo se
+  repintan mientras se mueve el dedo o el iPhone (`Movimiento.swift`: CoreMotion a 15 Hz y un reconocedor que solo mira).
+  Respeta la intensidad del fondo y «reducir movimiento». Un tema «propio» usa la decoración del tema con su misma base.
+- **Cambio de tema con círculo** (`CambioTema.swift`): foto de la pantalla encima y un agujero que crece desde el toque.
+- **Icono a juego** (`Assets.xcassets/Icono-<tema>.appiconset`, `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES` en
+  project.yml): al cambiar de tema, `setAlternateIconName` (interruptor en Configurar → Apariencia; iOS avisa siempre).
+  Se generan en la Pi con PIL (fondo = acento, visto = base): ver el commit que los añade.
+- **Sonidos** (`Sonidos.swift`): sintetizados con AVAudioEngine (madera, bambú, 8bit, campanas, clic, sintetizador; clave
+  `sonido` del catálogo). Suenan con cada `Haptica.shared.toca` si «sonidos» está encendido en Ajustes. Sesión `.ambient`.
+- **Mascota** (`Hoy/Nativo/Mascota/`): mascota.js portado a Canvas (mismo azar: misma forma que en la web).
+  `MascotaVista(ajustes:estado:presencia:reaccion:pasea:)` es reutilizable (vista previa de Ajustes); `MascotaHoy` la pone
+  en la cabecera de Hoy con el estado de los datos y se alegra al marcar.
+- **Completar el día** (`CelebracionDia`): confeti con los colores del tema, háptica «día» y su sonido.
+
 ## Freno de apps
 
 Tom no puede leer el Tiempo de uso (Apple solo lo deja con cuenta de pago), así que el freno va con Atajos. Una vez por app:

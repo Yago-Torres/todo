@@ -116,6 +116,7 @@ struct PantallaEditable<Cabecera: View, Bloque: View, Pie: View>: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: Tema.Espacio.l) {
                 cabecera(edita)
+                    .zIndex(1)   // lo que se sale de la cabecera (la mascota de paseo) va por encima de los bloques
                 ForEach(Aspecto.shared.bloques(pantalla).aplica(ids), id: \.self) { id in
                     bloque(id)
                         .contextMenu {

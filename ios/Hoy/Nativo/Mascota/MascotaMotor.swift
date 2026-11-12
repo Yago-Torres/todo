@@ -427,7 +427,15 @@ final class MascotaMotor {
             f.flota = -5 * (1 - cos(t / 3.6 * 2 * .pi)) / 2
             if actual == .animo {
                 let u = t.truncatingRemainder(dividingBy: 2.6) / 2.6
-                f.vaiven = u < 1.0 / 3 ? -4 * sin(u * 3 * .pi / 2) : u < 2.0 / 3 ? -4 + 8 * (1 - cos((u - 1.0 / 3) * 3 * .pi)) / 2 : 4 * cos((u - 2.0 / 3) * 3 * .pi / 2)
+                // 0 → -4 → 4 → 0 en 2,6 s
+                let tercio = 1.0 / 3
+                if u < tercio {
+                    f.vaiven = -4 * sin(u * 3 * Double.pi / 2)
+                } else if u < 2 * tercio {
+                    f.vaiven = -4 + 8 * (1 - cos((u - tercio) * 3 * Double.pi)) / 2
+                } else {
+                    f.vaiven = 4 * cos((u - 2 * tercio) * 3 * Double.pi / 2)
+                }
             }
             f.fase = Int(t / (esFlor ? 0.25 : 0.55)) % 2
         }

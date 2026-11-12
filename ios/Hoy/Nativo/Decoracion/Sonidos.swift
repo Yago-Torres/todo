@@ -124,13 +124,13 @@ private final class Sinte: @unchecked Sendable {
     }
 
     let frecuencia: Double
-    private let estado = OSAllocatedUnfairLock(initialState: (reloj: 0, voces: [Voz](), ruido: UInt32(0x1234_5678)))
+    private let estado = OSAllocatedUnfairLock(uncheckedState: (reloj: 0, voces: [Voz](), ruido: UInt32(0x1234_5678)))
 
     init(frecuencia: Double) { self.frecuencia = frecuencia }
 
     func programa(_ notas: [Nota]) {
         let sr = frecuencia
-        estado.withLock { s in
+        estado.withLockUnchecked { s in
             // un pelín de margen para que la primera muestra no se corte
             let base = s.reloj + Int(0.01 * sr)
             for n in notas {
@@ -145,7 +145,7 @@ private final class Sinte: @unchecked Sendable {
             let buffers = UnsafeMutableAudioBufferListPointer(lista)
             let n = Int(cuantos)
             let sr = frecuencia
-            estado.withLock { s in
+            estado.withLockUnchecked { s in
                 for i in 0..<n {
                     var suma = 0.0
                     var v = 0
