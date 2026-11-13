@@ -41,7 +41,7 @@ enum Avisos {
                                            intentIdentifiers: [], options: [])
         let entreno = UNNotificationCategory(identifier: categoriaEntreno, actions: [accion(accionMueve, "Mover a mañana")],
                                              intentIdentifiers: [], options: [])
-        UNUserNotificationCenter.current().setNotificationCategories([hecho, tarea, entreno])
+        UNUserNotificationCenter.current().setNotificationCategories([hecho, tarea, entreno, FrenoAvisos.categoriaNotificacion()])
     }
 
     private static func borraPendientes() async {
@@ -238,6 +238,7 @@ final class AvisosDelegado: NSObject, UNUserNotificationCenterDelegate {
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
+        if FrenoAvisos.maneja(response, completionHandler) { return }   // los «¿sigues?» del freno (FrenoAvisos.swift)
         let info = response.notification.request.content.userInfo
         let ruta = info["ruta"] as? String
         let habito = info["habito"] as? String

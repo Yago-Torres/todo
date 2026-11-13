@@ -16,6 +16,8 @@ struct AppFrenada: Codable, Hashable, Identifiable {
     var id: String { rawValue }
     var enlace: URL { URL(string: esquema) ?? URL(string: "hoy://")! }
     var freno: URL { URL(string: "hoy://freno?app=\(rawValue)")! }
+    /// La pantalla de freno «¿sigues?»: con el pase en marcha, enseña cuánto llevas (sin espera) y deja salir o seguir.
+    var revision: URL { URL(string: "hoy://freno?app=\(rawValue)&revision=1")! }
 
     /// Esquemas conocidos; abrirlos no necesita LSApplicationQueriesSchemes (solo canOpenURL lo pediría).
     static let conocidas: [String: (String, String)] = [
@@ -119,17 +121,36 @@ enum Freno {
 
     private static func claveAbierta(_ app: AppFrenada) -> String { "freno.abierta.\(app.rawValue)" }
 
+    /// Cuando se puso a contar el rato de ahora (nil: no se sabe o es de hace más de 4 h).
+    static func inicio(_ app: AppFrenada) -> Date? {
+        let t = Almacen.defaults.double(forKey: claveAbierta(app))
+        guard t > 0, Date().timeIntervalSince1970 - t < 4 * 3600 else { return nil }
+        return Date(timeIntervalSince1970: t)
+    }
+
+    /// Los minutos que llevas con la app abierta desde que entraste.
+    static func llevados(_ app: AppFrenada) -> Int {
+        guard let d = inicio(app) else { return 0 }
+        return max(0, Int(Date().timeIntervalSince(d) / 60))
+    }
+
     /// La app ha pasado a primer plano (con pase): desde aquí cuenta el uso real.
     private static func marcaAbierta(_ app: AppFrenada) {
-        if Almacen.defaults.double(forKey: claveAbierta(app)) == 0 {
+        if inicio(app) == nil {
             Almacen.defaults.set(Date().timeIntervalSince1970, forKey: claveAbierta(app))
         }
+    }
+
+    /// Entrada nueva (pase nuevo): el rato vuelve a contar desde ahora, aunque la sesión anterior no se cerrara.
+    private static func iniciaSesion(_ app: AppFrenada) {
+        Almacen.defaults.set(Date().timeIntervalSince1970, forKey: claveAbierta(app))
     }
 
     /// Lo que hace «App cerrada»: suma el rato desde que se abrió (si es creíble: menos de 4 h) al día en que se abrió.
     static func alCerrar(_ app: AppFrenada) {
         let desde = Almacen.defaults.double(forKey: claveAbierta(app))
         Almacen.defaults.removeObject(forKey: claveAbierta(app))
+        FrenoAvisos.cancela(app)   // cerrada: ya no hay que preguntar «¿sigues?»
         guard desde > 0 else { return }
         let segundos = Int(Date().timeIntervalSince1970 - desde)
         guard segundos > 0, segundos < 4 * 3600 else { return }
@@ -193,11 +214,49 @@ enum Freno {
         if deHoy(app).aperturas <= libresAlDia, !pasadoDeLimite(app) {
             daPase(app, minutos: minutosPase)
             apunta(app) { $0.minutos += minutosPase }
-            marcaAbierta(app)
+            iniciaSesion(app)
             return app.enlace
         }
         return app.freno
     }
+
+    /// Lo que hace la acción de Atajos: lo mismo que alAbrir y, si ha empezado un pase nuevo, programa sus «¿sigues?».
+    static func alAbrirConAvisos(_ app: AppFrenada) async -> URL {
+        let tenia = pase(app) != nil
+        let url = alAbrir(app)
+        if !tenia, url != app.freno { await FrenoAvisos.programa(app) }
+        return url
+    }
+
+    /// «5 min más» (del aviso o de la pantalla de revisión): amplía el pase sin abrir la app.
+    static func amplia(_ app: AppFrenada, minutos: Int) async {
+        let base = max(Date(), pase(app) ?? Date())
+        let hasta = base.addingTimeInterval(Double(minutos) * 60)
+        Almacen.defaults.set(hasta.timeIntervalSince1970, forKey: clavePase(app))
+        apunta(app) { $0.minutos += minutos }
+        marcaAbierta(app)
+        await FrenoAvisos.programa(app)
+        await MainActor.run { Isla.pase(app, hasta: hasta) }
+    }
+
+    /// Desde la pantalla de revisión: sigues, con minutos más, y vuelves a la app.
+    static func sigue(_ app: AppFrenada, minutos: Int) {
+        Task { @MainActor in
+            await amplia(app, minutos: minutos)
+            _ = await UIApplication.shared.open(app.enlace)
+        }
+    }
+
+    /// Desde la pantalla de revisión: lo dejas. Se acaba el pase, se cuenta lo que llevabas y no vuelve a preguntar.
+    static func dejala(_ app: AppFrenada) {
+        Almacen.defaults.removeObject(forKey: clavePase(app))
+        alCerrar(app)
+        apunta(app) { $0.renuncias += 1 }
+        Task { @MainActor in Isla.terminaPase() }
+    }
+
+    /// Si la pantalla se abrió desde un «¿sigues?» (hoy://freno?…&revision=1). Se lee una vez.
+    static var revision = false
 
     /// Primera entrada de la hora: la espera inicial (5 s); cada entrada más en la misma hora, +3 s; tope 30.
     /// Al cambiar la hora vuelve a empezar. Pasado el límite diario, 30 directamente.
@@ -209,14 +268,17 @@ enum Freno {
         daPase(app, minutos: minutos)
         apuntaEntrada(app)
         apunta(app) { $0.entradas += 1; $0.minutos += minutos }
+        iniciaSesion(app)
         Task { @MainActor in
-            Isla.pase(app.nombre, minutos: minutos)   // «Instagram · 4:59» en la isla hasta que caduque
+            await FrenoAvisos.programa(app)           // «Llevas 5 min… ¿sigues?» a los 5, 10, 15…
+            Isla.pase(app, hasta: pase(app) ?? Date().addingTimeInterval(Double(minutos) * 60))   // «Instagram · 4:59» en la isla
             _ = await UIApplication.shared.open(app.enlace)
         }
     }
 
     static func renuncia(_ app: AppFrenada) {
         apunta(app) { $0.renuncias += 1 }
+        FrenoAvisos.cancela(app)
     }
 }
 
@@ -240,7 +302,7 @@ struct FrenoIntent: AppIntent {
         guard let frenada = AppFrenada.resuelve(nombre: app, esquema: enlace) else {
             throw FrenoError.sinEnlace(app)
         }
-        return .result(value: Freno.alAbrir(frenada))
+        return .result(value: await Freno.alAbrirConAvisos(frenada))
     }
 }
 
@@ -270,6 +332,7 @@ struct FrenoCerradaIntent: AppIntent {
         let frenada = Freno.apps()[clave] ?? AppFrenada.resuelve(nombre: app, esquema: nil)
             ?? AppFrenada(rawValue: clave, nombre: app, esquema: "")
         Freno.alCerrar(frenada)
+        await MainActor.run { Isla.terminaPase() }
         return .result()
     }
 }
@@ -281,13 +344,20 @@ struct PantallaFreno: View {
 
     @State private var queda: Int
     @State private var respira = false
+    /// Venimos de un «¿sigues?»: sin espera, enseña cuánto llevas y deja salir o seguir.
+    private let revision: Bool
+    private let llevas: Int
     private let contador: ContadorFreno
     private let reloj = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     init(app: AppFrenada, cerrar: @escaping () -> Void) {
         self.app = app
         self.cerrar = cerrar
-        _queda = State(initialValue: Freno.espera(app))
+        let rev = Freno.revision
+        Freno.revision = false
+        revision = rev
+        llevas = Freno.llevados(app)
+        _queda = State(initialValue: rev ? 0 : Freno.espera(app))
         contador = Freno.deHoy(app)
     }
 
@@ -296,6 +366,11 @@ struct PantallaFreno: View {
             Spacer()
             Text(app.nombre)
                 .font(.largeTitle.bold())
+            if revision {
+                Text(llevas > 0 ? "Llevas \(llevas) min en \(app.nombre)" : "Acabas de entrar en \(app.nombre)")
+                    .font(.title3.weight(.semibold))
+                    .multilineTextAlignment(.center)
+            }
             Text(resumen)
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -316,21 +391,22 @@ struct PantallaFreno: View {
             Spacer()
             VStack(spacing: 12) {
                 Button {
-                    Freno.renuncia(app)
+                    if revision { Freno.dejala(app) } else { Freno.renuncia(app) }
                     Haptica.shared.toca("marcar")
                     cerrar()
                 } label: {
-                    Text("Mejor no").frame(maxWidth: .infinity)
+                    Text(revision ? "Mejor lo dejo" : "Mejor no").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .foregroundStyle(Tema.acentoTexto)
                 .controlSize(.large)
 
                 Button {
-                    Freno.entra(app, minutos: Freno.minutosPase)
+                    if revision { Freno.sigue(app, minutos: Freno.minutosPase) } else { Freno.entra(app, minutos: Freno.minutosPase) }
                     cerrar()
                 } label: {
-                    Text("Entrar \(Freno.minutosPase) min").frame(maxWidth: .infinity)
+                    Text(revision ? "Seguir \(Freno.minutosPase) min más" : "Entrar \(Freno.minutosPase) min")
+                        .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
@@ -376,6 +452,9 @@ struct SeccionFreno: View {
     @AppStorage("freno.esperaPaso", store: Almacen.defaults) private var esperaPaso = 3
     @AppStorage("freno.libres", store: Almacen.defaults) private var libres = 0
     @AppStorage("freno.limite", store: Almacen.defaults) private var limite = 0
+    @AppStorage("freno.avisos", store: Almacen.defaults) private var avisos = true
+    @AppStorage("freno.avisoCada", store: Almacen.defaults) private var avisoCada = 5
+    @AppStorage("freno.avisoVeces", store: Almacen.defaults) private var avisoVeces = 3
     @State private var ayuda = false
 
     var body: some View {
@@ -386,6 +465,12 @@ struct SeccionFreno: View {
             Stepper("Aperturas libres al día: \(libres)", value: $libres, in: 0...20)
             Stepper(limite == 0 ? "Límite diario: sin límite" : "Límite diario: \(limite) min",
                     value: $limite, in: 0...240, step: 5)
+            Toggle("Preguntarme «¿sigues?» dentro", isOn: $avisos)
+            if avisos {
+                Stepper("Cada \(avisoCada) min", value: $avisoCada, in: 1...30)
+                Stepper("Hasta \(avisoVeces) \(avisoVeces == 1 ? "aviso" : "avisos") (\(FrenoAvisos.resumenMinutos(cada: avisoCada, veces: avisoVeces)))",
+                        value: $avisoVeces, in: 1...6)
+            }
             let hoy = Freno.apps().values.sorted { $0.nombre < $1.nombre }.map { ($0, Freno.deHoy($0)) }.filter { $0.1.aperturas > 0 }
             ForEach(hoy, id: \.0) { app, c in
                 LabeledContent(app.nombre, value: c.segundos > 0
@@ -401,8 +486,12 @@ struct SeccionFreno: View {
                 3. Añade «Abrir URL» (la de Atajos): coge sola el resultado de la anterior.
                 Sin pase, se abre Tom y te pregunta. La primera vez de cada hora esperas \(esperaInicial) s; cada vez que vuelves a entrar en esa misma hora, \(esperaPaso) s más (hasta 30). Al cambiar la hora vuelve a empezar.
 
+                Con la app abierta, Tom te avisa a los \(FrenoAvisos.resumenMinutos(cada: avisoCada, veces: avisoVeces)) min: «Salir» te trae aquí a pensártelo y «\(Freno.minutosPase) min más» amplía el pase sin abrir la app. En la isla dinámica, al llegar el momento, el pase pasa a «¿sigues?» con un botón «Salir». Si cierras la app (o dices «Mejor no») los avisos se cancelan. iOS no deja que una app te saque de otra a la fuerza: son avisos, no un muro. Cuando acaba el pase y la app sigue abierta, la siguiente vez que la abras vuelve a salir el freno.
+
                 Para medir el uso real (y el límite diario), otra automatización por app:
-                App → la misma, marca solo «Se cierra» y «Ejecutar inmediatamente» → acción «App cerrada» de Tom con el mismo nombre.
+                App → la misma, marca solo «Se cierra» y «Ejecutar inmediatamente» → acción «App cerrada» de Tom con el mismo nombre. Con ella además se cancelan los avisos pendientes al salir.
+
+                Como refuerzo que sí corta de verdad, usa los Ajustes de iOS → Tiempo de uso → Límites de apps: al llegar al límite, iOS bloquea la app y solo la desbloquea con tu código.
                 """)
                 .font(.callout)
                 .foregroundStyle(.secondary)

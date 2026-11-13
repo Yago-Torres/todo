@@ -15,6 +15,7 @@ struct AvisoActividad: ActivityAttributes {
         var progreso: Double?      // 0…1 (la subida)
         var listo: Bool = false
         var anillos: [Double] = [] // «Día en la isla»: hábitos, pasos, sueño (0…1)
+        var enlace: String? = nil  // freno: hoy://freno?app=…&revision=1, para el botón «Salir» cuando toca «¿sigues?»
     }
 
     /// descanso | freno | subida | dia

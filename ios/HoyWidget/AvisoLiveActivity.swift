@@ -31,10 +31,12 @@ struct AvisoLiveActivity: Widget {
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     VStack(alignment: .leading, spacing: 6) {
-                        if !e.detalle.isEmpty {
-                            Text(e.detalle).font(.callout).foregroundStyle(Tono2.suave).lineLimit(2)
+                        let detalle = AvisoVista.detalle(e, caducada: caducada)
+                        if !detalle.isEmpty {
+                            Text(detalle).font(.callout).foregroundStyle(Tono2.suave).lineLimit(2)
                         }
                         AvisoVista.barra(e, caducada: caducada)
+                        AvisoVista.salir(e, caducada: caducada)
                     }
                 }
             } compactLeading: {
@@ -73,7 +75,9 @@ private enum Tono2 {
 enum AvisoVista {
     /// Lo de la derecha: la cuenta atrás, el porcentaje, un check o los hábitos.
     @ViewBuilder static func derecha(_ e: AvisoActividad.ContentState, caducada: Bool) -> some View {
-        if e.listo || caducada {
+        if AvisoVista.sigues(e, caducada: caducada), let inicio = e.inicio {
+            Text(inicio, style: .timer)   // freno: lo que llevas, subiendo
+        } else if e.listo || caducada {
             Image(systemName: "checkmark")
         } else if let inicio = e.inicio, let fin = e.fin, fin > inicio {
             Text(timerInterval: inicio...fin, countsDown: true)
@@ -83,6 +87,29 @@ enum AvisoVista {
             Text("\(Int((h * 100).rounded()))%")
         } else {
             EmptyView()
+        }
+    }
+
+    /// El freno con «¿sigues?» activado, al llegar el momento del aviso (la actividad caduca justo entonces).
+    static func sigues(_ e: AvisoActividad.ContentState, caducada: Bool) -> Bool {
+        caducada && !e.listo && e.enlace != nil
+    }
+
+    static func detalle(_ e: AvisoActividad.ContentState, caducada: Bool) -> String {
+        sigues(e, caducada: caducada) ? "¿Sigues? Llevas este rato: piénsatelo." : e.detalle
+    }
+
+    /// «Salir»: abre Tom en la pantalla de freno con lo que llevas (hoy://freno?app=…&revision=1).
+    @ViewBuilder static func salir(_ e: AvisoActividad.ContentState, caducada: Bool) -> some View {
+        if sigues(e, caducada: caducada), let texto = e.enlace, let url = URL(string: texto) {
+            Link(destination: url) {
+                Label("Salir", systemImage: "arrow.uturn.backward")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(Tono2.fondo)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Tono2.acento, in: Capsule())
+            }
         }
     }
 
@@ -116,10 +143,11 @@ enum AvisoVista {
             }
             VStack(alignment: .leading, spacing: 4) {
                 Text(e.titulo).font(.headline).foregroundStyle(Tono2.texto).lineLimit(1)
-                if !e.detalle.isEmpty {
-                    Text(e.detalle).font(.subheadline).foregroundStyle(Tono2.suave).lineLimit(2)
+                if !detalle(e, caducada: caducada).isEmpty {
+                    Text(detalle(e, caducada: caducada)).font(.subheadline).foregroundStyle(Tono2.suave).lineLimit(2)
                 }
                 barra(e, caducada: caducada)
+                salir(e, caducada: caducada)
             }
             Spacer(minLength: 0)
             derecha(e, caducada: caducada)
