@@ -2,8 +2,8 @@ import SwiftUI
 import LocalAuthentication
 import WidgetKit
 
-/// Claves y ajustes. La primera vez sale sola; después se abre desde la web (fila «Ajustes de la app» en Ajustes,
-/// que manda {accion:"configurar"}), con hoy://configurar o con el botón de la página «Sin conexión» (ver Raiz).
+/// Claves y ajustes. La primera vez sale sola; después se abre desde Ajustes («Ajustes de la app»), el acceso
+/// «Ajustes de Tom» del icono o hoy://configurar (ver Raiz).
 struct Configurar: View {
     let alGuardar: (Claves) -> Void
 
@@ -154,7 +154,7 @@ struct Configurar: View {
                 } header: {
                     Text("Diagnóstico")
                 } footer: {
-                    Text("Si la web sale con la pantalla de Cloudflare, pulsa aquí y manda una captura.")
+                    Text("Comprueba la firma, las claves y si el servidor contesta. Si algo sale con ✗ o con un error, manda una captura.")
                 }
             }
             }
@@ -205,7 +205,7 @@ struct Configurar: View {
     private func diagnostica() async {
         guard let c = Almacen.claves else { return }
         diagnosticando = true
-        diagnostico = await Galletas.diagnostico(c)
+        diagnostico = await Diagnostico.comprueba(c)
         diagnosticando = false
     }
 

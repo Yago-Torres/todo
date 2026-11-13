@@ -36,7 +36,6 @@ final class Red: @unchecked Sendable {
         conRed = ahora
         cerrojo.unlock()
         guard ahora != antes else { return }
-        Task { @MainActor in PuenteLocal.activo?.red(ahora) }
         if ahora { Task { await Sincro.vacia() } }
     }
 }
@@ -92,10 +91,7 @@ enum Sincro {
         let enviados = await recorre(forzar: forzar)
         await turno.suelta()
         if enviados > 0 {
-            await MainActor.run {
-                PuenteLocal.activo?.sincronizado(enviados)
-                WidgetCenter.shared.reloadAllTimelines()
-            }
+            await MainActor.run { WidgetCenter.shared.reloadAllTimelines() }
         }
         return enviados
     }
@@ -107,7 +103,6 @@ enum Sincro {
             if Task.isCancelled { break }
             // en orden: si el primero espera su reintento, los de detrás también
             if !forzar, let proximo = c.proximo, proximo > Date() { break }
-            let ruta = c.ruta
             switch await envia(c) {
             case .hecho:
                 Local.borraCambio(c.id, rev: c.rev)
@@ -121,7 +116,6 @@ enum Sincro {
                 if intentos >= limite {
                     Local.actualiza(c.id, estado: .error, intentos: intentos, error: motivo, proximo: nil)
                     avisa("Un cambio no se ha podido guardar", "\(c.resumen): \(motivo). Lo tienes en Configurar → Sin conexión.")
-                    await MainActor.run { PuenteLocal.activo?.conflicto(ruta, motivo) }
                 } else {
                     let espera = min(3600, 30 * pow(2, Double(intentos - 1)))
                     Local.actualiza(c.id, estado: .pendiente, intentos: intentos, error: motivo,
@@ -132,7 +126,6 @@ enum Sincro {
                 Local.actualiza(c.id, estado: .conflicto, intentos: c.intentos + 1, error: motivo, proximo: nil)
                 avisa("Cambio sin guardar por un conflicto",
                       "\(c.resumen): \(motivo). No se ha perdido: lo tienes en Configurar → Sin conexión.")
-                await MainActor.run { PuenteLocal.activo?.conflicto(ruta, motivo) }
             }
         }
         if enviados > 0 { Local.ultimaSincronizacion = Date() }
@@ -326,7 +319,7 @@ enum Sincro {
         return .ok(resultado.0, http)
     }
 
-    /// La fecha del servidor (cabecera Date): la misma reloj que la de las copias que guarda la web.
+    /// La fecha del servidor (cabecera Date): el mismo reloj para todas las copias de Local.
     static func fechaDe(_ http: HTTPURLResponse) -> Date {
         guard let texto = http.value(forHTTPHeaderField: "Date") else { return Date() }
         let f = DateFormatter()

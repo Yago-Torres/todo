@@ -12,11 +12,12 @@ extension Aspecto {
         return catalogo?.temas?.first { $0.base.uppercased() == eleccion.base.uppercased() }
     }
 
-    /// El fondo animado del tema (FondoTema); sin catálogo nuevo, el ASCII de siempre.
-    var decoracion: String { temaDelCatalogo?.decoracion ?? "ascii" }
+    /// El fondo animado del tema (FondoTema); sin catálogo nuevo, el ASCII de siempre. Recién arrancada (aún sin
+    /// catálogo), el de la última vez.
+    var decoracion: String { temaDelCatalogo?.decoracion ?? (catalogo == nil ? instantanea?.decoracion : nil) ?? "ascii" }
 
     /// El juego de sonidos del tema (Sonidos).
-    var juegoSonidos: String { temaDelCatalogo?.sonido ?? "campanas" }
+    var juegoSonidos: String { temaDelCatalogo?.sonido ?? (catalogo == nil ? instantanea?.sonido : nil) ?? "campanas" }
 }
 
 /// Lo que mueve los fondos y la mascota sin tocarlos: la inclinación del iPhone y el último toque en pantalla.
@@ -74,7 +75,20 @@ final class MovimientoFondo {
         revisa()
     }
 
+    /// CoreMotion tarda en arrancar y el fondo se ve igual quieto: no se enciende hasta que la app ya ha pintado.
+    @ObservationIgnored private var arranqueHecho = false
+    @ObservationIgnored private var esperaArranque: Task<Void, Never>?
+
     private func revisa() {
+        if !arranqueHecho {
+            guard esperaArranque == nil else { return }
+            esperaArranque = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(1500))
+                MovimientoFondo.shared.arranqueHecho = true
+                MovimientoFondo.shared.revisa()
+            }
+            return
+        }
         let debe = usuarios > 0 && UIApplication.shared.applicationState == .active
             && !UIAccessibility.isReduceMotionEnabled && sensor.isDeviceMotionAvailable
         if debe, !sensor.isDeviceMotionActive {

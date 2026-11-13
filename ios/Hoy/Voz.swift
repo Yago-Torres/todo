@@ -198,7 +198,7 @@ final class Conversacion: NSObject, AVSpeechSynthesizerDelegate {
         paraEscucha()
         if sintetizador.isSpeaking { sintetizador.stopSpeaking(at: .immediate) }
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        Sonido.ambiente()   // de vuelta a la web: sus sonidos otra vez discretos
+        Sonido.ambiente()   // de vuelta a la app: sus sonidos otra vez discretos
         cerrada = true
     }
 

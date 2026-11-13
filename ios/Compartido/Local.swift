@@ -229,8 +229,8 @@ enum Local {
 
     // MARK: respuestas
 
-    /// «GET /api/toca?dia=2026-11-11»: la ruta tal cual y la query ordenada y sin codificar. La misma receta que
-    /// clave() del puente de la web (Hoy/Offline.swift), para que lo que guarda uno lo encuentre el otro.
+    /// «GET /api/toca?dia=2026-11-11»: la ruta tal cual y la query ordenada y sin codificar, para que la misma petición
+    /// dé siempre la misma clave.
     static func clave(_ metodo: String, _ ruta: String) -> String {
         guard let c = URLComponents(string: ruta) else { return "\(metodo) \(ruta)" }
         let pares = (c.queryItems ?? []).map { ($0.name, $0.value ?? "") }
@@ -267,7 +267,7 @@ enum Local {
         }
     }
 
-    /// Solo la fecha: la web pregunta esto en cada GET y el cuerpo entero solo si lo va a usar.
+    /// Solo la fecha y si es un cambio local, sin leer el cuerpo.
     static func meta(_ clave: String) -> (fecha: Date, local: Bool)? {
         conBase { (db: OpaquePointer) -> (fecha: Date, local: Bool)? in
             var r: (fecha: Date, local: Bool)?
@@ -439,7 +439,7 @@ enum Local {
 
     // MARK: lo apuntado sin red, ya pintado
 
-    /// Una marca que espera en la cola se ve ya en la copia de /api/state y /api/hoy (la web sin red) y en hoy.json
+    /// Una marca que espera en la cola se ve ya en la copia de /api/state y /api/hoy (las pantallas sin red) y en hoy.json
     /// (el widget). Es la misma marca idempotente que mandará la cola, así que no puede contradecirla.
     static func apuntaMarca(dia: String, habito: String, hecho: Bool) {
         let cEstado = clave("GET", "/api/state")

@@ -219,14 +219,19 @@ enum ColoresGuardados {
         return r
     }
 
-    /// El token en claro u oscuro según el widget; sin nada guardado, `claro`/`oscuro` de respaldo.
+    /// El token en claro u oscuro según el widget; sin nada guardado, `claro`/`oscuro` de respaldo. Con el modo noche
+    /// (Noche.swift), siempre el oscuro con su filtro cálido.
     static func color(_ token: String, claro: String, oscuro: String) -> Color {
         let g = lee()
-        return Color(uiColor: .dinamico(claro: g["claro"]?[token] ?? claro, oscuro: g["oscuro"]?[token] ?? oscuro))
+        let o = g["oscuro"]?[token] ?? oscuro
+        if Noche.activa() { return Color(uiColor: UIColor(css: Noche.filtra(o, acento: Noche.tokensAcento.contains(token)))) }
+        return Color(uiColor: .dinamico(claro: g["claro"]?[token] ?? claro, oscuro: o))
     }
 
-    /// Solo el valor oscuro (la Live Activity y los widgets de fondo oscuro).
+    /// Solo el valor oscuro (la Live Activity y los widgets de fondo oscuro), con el filtro del modo noche si toca.
     static func oscuro(_ token: String, _ respaldo: String) -> Color {
-        Color(uiColor: UIColor(css: lee()["oscuro"]?[token] ?? respaldo))
+        let o = lee()["oscuro"]?[token] ?? respaldo
+        if Noche.activa() { return Color(uiColor: UIColor(css: Noche.filtra(o, acento: Noche.tokensAcento.contains(token)))) }
+        return Color(uiColor: UIColor(css: o))
     }
 }
