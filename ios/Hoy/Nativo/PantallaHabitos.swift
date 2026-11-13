@@ -8,6 +8,7 @@ struct PantallaHabitos: View {
     @State private var semanaAtras = 0
     @State private var editando = false
     @State private var planificando = false
+    @State private var calendario = false
     @State private var nuevo: BorradorHabito?
     @State private var descansos = false
     @State private var rachas = DatosRachas.shared
@@ -63,6 +64,7 @@ struct PantallaHabitos: View {
         .sheet(isPresented: $descansos) { HojaDescansos() }
         .sheet(isPresented: $editando) { EditorHabitos() }
         .sheet(isPresented: $planificando) { PlanificarSemana() }
+        .sheet(isPresented: $calendario) { CalendarioHabitos() }
         .sheet(item: $nuevo) { FichaHabito(borrador: $0) }
     }
 
@@ -88,6 +90,7 @@ struct PantallaHabitos: View {
                 Menu {
                     Button("Nuevo hábito", systemImage: "plus") { nuevo = BorradorHabito() }
                     Button("Planificar la semana", systemImage: "calendar") { planificando = true }
+                    Button("Calendario del mes", systemImage: "calendar.day.timeline.left") { calendario = true }
                     Button("Editar y ordenar", systemImage: "pencil") { editando = true }
                     Divider()
                     Button("Descansar hoy, vacaciones y comodines", systemImage: "leaf") { descansos = true }

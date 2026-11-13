@@ -6,6 +6,7 @@ import SwiftUI
 struct MenuSemanaComida: View {
     @State private var datos = DatosComida.shared
     @State private var receta: EstadoComida.Receta?
+    @State private var compra = false
 
     var body: some View {
         ScrollView {
@@ -19,6 +20,17 @@ struct MenuSemanaComida: View {
                         Text("Todavía no hay menú para esta semana. Genera uno aquí abajo.")
                             .font(Tema.fuente(.texto)).foregroundStyle(Tema.suave).carta()
                     }
+                    Button {
+                        Haptica.shared.toca(.marcar)
+                        compra = true
+                    } label: {
+                        Label("Lista de la compra y cuentas", systemImage: "cart")
+                            .font(Tema.fuente(.destacado))
+                            .frame(maxWidth: .infinity).padding(.vertical, 12)
+                            .foregroundStyle(Tema.acento)
+                            .background(Tema.acentoSuave, in: RoundedRectangle(cornerRadius: Tema.Radio.boton, style: .continuous))
+                    }
+                    .buttonStyle(EstiloHundir())
                     ForEach(datos.dias, id: \.self) { dia in
                         DiaMenu(dia: dia, estado: e) { receta = $0 }
                     }
@@ -36,6 +48,7 @@ struct MenuSemanaComida: View {
         .scrollDismissesKeyboard(.interactively)
         .refreshable { await datos.carga() }
         .task { await datos.carga() }
+        .sheet(isPresented: $compra) { HojaCompraMenu() }
         .sheet(item: $receta) { r in
             if let e = datos.estado { DetalleReceta(receta: r, estado: e) }
         }
