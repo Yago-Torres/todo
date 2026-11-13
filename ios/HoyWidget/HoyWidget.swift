@@ -67,7 +67,9 @@ extension Hoy {
     }
 }
 
-struct HoyWidget: Widget {
+/// El widget principal. El tipo no se llama como el módulo (HoyWidget) para que no lo tape; el `kind` sigue siendo
+/// "HoyWidget", así que los widgets ya puestos no se pierden.
+struct WidgetHoy: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "HoyWidget", provider: Proveedor()) { entrada in
             HoyWidgetVista(entrada: entrada)
@@ -79,10 +81,22 @@ struct HoyWidget: Widget {
     }
 }
 
+/// Todo lo que sale en la galería, en grupos de menos de diez (el límite de WidgetBundleBuilder en un mismo bloque
+/// en iOS 17): los widgets de pantalla, las Live Activities y, desde iOS 18, los controles.
 @main
 struct HoyWidgets: WidgetBundle {
     var body: some Widget {
-        HoyWidget()
+        WidgetsDePantalla().body
+        WidgetsVivos().body
+        if #available(iOS 18.0, *) {
+            ControlesTom().body
+        }
+    }
+}
+
+struct WidgetsDePantalla: WidgetBundle {
+    var body: some Widget {
+        WidgetHoy()
         HoyDatoWidget()
         PendientesWidget()
         EntrenoWidget()
@@ -90,13 +104,22 @@ struct HoyWidgets: WidgetBundle {
         SuenoWidget()
         RachaWidget()
         SemanaWidget()
+    }
+}
+
+struct WidgetsVivos: WidgetBundle {
+    var body: some Widget {
         EntrenoLiveActivity()
         AvisoLiveActivity()
-        if #available(iOS 18.0, *) {
-            HablaConTomControl()
-            ApuntaTareaControl()
-            MarcaHabitoControl()
-            AbreSeccionControl()
-        }
+    }
+}
+
+@available(iOS 18.0, *)
+struct ControlesTom: WidgetBundle {
+    var body: some Widget {
+        HablaConTomControl()
+        ApuntaTareaControl()
+        MarcaHabitoControl()
+        AbreSeccionControl()
     }
 }
