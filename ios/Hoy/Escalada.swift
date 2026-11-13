@@ -67,7 +67,30 @@ final class Escalada {
         trabajo = "Leyendo el vídeo…"
         progreso = nil
         aviso = nil
-        Task { await procesa(elegido, datos) }
+        Task {
+            await procesa({
+                guard let video = try await elegido.loadTransferable(type: VideoElegido.self) else {
+                    throw APIError(mensaje: "No se ha podido leer el vídeo")
+                }
+                return video.url
+            }, datos)
+        }
+    }
+
+    /// Un vídeo que ya está en el iPhone (el grabado en el modo en vivo): se copia, porque el proceso borra el suyo.
+    func empieza(archivo: URL, _ datos: DatosIntento) {
+        guard trabajo == nil else { return }
+        trabajo = "Preparando el vídeo…"
+        progreso = nil
+        aviso = nil
+        Task {
+            await procesa({
+                let ext = archivo.pathExtension.isEmpty ? "mov" : archivo.pathExtension
+                let copia = ArchivosEscalada.carpeta.appendingPathComponent("original-\(UUID().uuidString).\(ext)")
+                try FileManager.default.copyItem(at: archivo, to: copia)
+                return copia
+            }, datos)
+        }
     }
 
     func reintenta(_ d: DatosIntento) {
@@ -89,7 +112,7 @@ final class Escalada {
 
     // MARK: el proceso
 
-    private func procesa(_ elegido: PhotosPickerItem, _ base: DatosIntento) async {
+    private func procesa(_ lee: () async throws -> URL, _ base: DatosIntento) async {
         var original: URL?
         defer {
             trabajo = nil
@@ -99,16 +122,14 @@ final class Escalada {
         var datos = base
         do {
             _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
-            guard let video = try await elegido.loadTransferable(type: VideoElegido.self) else {
-                throw APIError(mensaje: "No se ha podido leer el vídeo")
-            }
-            original = video.url
-            datos.intento = await Self.idIntento(video.url)
+            let leido = try await lee()
+            original = leido
+            datos.intento = await Self.idIntento(leido)
             let intento = datos.intento, inicial = datos
             trabajo = "Comprimiendo…"
             progreso = 0
             emite(intento, "comprimiendo", progreso: 0, datos: inicial)
-            let (comprimido, tipo) = try await Self.comprime(video.url, intento: intento) { [weak self] p in
+            let (comprimido, tipo) = try await Self.comprime(leido, intento: intento) { [weak self] p in
                 guard let self else { return }
                 self.progreso = p
                 self.emite(intento, "comprimiendo", progreso: p, datos: inicial)
@@ -569,6 +590,8 @@ enum VistaPrevia {
 // MARK: - la hoja
 
 struct HojaEscalada: View {
+    /// Un vídeo ya grabado (el modo en vivo): sin elegir de Fotos.
+    var archivo: URL?
     @Environment(\.dismiss) private var cerrar
     @State private var elegido: PhotosPickerItem?
     @State private var color = ""
@@ -580,13 +603,21 @@ struct HojaEscalada: View {
 
     private var escalada: Escalada { Escalada.shared }
 
+    init(archivo: URL? = nil) {
+        self.archivo = archivo
+    }
+
     var body: some View {
         NavigationStack {
             Form {
                 Group {
                 Section {
-                    PhotosPicker(selection: $elegido, matching: .videos, preferredItemEncoding: .current) {
-                        Label(elegido == nil ? "Elegir el vídeo" : "Vídeo elegido · cambiar", systemImage: "video")
+                    if archivo != nil {
+                        Label("El vídeo que acabas de grabar", systemImage: "checkmark.circle.fill")
+                    } else {
+                        PhotosPicker(selection: $elegido, matching: .videos, preferredItemEncoding: .current) {
+                            Label(elegido == nil ? "Elegir el vídeo" : "Vídeo elegido · cambiar", systemImage: "video")
+                        }
                     }
                 }
                 Section("El bloque") {
@@ -618,7 +649,7 @@ struct HojaEscalada: View {
                 }
                 Section {
                     Button("Subir") { sube() }
-                        .disabled(elegido == nil || color.isEmpty || escalada.trabajo != nil)
+                        .disabled((elegido == nil && archivo == nil) || color.isEmpty || escalada.trabajo != nil)
                     if let trabajo = escalada.trabajo {
                         HStack {
                             Text(trabajo)
@@ -676,7 +707,7 @@ struct HojaEscalada: View {
     }
 
     private func sube() {
-        guard let elegido else { return }
+        guard elegido != nil || archivo != nil else { return }
         var d = DatosIntento()
         d.angulo = angulo
         d.quien = quien.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? escalada.quien : quien
@@ -684,6 +715,12 @@ struct HojaEscalada: View {
         d.nombre = nombre.trimmingCharacters(in: .whitespacesAndNewlines)
         d.resultado = resultado
         d.nivel = nivel == 0 ? nil : nivel
+        if let archivo {
+            escalada.empieza(archivo: archivo, d)
+            cerrar()
+            return
+        }
+        guard let elegido else { return }
         escalada.empieza(elegido, d)
         self.elegido = nil
         nombre = ""

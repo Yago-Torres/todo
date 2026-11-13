@@ -16,6 +16,7 @@ struct PantallaEntreno: View {
     @State private var sesion = SesionEnCurso.shared
     @State private var guia = GuiaEnCurso.shared
     @State private var escalada = EscaladaDatos.shared
+    @State private var vivo = VivoEscalada.shared
     @State private var viendo: VistaRutina.Ver?
     @State private var verCarrera = false
     @Environment(\.scenePhase) private var fase
@@ -58,6 +59,9 @@ struct PantallaEntreno: View {
         }
         .fullScreenCover(isPresented: $guia.visible) {
             VistaGuia()
+        }
+        .fullScreenCover(isPresented: $vivo.enVivo) {
+            PantallaEnVivo()
         }
     }
 

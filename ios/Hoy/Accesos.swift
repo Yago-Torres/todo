@@ -4,6 +4,7 @@ import UIKit
 enum Accesos {
     private static let secciones: [(tipo: String, titulo: String, simbolo: String, ruta: String)] = [
         ("entreno", "Entreno", "figure.run", "/entreno.html"),
+        ("escalada-vivo", "Escalada en vivo", "figure.climbing", "/entreno.html"),
         ("pendientes", "Pendientes", "checklist", "/pendientes.html"),
         ("habitos", "Hábitos", "checkmark.circle", "/habitos.html"),
         ("salud", "Salud", "heart.fill", "/salud.html"),
@@ -23,6 +24,11 @@ enum Accesos {
         // Configurar, sin pasar por Ajustes
         if tipo == "configurar" {
             Task { @MainActor in Navegador.shared.configurar = true }
+            return
+        }
+        // la cámara con el esqueleto en vivo, encima de Entreno
+        if tipo == "escalada-vivo" {
+            Task { @MainActor in VivoEscalada.shared.abre() }
             return
         }
         guard let s = secciones.first(where: { $0.tipo == tipo }) else { return }

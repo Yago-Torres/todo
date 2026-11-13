@@ -78,7 +78,9 @@
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Tom usa la cámara para escanear o fotografiar tus documentos.</string>
+	<string>Tom usa la cámara para escanear o fotografiar tus documentos y para grabar tus intentos de escalada con el esqueleto en vivo.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Tom guarda en Fotos los vídeos de escalada y las tarjetas que creas, para que los compartas.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Tom usa Face ID para que nadie más vea tus hábitos y tus datos al abrirla.</string>
 	<key>NSHealthShareUsageDescription</key>

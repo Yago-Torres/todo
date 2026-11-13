@@ -165,12 +165,21 @@ struct TarjetaEscalada: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Tema.Espacio.m) {
             TituloEnt("Escalada")
-            Button {
-                Escalada.shared.hojaVisible = true
-            } label: {
-                Label("Subir intento", systemImage: "video.badge.plus").frame(maxWidth: .infinity, minHeight: 44)
+            HStack(spacing: Tema.Espacio.s) {
+                Button {
+                    VivoEscalada.shared.enVivo = true
+                } label: {
+                    Label("En vivo", systemImage: "figure.climbing").frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(BotonEnt(principal: true))
+                .accessibilityHint("Abre la cámara con el esqueleto en tiempo real")
+                Button {
+                    Escalada.shared.hojaVisible = true
+                } label: {
+                    Label("Subir intento", systemImage: "video.badge.plus").frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(BotonEnt())
             }
-            .buttonStyle(BotonEnt(principal: true))
             if let t = subida.trabajo {
                 HStack {
                     ProgressView().tint(Tema.acento)
