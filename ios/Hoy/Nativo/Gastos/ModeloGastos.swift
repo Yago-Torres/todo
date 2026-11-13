@@ -40,13 +40,15 @@ struct ResumenGastos: Decodable {
     var historico: [Ciclo] = []
     var insights: [Insight] = []
     var suscripciones: [Suscripcion] = []
+    /// Lo que se repite (semana, mes, año), también lo ignorado: el bloque Recurrentes (ReglasGastos.swift).
+    var recurrentes: [Recurrente] = []
     var ingresos: [IngresoCiclo] = []
     var sugeridoTotal = 0.0
     var pareja = ""
     var hucha: Hucha?
 
     enum CodingKeys: String, CodingKey {
-        case inicio, fin, dias, hechos, actual, total, aparte, presu, ingreso, extra, proyeccion, n, cats, serie, historico, insights, suscripciones, ingresos, pareja, hucha
+        case inicio, fin, dias, hechos, actual, total, aparte, presu, ingreso, extra, proyeccion, n, cats, serie, historico, insights, suscripciones, ingresos, pareja, hucha, recurrentes
         case diaCobro = "dia_cobro"
         case seriePrevia = "serie_previa"
         case sugeridoTotal = "sugerido_total"
@@ -169,6 +171,7 @@ struct ResumenGastos: Decodable {
         proyeccion = c.v(.proyeccion, 0); n = c.v(.n, 0); cats = c.v(.cats, [])
         serie = c.v(.serie, []); seriePrevia = c.v(.seriePrevia, []); historico = c.v(.historico, [])
         insights = c.v(.insights, []); suscripciones = c.v(.suscripciones, []); ingresos = c.v(.ingresos, [])
+        recurrentes = c.v(.recurrentes, [])
         sugeridoTotal = c.v(.sugeridoTotal, 0)
         pareja = (try? c.decodeIfPresent(String.self, forKey: .pareja)) ?? ""
         hucha = try? c.decodeIfPresent(Hucha.self, forKey: .hucha)
@@ -251,9 +254,13 @@ struct EstadoGastos: Decodable {
     var cats: [CategoriaBase] = []
     var gastos: [Movimiento] = []
     var viajes: [Viaje] = []
+    /// Reglas de categoría (el orden es la prioridad), palabras rechazadas y recurrentes confirmados/ignorados.
+    var reglas: [ReglaGasto] = []
+    var rechazadas: [String] = []
+    var recurrentes: [String: String] = [:]
 
     enum CodingKeys: String, CodingKey {
-        case cats, gastos, viajes
+        case cats, gastos, viajes, reglas, rechazadas, recurrentes
     }
 
     struct CategoriaBase: Decodable, Identifiable, Hashable {
@@ -293,6 +300,7 @@ struct EstadoGastos: Decodable {
     init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
         cats = c.v(.cats, []); gastos = c.v(.gastos, []); viajes = c.v(.viajes, [])
+        reglas = c.v(.reglas, []); rechazadas = c.v(.rechazadas, []); recurrentes = c.v(.recurrentes, [:])
     }
 }
 

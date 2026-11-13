@@ -251,7 +251,8 @@ PantallaEditable(pantalla: "app-entreno", titulo: "Entreno",
 Todo lo de Tom funciona sin conexión y se sincroniza solo al volver (`Compartido/Operaciones.swift`, `Hoy/Sincro.swift`).
 
 - **Operaciones con intención**, no copias del estado: `{op: "habito.edita", id, cambios}`, `habito.crea/borra/ordena`,
-  `plan.pon`, `gasto.edita/borra/restaura`, `presupuesto.pon`. Van a la cola de Local (método `OP`, ruta = el estado que
+  `plan.pon`, `gasto.edita/borra/restaura`, `presupuesto.pon`, `regla.pon/borra/ordena/rechaza/aplica` y `recurrente.marca`
+  (Gastos, `Compartido/OperacionesGastos.swift`). Van a la cola de Local (método `OP`, ruta = el estado que
   tocan) junto a las peticiones de siempre (marcas, tareas, gastos, documentos), en un único orden.
 - **Al apuntarlas** se pintan ya: la copia que se ve es «lo último del servidor (`BASE GET …`) + lo pendiente encima», y se
   rehace al bajar datos frescos, al mandar o al descartar. Sigue ahí aunque se cierre la app.
@@ -265,6 +266,21 @@ Todo lo de Tom funciona sin conexión y se sincroniza solo al volver (`Compartid
   apunta algo con red (`Hoy/Nativo/Cola/EstadoCola.swift`).
 - **Indicador**: encima de la barra, «N cambios por enviar» (`IndicadorCola`); tocarlo abre la lista con reintentar y descartar.
 - Prueba de la lógica pura: `Pruebas/PruebaOperaciones.swift` (fuera de los targets).
+
+## Gastos: flujo, reglas y recurrentes (`Hoy/Nativo/Gastos/`)
+
+- **Flujo** (`FlujoGastos.swift`, bloque `flujo`, el primero): de lo que entra (sueldo + extras) a cada categoría, la hucha
+  y lo que queda, con bandas bezier (`BandaFlujo`) que se dibujan al cargar (quietas con «reducir movimiento»). Sin
+  ingreso, o gastando más de lo que entra, sale de lo gastado. Las pequeñas van en «Otros». Tocar una banda la resalta y
+  filtra los movimientos. Las etiquetas tienen un hueco mínimo que crece con Dynamic Type: no se pisan.
+- **Reglas** (`ReglasGastos.swift`, bloque `reglas`): «si el concepto contiene "mercadona" → Súper». Las propone el
+  servidor (`GET /reglas`) y Tom al corregir la categoría de un gasto (tarjeta «¿Siempre así?»); aceptar, editar, rechazar,
+  ordenar, borrar y «aplicar a N anteriores» son operaciones de la cola: sin red también. Las aplica el servidor a lo que
+  entra por `/gasto` (bot, banco, tickets, Apple Pay). Regla en `~/gastos/CLAUDE.md`.
+- **Recurrentes** (bloque `suscripciones`, ahora «Recurrentes»): semana, mes o año, con el próximo cargo, total al mes y al
+  año; confirmar o ignorar (`recurrente.marca`). Aviso local el día antes (`AvisosRecurrentes.swift`; Configurar →
+  Gastos recurrentes, por instancia).
+- Todo por instancia: Yago y Aitana nunca se mezclan.
 
 ## Apariencia, gestos e isla
 
