@@ -56,6 +56,9 @@ struct HojaCompraMenu: View {
     @State private var aviso: String?
     @State private var apagadas: Set<String> = Set(Almacen.defaults.stringArray(forKey: "comida.apagadas") ?? [])
     @State private var vista = 0
+    /// Los productos fijados a mano (ingrediente → cadena → pid), del estado de comida.
+    @State private var pines: [String: [String: String]] = [:]
+    @State private var producto: ProductoAElegir?
 
     private var vivas: [String] { cadenas.filter { !apagadas.contains($0) } }
 
@@ -105,6 +108,9 @@ struct HojaCompraMenu: View {
         }
         .presentationBackground(Tema.fondo)
         .presentationDragIndicator(.visible)
+        .sheet(item: $producto, onDismiss: { Task { await carga() } }) { p in
+            HojaProducto(elegir: p, fijado: pines[p.ing]?[p.cadena] ?? "")
+        }
     }
 
     // MARK: lista
@@ -135,8 +141,14 @@ struct HojaCompraMenu: View {
                     .font(.system(size: 20)).foregroundStyle(hecho ? Tema.acento : Tema.tenue)
                     .contentTransition(.symbolEffect(.replace))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(f.n).font(Tema.fuente(.texto, peso: .medium)).foregroundStyle(Tema.texto)
-                        .strikethrough(hecho, color: Tema.suave)
+                    HStack(spacing: 4) {
+                        Text(f.n).font(Tema.fuente(.texto, peso: .medium)).foregroundStyle(Tema.texto)
+                            .strikethrough(hecho, color: Tema.suave)
+                        if !(pines[f.id] ?? [:]).isEmpty {
+                            Image(systemName: "pin.fill").font(.system(size: 10)).foregroundStyle(Tema.acento)
+                                .accessibilityLabel("Con producto fijado")
+                        }
+                    }
                     Text("Necesitas \(cantidad(f.cantidad, f.unidad))").font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
                     if let g = gana {
                         let cadena = g.0, o = g.1
@@ -161,6 +173,14 @@ struct HojaCompraMenu: View {
         .accessibilityElement(children: .combine)
         .accessibilityValue(hecho ? "En el carro" : "Por comprar")
         .accessibilityHint(hecho ? "Toca para sacarlo del carro" : "Toca para tacharlo")
+        .contextMenu {
+            // la web: tocar el precio de una cadena para fijar a mano el producto bueno
+            ForEach(cadenas, id: \.self) { c in
+                Button("Elegir el producto en \(c.capitalized)", systemImage: pines[f.id]?[c] != nil ? "pin.fill" : "pin") {
+                    producto = ProductoAElegir(ing: f.id, nombre: f.n, cadena: c)
+                }
+            }
+        }
     }
 
     // MARK: cuentas
@@ -264,6 +284,11 @@ struct HojaCompraMenu: View {
                 // lo tachado sin red aún no está en la lista del servidor: manda la copia del estado
                 let t = (o["tachado"] as? [String: Any]) ?? [:]
                 tachado = Dictionary(uniqueKeysWithValues: l.filas.map { ($0.id, (t[$0.id] as? Bool) ?? false) })
+                var p: [String: [String: String]] = [:]
+                for i in (o["ingredientes"] as? [[String: Any]]) ?? [] {
+                    if let id = i["id"] as? String, let pin = i["pin"] as? [String: String], !pin.isEmpty { p[id] = pin }
+                }
+                pines = p
             }
             if cadenas.isEmpty { cadenas = Array(Set(l.filas.flatMap { $0.opciones.keys })).sorted() }
             withAnimation(Tema.Muelle.pantalla) { lista = l }
@@ -280,21 +305,11 @@ struct HojaCompraMenu: View {
         if let l = lista, !l.filas.isEmpty, l.filas.allSatisfy({ estaTachado($0) }) { aviso = "Compra hecha: todo en el carro." }
         Task {
             do {
-                let (e, _) = try await API.leeOCopia("/api/comida/estado")
-                guard var o = try JSONSerialization.jsonObject(with: e) as? [String: Any] else { return }
-                var t = (o["tachado"] as? [String: Any]) ?? [:]
-                t[f.id] = si ? true : nil
-                o["tachado"] = t
-                // lo calculado al vuelo no se devuelve (el servidor lo vuelve a poner)
-                o["objetivo"] = nil
-                o["cadenas"] = nil
-                if try await API.escribeOEncola("/api/comida/estado", metodo: "PUT", json: o) == nil {
-                    aviso = API.avisoEncolado + "."
-                }
+                if try await DatosComida.shared.tacha(f.id, si) { aviso = API.avisoEncolado + "." }
             } catch {
                 Haptica.shared.toca(.error)
                 withAnimation(Tema.Muelle.toque) { tachado[f.id] = !si }
-                aviso = "No se ha guardado: \(error.localizedDescription)"
+                aviso = "No se ha guardado: \(DatosGastos.mensaje(error))"
             }
         }
     }
@@ -320,6 +335,109 @@ struct HojaCompraMenu: View {
         case "ud": return String(format: "%g ud", (c * 10).rounded() / 10).replacingOccurrences(of: ".", with: ",")
         case "l": return c >= 1000 ? String(format: "%.1f l", c / 1000).replacingOccurrences(of: ".", with: ",") : "\(Int(c)) ml"
         default: return c >= 1000 ? String(format: "%.1f kg", c / 1000).replacingOccurrences(of: ".", with: ",") : "\(Int(c)) g"
+        }
+    }
+}
+
+
+// MARK: fijar el producto de una cadena
+
+struct ProductoAElegir: Identifiable {
+    let ing: String
+    let nombre: String
+    let cadena: String
+    var id: String { "\(ing)|\(cadena)" }
+}
+
+/// Lo que ha encontrado esa cadena para el ingrediente: tocar uno lo fija (el automático deja de decidir) y
+/// «Quitar el pin» lo devuelve al automático. Buscar necesita conexión; fijar va por la cola.
+private struct HojaProducto: View {
+    let elegir: ProductoAElegir
+    @State var fijado: String
+    @Environment(\.dismiss) private var cierra
+    @State private var productos: [ProductoCadena]?
+    @State private var error: String?
+    @State private var trabajando = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    if let productos {
+                        if productos.isEmpty {
+                            Text("Esta cadena no ha encontrado nada. Prueba a cambiar el término de búsqueda del ingrediente en la web.")
+                                .font(Tema.fuente(.texto)).foregroundStyle(Tema.suave).listRowBackground(Tema.carta)
+                        }
+                        ForEach(productos) { p in
+                            Button { fija(p.pid) } label: { fila(p) }.listRowBackground(Tema.carta)
+                        }
+                    } else if error == nil {
+                        HStack { ProgressView(); Text("Buscando…").foregroundStyle(Tema.suave) }.listRowBackground(Tema.carta)
+                    }
+                } footer: {
+                    Text("Toca el producto correcto: queda fijado y el automático deja de decidir.")
+                }
+                if !fijado.isEmpty {
+                    Section {
+                        Button("Quitar el pin", role: .destructive) { fija("") }.listRowBackground(Tema.carta)
+                    }
+                }
+                if let error {
+                    Text(error).font(Tema.fuente(.pequeno)).foregroundStyle(Tema.peligro).listRowBackground(Tema.carta)
+                }
+            }
+            .scrollContentBackground(.hidden)
+            .background(Tema.fondo.ignoresSafeArea())
+            .navigationTitle("\(elegir.nombre) · \(elegir.cadena.capitalized)")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cerrar") { cierra() } } }
+            .task { await busca() }
+            .tint(Tema.acento)
+        }
+        .presentationBackground(Tema.fondo)
+        .presentationDragIndicator(.visible)
+    }
+
+    private func fila(_ p: ProductoCadena) -> some View {
+        HStack(alignment: .top, spacing: Tema.Espacio.m) {
+            Image(systemName: p.pid == fijado ? "pin.fill" : "circle")
+                .foregroundStyle(p.pid == fijado ? Tema.acento : Tema.tenue)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(p.nombre).font(Tema.fuente(.texto)).foregroundStyle(Tema.texto)
+                Text([p.categoria ?? "", "envase \(String(format: "%.2f", p.precio).replacingOccurrences(of: ".", with: ",")) €"]
+                    .filter { !$0.isEmpty }.joined(separator: " · "))
+                    .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
+            }
+            Spacer()
+            Text("\(String(format: "%.2f", p.porUnidad).replacingOccurrences(of: ".", with: ",")) €/\(p.unidad)")
+                .font(Tema.fuente(.pequeno, peso: .semibold)).monospacedDigit().foregroundStyle(Tema.texto)
+        }
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+    }
+
+    private func busca() async {
+        do {
+            productos = try await DatosComida.shared.candidatos(elegir.ing).filter { $0.cadena == elegir.cadena }
+        } catch {
+            self.error = "No he podido buscar los productos (hace falta conexión): \(DatosGastos.mensaje(error))"
+        }
+    }
+
+    private func fija(_ pid: String) {
+        guard !trabajando else { return }
+        trabajando = true
+        Task {
+            defer { trabajando = false }
+            do {
+                try await DatosComida.shared.fija(elegir.ing, cadena: elegir.cadena, pid: pid, nombre: elegir.nombre)
+                Haptica.shared.toca(.marcar)
+                fijado = pid
+                cierra()
+            } catch {
+                Haptica.shared.toca(.error)
+                self.error = DatosGastos.mensaje(error)
+            }
         }
     }
 }

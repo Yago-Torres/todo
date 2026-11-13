@@ -30,11 +30,13 @@ enum Operaciones {
     static let bandeja = "/api/bandeja"
     static let documentos = "/api/documentos"
     static let basesGastos = ["/api/gastos", "/api/gastos-aitana"]
+    /// El estado de Comida: lo tachado, los productos fijados y la variante de cada receta van como operaciones (OpsComida).
+    static let comida = "/api/comida/estado"
     /// Cuántos hábitos admite el servidor (clean() corta en 20).
     static let maximoHabitos = 20
 
     /// Las copias que pueden llevar cambios pendientes encima.
-    static let afectables: Set<String> = Set([state, hoy, bandeja, documentos] + basesGastos.map { $0 + "/estado" })
+    static let afectables: Set<String> = Set([state, hoy, bandeja, documentos, comida] + basesGastos.map { $0 + "/estado" })
 
     /// Un cambio de la cola, ya leído.
     struct Pendiente {
@@ -54,7 +56,7 @@ enum Operaciones {
         switch p.metodo {
         case "OP":
             if p.ruta == state { return [state, hoy] }
-            if p.ruta.hasPrefix("/api/comida/") { return [] }
+            if p.ruta.hasPrefix("/api/comida/") { return p.op.hasPrefix("comida.") ? [p.ruta] : [] }
             return [p.ruta]
         case "POST":
             if p.ruta == "/api/marca" { return [state, hoy] }

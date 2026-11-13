@@ -70,24 +70,42 @@ struct EstadoComida: Decodable {
         }
     }
 
-    struct Ingrediente: Decodable, Hashable {
+    struct Ingrediente: Decodable, Hashable, Identifiable {
         var id = ""
         var n = ""
         var unidad = "kg"
         var vn = ""
         var variantes: [Variante] = []
+        /// Por 100 g en crudo (nil = sin datos), gramos de una unidad y de dónde salen los datos.
+        var n100: N100?
+        var gUd: Double?
+        var fuente = ""
+        /// El producto fijado a mano en cada cadena (pid).
+        var pin: [String: String] = [:]
 
-        enum CodingKeys: String, CodingKey { case id, n, unidad, vn, variantes }
+        enum CodingKeys: String, CodingKey {
+            case id, n, unidad, vn, variantes, n100, fuente, pin
+            case gUd = "g_ud"
+        }
 
-        struct Variante: Decodable, Hashable {
+        struct Variante: Decodable, Hashable, Identifiable {
             var id = ""
             var n = ""
+            var n100: N100?
+            var gUd: Double?
+            var fuente = ""
 
-            enum CodingKeys: String, CodingKey { case id, n }
+            enum CodingKeys: String, CodingKey {
+                case id, n, n100, fuente
+                case gUd = "g_ud"
+            }
 
             init(from d: Decoder) throws {
                 let c = try d.container(keyedBy: CodingKeys.self)
                 id = c.v(.id, ""); n = c.v(.n, "")
+                n100 = try? c.decodeIfPresent(N100.self, forKey: .n100)
+                gUd = try? c.decodeIfPresent(Double.self, forKey: .gUd)
+                fuente = c.v(.fuente, "")
             }
         }
 
@@ -95,6 +113,34 @@ struct EstadoComida: Decodable {
             let c = try d.container(keyedBy: CodingKeys.self)
             id = c.v(.id, ""); n = c.v(.n, ""); unidad = c.v(.unidad, "kg"); vn = c.v(.vn, "")
             variantes = c.v(.variantes, [])
+            n100 = try? c.decodeIfPresent(N100.self, forKey: .n100)
+            gUd = try? c.decodeIfPresent(Double.self, forKey: .gUd)
+            fuente = c.v(.fuente, ""); pin = c.v(.pin, [:])
+        }
+    }
+
+    /// Nutrición por 100 g: kcal y gramos de proteína, hidratos, grasa y (si se sabe) fibra.
+    struct N100: Decodable, Hashable {
+        var kcal = 0.0
+        var prot = 0.0
+        var hc = 0.0
+        var grasa = 0.0
+        var fibra: Double?
+
+        enum CodingKeys: String, CodingKey { case kcal, prot, hc, grasa, fibra }
+
+        init(from d: Decoder) throws {
+            let c = try d.container(keyedBy: CodingKeys.self)
+            kcal = c.v(.kcal, 0); prot = c.v(.prot, 0); hc = c.v(.hc, 0); grasa = c.v(.grasa, 0)
+            fibra = try? c.decodeIfPresent(Double.self, forKey: .fibra)
+        }
+
+        /// «389 kcal · P 17 · HC 66 · G 7».
+        var texto: String {
+            func n(_ x: Double) -> String {
+                x == x.rounded() ? String(Int(x)) : String(format: "%.1f", x).replacingOccurrences(of: ".", with: ",")
+            }
+            return "\(Int(kcal.rounded())) kcal · P \(n(prot)) · HC \(n(hc)) · G \(n(grasa))"
         }
     }
 
@@ -192,6 +238,13 @@ final class DatosComida {
             if estado == nil {
                 self.error = (error as? APIError)?.mensaje ?? "No entiendo lo que devuelve el servidor de comida."
             }
+        }
+    }
+
+    /// Vuelve a pintar la copia de Local (tras apuntar o mandar una operación de la cola).
+    func refrescaLocal() {
+        if let r = Local.lee(Local.clave("GET", ruta)), let e = try? JSONDecoder().decode(EstadoComida.self, from: r.cuerpo) {
+            withAnimation(Tema.Muelle.pantalla) { estado = e }
         }
     }
 

@@ -7,6 +7,7 @@ struct MenuSemanaComida: View {
     @State private var datos = DatosComida.shared
     @State private var receta: EstadoComida.Receta?
     @State private var compra = false
+    @State private var ingredientes = false
 
     var body: some View {
         ScrollView {
@@ -31,6 +32,17 @@ struct MenuSemanaComida: View {
                             .background(Tema.acentoSuave, in: RoundedRectangle(cornerRadius: Tema.Radio.boton, style: .continuous))
                     }
                     .buttonStyle(EstiloHundir())
+                    Button {
+                        Haptica.shared.toca(.marcar)
+                        ingredientes = true
+                    } label: {
+                        Label("Ingredientes y sus macros", systemImage: "leaf")
+                            .font(Tema.fuente(.texto, peso: .semibold))
+                            .frame(maxWidth: .infinity).padding(.vertical, 10)
+                            .foregroundStyle(Tema.texto)
+                            .background(Tema.carta, in: RoundedRectangle(cornerRadius: Tema.Radio.boton, style: .continuous))
+                    }
+                    .buttonStyle(EstiloHundir())
                     ForEach(datos.dias, id: \.self) { dia in
                         DiaMenu(dia: dia, estado: e) { receta = $0 }
                     }
@@ -49,6 +61,7 @@ struct MenuSemanaComida: View {
         .refreshable { await datos.carga() }
         .task { await datos.carga() }
         .sheet(isPresented: $compra) { HojaCompraMenu() }
+        .sheet(isPresented: $ingredientes) { HojaIngredientes() }
         .sheet(item: $receta) { r in
             if let e = datos.estado { DetalleReceta(receta: r, estado: e) }
         }
@@ -212,9 +225,20 @@ private struct DiaMenu: View {
 // MARK: una receta
 
 private struct DetalleReceta: View {
-    let receta: EstadoComida.Receta
-    let estado: EstadoComida
+    /// Lo de cuando se abrió; se pinta lo último de DatosComida (cambiar una variante se ve al momento).
+    let inicial: EstadoComida.Receta
+    let inicio: EstadoComida
     @Environment(\.dismiss) private var cierra
+    @State private var datos = DatosComida.shared
+    @State private var aviso: String?
+
+    init(receta: EstadoComida.Receta, estado: EstadoComida) {
+        inicial = receta
+        inicio = estado
+    }
+
+    private var estado: EstadoComida { datos.estado ?? inicio }
+    private var receta: EstadoComida.Receta { estado.receta(inicial.id) ?? inicial }
 
     var body: some View {
         ScrollView {
@@ -233,14 +257,30 @@ private struct DetalleReceta: View {
                 if !receta.ing.isEmpty {
                     VStack(alignment: .leading, spacing: Tema.Espacio.s) {
                         Text("Ingredientes").font(Tema.fuente(.destacado)).foregroundStyle(Tema.texto)
-                        ForEach(Array(receta.ing.enumerated()), id: \.offset) { _, l in
+                        ForEach(Array(receta.ing.enumerated()), id: \.offset) { k, l in
                             HStack(alignment: .firstTextBaseline) {
                                 Text(estado.nombre(l)).font(Tema.fuente(.texto)).foregroundStyle(Tema.texto)
+                                if let ing = estado.ingrediente(l.i), !ing.variantes.isEmpty {
+                                    // la forma de este ingrediente en esta receta (secas, cocidas, de bote…)
+                                    Menu {
+                                        Picker("Forma", selection: Binding(get: { l.v }, set: { cambia(k, l, $0, ing) })) {
+                                            Text(ing.vn.isEmpty ? "Por defecto" : ing.vn).tag("")
+                                            ForEach(ing.variantes) { v in Text(v.n).tag(v.id) }
+                                        }
+                                    } label: {
+                                        Image(systemName: "chevron.up.chevron.down")
+                                            .font(.system(size: 11, weight: .semibold)).foregroundStyle(Tema.acento)
+                                            .frame(width: 28, height: 24)
+                                    }
+                                    .accessibilityLabel("Cambiar la forma de \(ing.n)")
+                                }
                                 Spacer()
                                 Text(estado.cantidad(l)).font(Tema.fuente(.texto)).monospacedDigit()
                                     .foregroundStyle(Tema.suave)
                             }
-                            .accessibilityElement(children: .combine)
+                        }
+                        if let aviso {
+                            Text(aviso).font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
                         }
                     }
                     .carta()
@@ -267,6 +307,21 @@ private struct DetalleReceta: View {
         .background(Tema.fondo.ignoresSafeArea())
         .presentationBackground(Tema.fondo)
         .presentationDragIndicator(.visible)
+    }
+
+    private func cambia(_ k: Int, _ l: EstadoComida.Linea, _ v: String, _ ing: EstadoComida.Ingrediente) {
+        guard v != l.v else { return }
+        Haptica.shared.toca(.marcar)
+        Task {
+            do {
+                let enCola = try await datos.ponVariante(receta: receta.id, linea: k, ing: l.i, v: v, nombre: ing.n)
+                aviso = enCola ? "Guardado en el iPhone: las kcal se recalculan cuando llegue al servidor." : nil
+                if !enCola { await datos.carga() }
+            } catch {
+                Haptica.shared.toca(.error)
+                aviso = DatosGastos.mensaje(error)
+            }
+        }
     }
 
     private var macros: some View {

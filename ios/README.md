@@ -412,12 +412,20 @@ Repaso función a función de cada página web contra su pantalla de Tom (13/11)
 Ya estaban a la par: Pendientes, Documentos, Ajustes (la apariencia y las pantallas están en Configurar), Entreno
 (el aviso push de la web no aplica: Tom avisa en local), Carrera y Salud (solo lectura en la web).
 
-Lo que queda, con esfuerzo estimado:
+Segunda tanda (también hecho):
+
+| Web | Ahora en Tom |
+|---|---|
+| Comida → Ingredientes | `Comida/IngredientesComida.swift` (desde el Menú): buscar, crear, macros por 100 g, unidad, g/ud, fuente, «Rellenar» con Open Food Facts y variantes (predeterminada, borrar). POST `/ingrediente` y `/variante`; sin red, a la cola |
+| Comida → fijar producto (pin) | Mantener pulsado un ingrediente en la lista de la compra → «Elegir el producto en …» (`/candidatos`; fijar es la operación `comida.pin`) |
+| Comida → variante en la receta | En la ficha de una receta del menú, el selector junto a cada ingrediente con variantes (operación `comida.variante`) |
+| Hábitos → tira de 28 días | Tarjeta «Rachas» bajo los hábitos (`Habitos/TiraRachas.swift`): 28 días (o 4 semanas si es semanal), racha y constancia a 30 días |
+
+Tachar la compra, fijar un producto y cambiar la variante son operaciones de la cola sobre `/api/comida/estado`
+(`Compartido/OperacionesComida.swift`, `comida.tacha/pin/variante`): se ven al momento y salen solas al volver la red.
+
+Lo que queda:
 
 | Web | Falta | Esfuerzo |
 |---|---|---|
-| Comida | Editor de ingredientes: buscar, crear, corregir macros, variantes (predeterminada, borrar) y «Rellenar» con Open Food Facts (`/ingrediente`, `/variante`, `/rellena`) | Grande (1 día) |
-| Comida | Fijar a mano el producto de cada cadena (pin) desde la lista de la compra (`/candidatos` + PUT del `pin`) | Medio (2-3 h) |
-| Comida | Elegir variante por ingrediente en la ficha de una receta del menú | Pequeño (1 h) |
-| Hábitos | Tira de 28 días con constancia a 30 días (la web la enseña en «Rachas»; Tom tiene la semana y la racha) | Pequeño (1-2 h) |
 | Gastos | Sin red, cambiar ingreso, día de cobro, hucha o viajes no recalcula las cuentas del ciclo hasta que llega (las calcula el servidor) | Medio: recalcular `resumen()` en el iPhone |

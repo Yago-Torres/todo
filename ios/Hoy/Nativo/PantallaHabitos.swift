@@ -47,6 +47,7 @@ struct PantallaHabitos: View {
                 ForEach(datos.habitos) { h in
                     TarjetaHabito(habito: h, dias: dias, hoy: hoy, racha: racha(h.id))
                 }
+                TiraRachas(racha: { racha($0) })   // Habitos/TiraRachas.swift
             }
             .padding(.horizontal, Tema.Espacio.l)
             .padding(.top, Tema.Espacio.s)
