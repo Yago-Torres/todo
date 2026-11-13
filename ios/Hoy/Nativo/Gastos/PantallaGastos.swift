@@ -804,7 +804,6 @@ private struct MovimientosGastos: View {
 
     private func fila(_ m: Movimiento) -> some View {
         Button {
-            guard !m.pendiente else { return }
             Haptica.shared.toca(.marcar)
             abrir(m)
         } label: {
@@ -825,13 +824,12 @@ private struct MovimientosGastos: View {
         }
         .buttonStyle(EstiloHundir())
         .contextMenu {
-            if !m.pendiente {
-                Button("Editar", systemImage: "pencil") { abrir(m) }
-                Button("Borrar", systemImage: "trash", role: .destructive) {
-                    Task {
-                        do { try await datos.borra(m); Haptica.shared.toca(.desmarcar) }
-                        catch { Haptica.shared.toca(.error) }
-                    }
+            // también lo apuntado sin red: el cambio sale detrás de él en la cola
+            Button("Editar", systemImage: "pencil") { abrir(m) }
+            Button("Borrar", systemImage: "trash", role: .destructive) {
+                Task {
+                    do { try await datos.borra(m); Haptica.shared.toca(.desmarcar) }
+                    catch { Haptica.shared.toca(.error) }
                 }
             }
         }

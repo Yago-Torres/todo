@@ -49,6 +49,7 @@ enum Local {
 
         var resumen: String {
             let json = (cuerpo.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]) ?? [:]
+            if metodo == "OP" { return (json["resumen"] as? String) ?? "Cambio sin enviar" }
             switch (metodo, rutaSinQuery) {
             case ("PUT", "/api/state"):
                 return "Cambios en hábitos y entreno"
@@ -69,6 +70,23 @@ enum Local {
                 return "Tarea hecha"
             case ("POST", "/api/tarea/borra"):
                 return "Borrar tarea"
+            case ("POST", "/api/leido"):
+                return "Marcar como leído"
+            case ("POST", "/api/documentos"):
+                let meta = cabeceras["x-doc"].flatMap { $0.removingPercentEncoding }.flatMap { $0.data(using: .utf8) }
+                    .flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }
+                return "Subir documento: \((meta?["n"] as? String) ?? (meta?["nombre"] as? String) ?? "")"
+            case ("POST", let r) where r.hasPrefix("/api/documentos/") && r.hasSuffix("/borra"):
+                return "Borrar documento"
+            case ("POST", let r) where r.hasPrefix("/api/documentos/") && r.hasSuffix("/restaura"):
+                return "Recuperar documento"
+            case ("POST", let r) where r.hasPrefix("/api/documentos/"):
+                return "Cambiar documento: \((json["n"] as? String) ?? "")"
+            case ("POST", "/api/gastos/ingreso"), ("POST", "/api/gastos-aitana/ingreso"):
+                let importe = (json["importe"] as? NSNumber)?.doubleValue ?? 0
+                return "Ingreso de \(String(format: "%.2f", importe).replacingOccurrences(of: ".", with: ",")) €"
+            case ("POST", "/api/ajustes"):
+                return "Ajustes de Tom"
             case ("POST", "/api/gastos/gasto"), ("POST", "/api/gastos-aitana/gasto"):
                 let importe = (json["importe"] as? NSNumber)?.doubleValue ?? 0
                 return "Gasto de \(String(format: "%.2f", importe).replacingOccurrences(of: ".", with: ",")) €"
@@ -102,6 +120,7 @@ enum Local {
             cabeceras TEXT NOT NULL DEFAULT '{}', fecha REAL NOT NULL, intentos INTEGER NOT NULL DEFAULT 0,
             estado TEXT NOT NULL DEFAULT 'pendiente', error TEXT, base BLOB, proximo REAL,
             rev INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE IF NOT EXISTS alias (de TEXT PRIMARY KEY, a TEXT NOT NULL, fecha REAL NOT NULL);
         """
 
     // MARK: la base
@@ -314,9 +333,29 @@ enum Local {
         let hecho = conBase({ (db: OpaquePointer) -> Bool? in
             inserta(db, metodo: metodo, ruta: ruta, cuerpo: cuerpo, cabeceras: cabeceras, fecha: fecha, base: base)
         }) ?? false
-        if hecho { return true }
+        if hecho { avisaCola(); return true }
         return alBuzon(metodo: metodo, ruta: ruta, cuerpo: cuerpo, cabeceras: cabeceras, fecha: fecha)
     }
+
+    /// Apunta una operación con intención (Operaciones.swift): no se junta con nada, sale en su sitio de la cola.
+    /// Devuelve su id en la cola; nil si la base no se abre (iPhone bloqueado: va al buzón y sale igual, pero sin id).
+    static func encolaOperacion(ruta: String, cuerpo: Data) -> Int64? {
+        let fecha = Date().timeIntervalSince1970
+        let id = conBase { (db: OpaquePointer) -> Int64? in
+            guard ejecuta(db, "INSERT INTO cola (metodo, ruta, cuerpo, cabeceras, fecha) VALUES ('OP', ?, ?, '{}', ?)",
+                          [ruta, cuerpo, fecha]) else { return nil }
+            return sqlite3_last_insert_rowid(db)
+        }
+        if id != nil {
+            avisaCola()
+        } else {
+            _ = alBuzon(metodo: "OP", ruta: ruta, cuerpo: cuerpo, cabeceras: [:], fecha: fecha)
+        }
+        return id
+    }
+
+    /// Un cambio de la cola por su id (nil si ya salió o se descartó).
+    static func cambio(_ id: Int64) -> Cambio? { cambios().first { $0.id == id } }
 
     private static func inserta(_ db: OpaquePointer, metodo: String, ruta: String, cuerpo: Data?,
                                 cabeceras: [String: String], fecha: Double, base: Data?) -> Bool {
@@ -370,6 +409,7 @@ enum Local {
             }) ?? false
             guard ok else { return }
             try? fm.removeItem(at: url)
+            avisaCola()
         }
     }
 
@@ -408,6 +448,7 @@ enum Local {
     }
 
     static func actualiza(_ id: Int64, estado: Estado, intentos: Int, error: String?, proximo: Date?) {
+        defer { avisaCola() }
         let valores: [Any?] = [estado.rawValue, intentos, error, proximo?.timeIntervalSince1970, id]
         _ = conBase { (db: OpaquePointer) -> Bool? in
             ejecuta(db, "UPDATE cola SET estado = ?, intentos = ?, error = ?, proximo = ? WHERE id = ?", valores)
@@ -416,17 +457,65 @@ enum Local {
 
     /// Enviado: fuera de la cola, salvo que mientras salía se le juntara otro PUT (entonces sale otra vez).
     static func borraCambio(_ id: Int64, rev: Int) {
+        defer { avisaCola() }
         _ = conBase { (db: OpaquePointer) -> Bool? in ejecuta(db, "DELETE FROM cola WHERE id = ? AND rev = ?", [id, rev]) }
     }
 
     static func descarta(_ id: Int64) {
+        defer { avisaCola() }
         _ = conBase { (db: OpaquePointer) -> Bool? in ejecuta(db, "DELETE FROM cola WHERE id = ?", [id]) }
     }
 
     static func reintenta(_ id: Int64) {
+        defer { avisaCola() }
         _ = conBase { (db: OpaquePointer) -> Bool? in
             ejecuta(db, "UPDATE cola SET estado = 'pendiente', intentos = 0, error = NULL, proximo = NULL WHERE id = ?", [id])
         }
+    }
+
+    /// Pone el cambio en espera: sale cuando llegue su `proximo` (o con «Enviar ahora»), sin contar un intento.
+    static func espera(_ id: Int64, hasta: Date, motivo: String) {
+        defer { avisaCola() }
+        _ = conBase { (db: OpaquePointer) -> Bool? in
+            ejecuta(db, "UPDATE cola SET error = ?, proximo = ? WHERE id = ?", [motivo, hasta.timeIntervalSince1970, id])
+        }
+    }
+
+    /// Que la app repinte el indicador de «cambios por enviar» (solo en este proceso; el widget no lo pinta).
+    private static func avisaCola() {
+        NotificationCenter.default.post(name: .tomColaCambia, object: nil)
+    }
+
+    // MARK: ids provisionales
+
+    /// Lo creado sin red lleva un id «tmp:…» hasta que el servidor le da el suyo; las tareas del vault, además,
+    /// cambian de id con cada cambio de texto. Aquí se apunta cada salto (provisional → real, viejo → nuevo) para que
+    /// lo que va detrás en la cola llegue con el id bueno.
+    static func ponAlias(_ de: String, _ a: String) {
+        guard !de.isEmpty, !a.isEmpty, de != a else { return }
+        _ = conBase { (db: OpaquePointer) -> Bool? in
+            ejecuta(db, "INSERT OR REPLACE INTO alias (de, a, fecha) VALUES (?, ?, ?)", [de, a, Date().timeIntervalSince1970])
+        }
+    }
+
+    /// El id de ahora de lo que se apuntó con `id` (sigue la cadena; si no hay salto, el mismo).
+    static func alias(_ id: String) -> String {
+        conBase { (db: OpaquePointer) -> String? in
+            var actual = id
+            for _ in 0..<20 {
+                var siguiente: String?
+                ejecuta(db, "SELECT a FROM alias WHERE de = ?", [actual]) { st in siguiente = columnaTexto(st, 0) }
+                guard let s = siguiente, s != actual else { break }
+                actual = s
+            }
+            return actual
+        } ?? id
+    }
+
+    /// Los saltos de más de 30 días ya no los necesita nadie.
+    static func limpiaAlias() {
+        let limite = Date().addingTimeInterval(-30 * 24 * 3600).timeIntervalSince1970
+        _ = conBase { (db: OpaquePointer) -> Bool? in ejecuta(db, "DELETE FROM alias WHERE fecha < ?", [limite]) }
     }
 
     static var ultimaSincronizacion: Date? {
@@ -474,4 +563,9 @@ enum Local {
             if let d = try? JSONEncoder().encode(h) { Almacen.guardaHoy(d) }
         }
     }
+}
+
+extension Notification.Name {
+    /// La cola de cambios sin enviar ha cambiado (uno nuevo, uno enviado, descartado o con error).
+    static let tomColaCambia = Notification.Name("tomColaCambia")
 }

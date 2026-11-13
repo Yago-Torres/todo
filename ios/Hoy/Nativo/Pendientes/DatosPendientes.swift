@@ -21,7 +21,7 @@ struct TareaVault: Codable, Identifiable, Hashable {
     /// El día, o nil si no tiene (el servidor a veces manda «»).
     var dia: String? { (due?.isEmpty ?? true) ? nil : due }
     var horaTexto: String? { (hora?.isEmpty ?? true) ? nil : hora }
-    /// Recién apuntada sin red: todavía no tiene el id del vault.
+    /// Recién apuntada sin red: todavía no tiene el id del vault (se puede cambiar igual: la cola le pone el bueno).
     var provisional: Bool { id.hasPrefix("tmp:") }
 }
 
@@ -137,18 +137,22 @@ final class DatosPendientes {
 
     func quitaAviso() { aviso = nil }
 
-    /// Lo que se ve sin red queda guardado como copia: al reabrir la app sin conexión sigue con el cambio.
-    private func persiste() {
-        guard let bandeja, let datos = try? JSONEncoder().encode(bandeja) else { return }
-        Local.guarda(Local.clave("GET", Self.ruta), cuerpo: datos, tipo: "application/json", version: nil, fecha: Date())
-    }
-
     private static func objeto(_ datos: Data?) -> [String: Any]? {
         datos.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
     }
 
-    private func edicionProvisional() {
-        avisa("Esa tarea aún no ha llegado al vault. Cámbiala cuando vuelva la conexión.", error: true)
+    /// Quita de la cola lo que iba sobre una tarea apuntada sin red que aún no ha salido (crearla y sus cambios).
+    private func olvidaProvisional(_ id: String) -> Bool {
+        let suyos = Local.cambios().filter { c in
+            guard c.estado == .pendiente else { return false }
+            if c.cabeceras["x-tom-tmp"] == id { return true }
+            let cuerpo = c.cuerpo.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
+            return (cuerpo?["id"] as? String) == id
+        }
+        guard suyos.contains(where: { $0.cabeceras["x-tom-tmp"] == id }) else { return false }
+        for c in suyos { Local.descarta(c.id) }
+        Operaciones.recalcula(Self.ruta)
+        return true
     }
 
     // MARK: apuntar
@@ -163,7 +167,7 @@ final class DatosPendientes {
         if let due { json["due"] = due }
         if let hora, due != nil { json["hora"] = hora }
         do {
-            let r = try await API.escribeOEncola("/api/tarea", json: json)
+            let r = try await API.escribeOEncola("/api/tarea", json: json, tmp: provisional.id)
             if let r, let real = try? JSONDecoder().decode(TareaVault.self, from: r) {
                 withAnimation(Tema.Muelle.pantalla) {
                     if let i = bandeja?.tareas.firstIndex(where: { $0.id == provisional.id }) { bandeja?.tareas[i] = real }
@@ -173,8 +177,7 @@ final class DatosPendientes {
                 await recarga()
                 avisa("Apuntado: \(limpio)")
             } else {
-                persiste()
-                avisa("Apuntado. Se enviará al volver la conexión")
+                avisa("Apuntado. Se enviará en cuanto haya conexión")
             }
             return true
         } catch {
@@ -187,7 +190,6 @@ final class DatosPendientes {
     // MARK: cambiar
 
     func edita(_ t: TareaVault, texto: String, due: String?, hora: String?) async {
-        guard !t.provisional else { return edicionProvisional() }
         let limpio = texto.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !limpio.isEmpty else { return }
         let nuevaHora = due == nil ? nil : hora
@@ -205,8 +207,7 @@ final class DatosPendientes {
                 if let i = bandeja?.tareas.firstIndex(where: { $0.id == t.id }) { bandeja?.tareas[i] = real }
                 avisa("Cambiada: \(real.t)")
             } else if r == nil {
-                persiste()
-                avisa("Cambiada. Se enviará al volver la conexión")
+                avisa("Cambiada. Se enviará en cuanto haya conexión")
             }
         } catch {
             avisa("No se ha cambiado: \(error.localizedDescription)", error: true)
@@ -227,7 +228,6 @@ final class DatosPendientes {
     // MARK: hecha
 
     func hecha(_ t: TareaVault) async {
-        guard !t.provisional else { return edicionProvisional() }
         guard !marcadas.contains(t.id) else { return }
         Haptica.shared.toca(.marcar)
         withAnimation(Tema.Muelle.toque) { _ = marcadas.insert(t.id) }
@@ -240,8 +240,7 @@ final class DatosPendientes {
             if let nuevo = Self.objeto(r)?["id"] as? String {
                 avisa("Hecha: \(t.t)") { [weak self] in await self?.deshazHecha(t, id: nuevo) }
             } else {
-                persiste()
-                avisa("Hecha. Se enviará al volver la conexión")
+                avisa("Hecha. Se enviará en cuanto haya conexión")
             }
         } catch {
             withAnimation(Tema.Muelle.pantalla) {
@@ -264,8 +263,10 @@ final class DatosPendientes {
     // MARK: borrar
 
     func borra(_ t: TareaVault) async {
-        guard !t.provisional else {
+        // apuntada sin red y aún en la cola: basta con no mandarla
+        if t.provisional, olvidaProvisional(t.id) {
             withAnimation(Tema.Muelle.pantalla) { bandeja?.tareas.removeAll { $0.id == t.id } }
+            avisa("Borrada: \(t.t)")
             return
         }
         Haptica.shared.toca(.desmarcar)
@@ -275,8 +276,7 @@ final class DatosPendientes {
             if let borrada = Self.objeto(r) {
                 avisa("Borrada: \(t.t)") { [weak self] in await self?.restaura(borrada) }
             } else {
-                persiste()
-                avisa("Borrada. Se enviará al volver la conexión")
+                avisa("Borrada. Se enviará en cuanto haya conexión")
             }
         } catch {
             avisa("No se ha borrado: \(error.localizedDescription)", error: true)
@@ -301,8 +301,7 @@ final class DatosPendientes {
         do {
             let r = try await API.escribeOEncola("/api/leido", json: ["ruta": l.ruta])
             if r == nil {
-                persiste()
-                avisa("Leído. Se enviará al volver la conexión")
+                avisa("Leído. Se enviará en cuanto haya conexión")
             } else {
                 avisa("Leído: \(l.titulo)")
             }

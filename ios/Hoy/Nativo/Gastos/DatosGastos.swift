@@ -5,8 +5,8 @@ import WidgetKit
 
 /// Lo que enseña Gastos en nativo. Lee /resumen y /estado de la instancia elegida (por el proxy de todo; sin red, la
 /// copia de Local) y escribe por los mismos caminos que la web: POST /gasto e /ingreso (a la cola si no hay red) y, para
-/// editar o borrar, leer-modificar-escribir del estado entero (solo con red: un PUT de todo el estado hecho a ciegas
-/// podría pisar lo que el bot apuntó mientras tanto).
+/// editar, borrar y los presupuestos, operaciones de la cola (Compartido/Operaciones.swift): se ven al momento y Sincro
+/// las aplica sobre el estado fresco del servidor, así que tampoco necesitan red ni pisan lo que el bot apuntó.
 ///
 /// Las dos instancias (Yago y Aitana) tienen cada una sus copias en memoria y en Local; ninguna cuenta se suma con la otra.
 @MainActor @Observable
@@ -20,7 +20,8 @@ final class DatosGastos {
     private var resumenes: [String: ResumenGastos] = [:]
     private var estados: [InstanciaGastos: EstadoGastos] = [:]
     private var copias: [String: Date] = [:]
-    private var pendientes: [InstanciaGastos: [Movimiento]] = [:]
+    /// Los ids apuntados sin red que aún esperan en la cola (salen con «Sin enviar»).
+    private var enCola: Set<String> = []
     private var enCurso = 0
     var cargando: Bool { enCurso > 0 }
     private(set) var error: String?
@@ -39,9 +40,28 @@ final class DatosGastos {
     /// La fecha de la copia si lo que se ve no viene fresco del servidor (sin red).
     var copia: Date? { copias[clave(instancia, ref)] }
 
-    /// Los movimientos de la instancia, con los apuntados sin red delante.
+    /// Los movimientos de la instancia (la copia local ya lleva los apuntados sin red).
     var movimientos: [Movimiento] {
-        (pendientes[instancia] ?? []) + (estado?.gastos ?? [])
+        (estado?.gastos ?? []).map { m in
+            var m = m
+            m.pendiente = enCola.contains(m.id)
+            return m
+        }
+    }
+
+    /// Qué gastos siguen en la cola sin salir.
+    private func miraCola() {
+        enCola = Set(Local.cambios().filter { $0.estado == .pendiente && $0.metodo == "POST" && $0.rutaSinQuery.hasSuffix("/gasto") }
+            .compactMap { c in (c.cuerpo.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any])?["id"] as? String })
+    }
+
+    /// La copia local del estado de `inst` (con lo pendiente encima), a la pantalla.
+    private func pintaLocal(_ inst: InstanciaGastos) {
+        miraCola()
+        if let r = Local.lee(Local.clave("GET", "\(inst.base)/estado")),
+           let e = try? JSONDecoder().decode(EstadoGastos.self, from: r.cuerpo) {
+            withAnimation(Tema.Muelle.pantalla) { estados[inst] = e }
+        }
     }
 
     func nombreCat(_ id: String) -> String {
@@ -79,7 +99,6 @@ final class DatosGastos {
             resumenes[k] = r
             copias[k] = fecha
             error = nil
-            if fecha == nil, Local.numeroPendientes() == 0 { pendientes[inst] = nil }
         } catch {
             if resumenes[clave(inst, dia)] == nil { self.error = Self.mensaje(error) }
             else { self.error = nil }
@@ -88,6 +107,7 @@ final class DatosGastos {
            let e = try? JSONDecoder().decode(EstadoGastos.self, from: r.datos) {
             estados[inst] = e
         }
+        miraCola()
         if inst == .yago { WidgetCenter.shared.reloadAllTimelines() }
     }
 
@@ -146,11 +166,7 @@ final class DatosGastos {
         if tipo != .gasto { json["tipo"] = tipo.rawValue }
         let ruta = "\(inst.base)/\(tipo == .gasto ? "gasto" : "ingreso")"
         guard let crudo = try await API.escribeOEncola(ruta, json: json) else {
-            if tipo == .gasto {
-                var m = Movimiento(id: id, dia: dia, importe: redondeado, cat: cat ?? "", nota: limpia, pendiente: true)
-                m.src = "web"
-                withAnimation(Tema.Muelle.pantalla) { pendientes[inst, default: []].insert(m, at: 0) }
-            }
+            pintaLocal(inst)   // la copia local ya lo lleva (Operaciones)
             return "\(tipo.verbo) de \(Eur.texto(redondeado)). \(API.avisoEncolado)."
         }
         let objeto = try? JSONSerialization.jsonObject(with: crudo) as? [String: Any]
@@ -161,23 +177,30 @@ final class DatosGastos {
         return texto
     }
 
-    // MARK: editar y borrar (leer-modificar-escribir del estado entero)
+    // MARK: editar y borrar (operaciones de la cola)
 
-    /// Trae el estado de ahora, lo cambia con `cambio` y lo guarda. Sin red no se hace: avisa y no toca nada.
-    private func modifica(_ inst: InstanciaGastos, _ cambio: (inout [String: Any]) throws -> Void) async throws {
-        do {
-            let crudo = try await API.datos("\(inst.base)/estado")
-            guard var e = try JSONSerialization.jsonObject(with: crudo) as? [String: Any] else {
-                throw APIError(mensaje: "No entiendo lo que devuelve el servidor. Vuelve a probar en un momento.")
-            }
-            try cambio(&e)
-            let guardado = try await API.datos("\(inst.base)/estado", metodo: "PUT", json: e)
-            if let limpio = try? JSONDecoder().decode(EstadoGastos.self, from: guardado) {
-                withAnimation(Tema.Muelle.pantalla) { estados[inst] = limpio }
-            }
-        } catch let e as APIError where e.sinRed {
-            throw APIError(mensaje: "Sin conexión: para editar o borrar gastos hace falta red. Prueba otra vez cuando vuelva.")
+    /// Apunta la operación sobre el estado de `inst`, la pinta y la manda. Con red espera a que llegue y, si el servidor
+    /// la rechaza (el gasto ya no está…), lanza el motivo. Sin red vuelve enseguida: sale sola al volver la conexión.
+    @discardableResult
+    private func opera(_ inst: InstanciaGastos, _ op: [String: Any]) async throws -> Bool {
+        guard let id = Operaciones.encola("\(inst.base)/estado", op) else {
+            throw APIError(mensaje: "No he podido guardar el cambio en el iPhone. Desbloquéalo y vuelve a probar.")
         }
+        pintaLocal(inst)
+        await Sincro.vacia()
+        pintaLocal(inst)
+        guard let c = Local.cambio(id) else { return false }
+        if c.estado != .pendiente { throw APIError(mensaje: c.error ?? "El servidor no ha aceptado el cambio.") }
+        return true
+    }
+
+    /// Sin red, el resumen (lo calcula el servidor) no se entera del presupuesto nuevo: se le pone a mano en pantalla.
+    private func ponEnResumen(_ valores: [String: Double]) {
+        let k = clave(instancia, ref)
+        guard var r = resumenes[k] else { return }
+        for i in r.cats.indices { if let v = valores[r.cats[i].id] { r.cats[i].presu = v } }
+        r.presu = r.cats.reduce(0) { $0 + $1.presu }
+        withAnimation(Tema.Muelle.pantalla) { resumenes[k] = r }
     }
 
     private func refresca(_ inst: InstanciaGastos) async {
@@ -196,31 +219,21 @@ final class DatosGastos {
 
     func edita(_ m: Movimiento, _ c: Cambios) async throws {
         let inst = instancia
-        try await modifica(inst) { e in
-            var gastos = (e["gastos"] as? [[String: Any]]) ?? []
-            guard let i = gastos.firstIndex(where: { ($0["id"] as? String) == m.id }) else {
-                throw APIError(mensaje: "Ese gasto ya no está: alguien lo ha borrado. Recarga la lista.")
-            }
-            gastos[i]["importe"] = (c.importe * 100).rounded() / 100
-            gastos[i]["dia"] = c.dia
-            gastos[i]["cat"] = c.cat
-            gastos[i]["comercio"] = c.comercio
-            gastos[i]["nota"] = c.nota
-            gastos[i]["viaje"] = c.viaje
-            e["gastos"] = gastos
-        }
+        let importe = (c.importe * 100).rounded() / 100
+        let cambios: [String: Any] = ["importe": importe, "dia": c.dia, "cat": c.cat, "comercio": c.comercio,
+                                      "nota": c.nota, "viaje": c.viaje]
+        try await opera(inst, ["op": "gasto.edita", "id": m.id, "cambios": cambios,
+                               "resumen": "Cambiar el gasto de \(Eur.texto(importe))"])
         await refresca(inst)
     }
 
     func borra(_ m: Movimiento) async throws {
         let inst = instancia
-        var quitado: [String: Any]?
-        try await modifica(inst) { e in
-            var gastos = (e["gastos"] as? [[String: Any]]) ?? []
-            guard let i = gastos.firstIndex(where: { ($0["id"] as? String) == m.id }) else { return }
-            quitado = gastos.remove(at: i)
-            e["gastos"] = gastos
-        }
+        // lo que había, para poder deshacerlo (de la copia local: con o sin red)
+        let quitado = Local.lee(Local.clave("GET", "\(inst.base)/estado"))
+            .flatMap { (try? JSONSerialization.jsonObject(with: $0.cuerpo)) as? [String: Any] }
+            .flatMap { ($0["gastos"] as? [[String: Any]])?.first { ($0["id"] as? String) == m.id } }
+        try await opera(inst, ["op": "gasto.borra", "id": m.id, "resumen": "Borrar el gasto de \(Eur.texto(m.importe))"])
         if let quitado {
             borrado = (inst, quitado, "Borrado: \(Eur.texto(m.importe))")
             tareaBorrado?.cancel()
@@ -237,11 +250,8 @@ final class DatosGastos {
         guard let b = borrado else { return }
         tareaBorrado?.cancel()
         withAnimation(Tema.Muelle.pantalla) { borrado = nil }
-        try await modifica(b.instancia) { e in
-            var gastos = (e["gastos"] as? [[String: Any]]) ?? []
-            if !gastos.contains(where: { ($0["id"] as? String) == (b.crudo["id"] as? String) }) { gastos.append(b.crudo) }
-            e["gastos"] = gastos
-        }
+        try await opera(b.instancia, ["op": "gasto.restaura", "id": (b.crudo["id"] as? String) ?? "", "gasto": b.crudo,
+                                      "resumen": "Recuperar un gasto borrado"])
         await refresca(b.instancia)
     }
 
@@ -249,27 +259,20 @@ final class DatosGastos {
 
     func ponPresupuesto(_ cat: String, _ valor: Double) async throws {
         let inst = instancia
-        try await modifica(inst) { e in
-            var cats = (e["cats"] as? [[String: Any]]) ?? []
-            guard let i = cats.firstIndex(where: { ($0["id"] as? String) == cat }) else { return }
-            cats[i]["presu"] = max(0, valor)
-            e["cats"] = cats
-        }
+        let enCola = try await opera(inst, ["op": "presupuesto.pon", "valores": [cat: max(0, valor)],
+                                            "resumen": "Presupuesto de \(nombreCat(cat)): \(Eur.texto(max(0, valor)))"])
         await refresca(inst)
+        if enCola { ponEnResumen([cat: max(0, valor)]) }
     }
 
     /// «Usar sugeridos»: copia el presupuesto sugerido de cada categoría que tenga uno.
     func usaSugeridos() async throws {
         let inst = instancia
         let sugeridos = Dictionary(uniqueKeysWithValues: (resumen?.cats ?? []).filter { $0.sugerido > 0 }.map { ($0.id, $0.sugerido) })
-        try await modifica(inst) { e in
-            var cats = (e["cats"] as? [[String: Any]]) ?? []
-            for i in cats.indices {
-                if let id = cats[i]["id"] as? String, let s = sugeridos[id] { cats[i]["presu"] = s }
-            }
-            e["cats"] = cats
-        }
+        guard !sugeridos.isEmpty else { return }
+        let enCola = try await opera(inst, ["op": "presupuesto.pon", "valores": sugeridos, "resumen": "Usar los presupuestos sugeridos"])
         await refresca(inst)
+        if enCola { ponEnResumen(sugeridos) }
     }
 
     static func mensaje(_ error: Error) -> String {

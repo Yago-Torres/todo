@@ -68,6 +68,15 @@ final class DatosNativos {
         await carga()
     }
 
+    /// Vuelve a pintar lo que hay en la copia local (tras apuntar un cambio en la cola o al salir de ella).
+    func refrescaDesdeLocal() {
+        if let r = Local.lee(Local.clave("GET", "/api/state")) { leeEstado(r.cuerpo) }
+        if let r = Local.lee(Local.clave("GET", "/api/hoy")), let h = try? JSONDecoder().decode(Hoy.self, from: r.cuerpo) {
+            withAnimation(Tema.Muelle.toque) { hoy = h }
+            actualizaIsla()
+        }
+    }
+
     func leeEstado(_ crudo: Data) {
         guard let e = (try? JSONSerialization.jsonObject(with: crudo)) as? [String: Any] else { return }
         habitos = ((e["habits"] as? [[String: Any]]) ?? []).compactMap { h in

@@ -5,7 +5,7 @@ import Foundation
 // Compila en la app y en el widget; HoyCompartir no lo incluye (API.swift no sabe nada de Local).
 
 extension API {
-    static let avisoEncolado = "Apuntado, se enviará al volver la conexión"
+    static let avisoEncolado = "Apuntado, se enviará en cuanto haya conexión"
 
     /// «(sin conexión, datos de las 18:30)».
     static func notaCopia(_ fecha: Date) -> String {
@@ -19,14 +19,31 @@ extension API {
     }
 
     /// Una escritura que, si no llega al servidor, se apunta en la cola. nil = encolada.
-    static func escribeOEncola(_ ruta: String, metodo: String = "POST", json: [String: Any]) async throws -> Data? {
-        do {
-            return try await datos(ruta, metodo: metodo, json: json)
-        } catch let error as APIError where error.sinRed {
+    /// `tmp`: el id provisional de lo que se crea (una tarea): al salir se apunta el id real para lo que vaya detrás.
+    static func escribeOEncola(_ ruta: String, metodo: String = "POST", json: [String: Any],
+                               tmp: String? = nil) async throws -> Data? {
+        var cabeceras = ["content-type": "application/json"]
+        if let tmp { cabeceras["x-tom-tmp"] = tmp }
+        func alaCola(_ error: Error) throws -> Data? {
             guard let cuerpo = try? JSONSerialization.data(withJSONObject: json),
-                  Local.encola(metodo: metodo, ruta: ruta, cuerpo: cuerpo,
-                               cabeceras: ["content-type": "application/json"]) else { throw error }
+                  Local.encola(metodo: metodo, ruta: ruta, cuerpo: cuerpo, cabeceras: cabeceras) else { throw error }
+            // y ya se ve en la copia local (y sigue viéndose aunque se cierre la app)
+            Operaciones.anota(metodo: metodo, ruta: ruta, json: json, cabeceras: cabeceras)
             return nil
+        }
+        // con el id de ahora (lo creado sin red ya tiene el suyo, una tarea cambiada tiene otro)
+        let crudo = try? JSONSerialization.data(withJSONObject: json)
+        let (rutaAhora, cuerpoAhora) = Operaciones.resuelveIds(ruta: ruta, cuerpo: crudo)
+        let jsonAhora = (cuerpoAhora.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]) ?? json
+        // va sobre algo que aún espera en la cola: detrás de ello, para que salgan en orden
+        if rutaAhora.contains("tmp:") || ((jsonAhora["id"] as? String)?.hasPrefix("tmp:") ?? false)
+            || Operaciones.esperaEnCola(ruta) {
+            return try alaCola(APIError(mensaje: "No he podido guardar el cambio en el iPhone. Desbloquéalo y vuelve a probar."))
+        }
+        do {
+            return try await datos(rutaAhora, metodo: metodo, json: jsonAhora)
+        } catch let error as APIError where error.sinRed {
+            return try alaCola(error)
         }
     }
 
@@ -34,8 +51,8 @@ extension API {
     static func leeOCopia(_ ruta: String) async throws -> (datos: Data, copia: Date?) {
         do {
             let crudo = try await datos(ruta)
-            Local.guarda(Local.clave("GET", ruta), cuerpo: crudo, tipo: "application/json", version: nil, fecha: Date())
-            return (crudo, nil)
+            // lo del servidor, con lo que aún no ha salido de la cola encima (Operaciones.swift)
+            return (Operaciones.llega(ruta, crudo), nil)
         } catch let error as APIError where error.sinRed {
             if let r = Local.lee(Local.clave("GET", ruta)) { return (r.cuerpo, r.fecha) }
             if !Local.disponible {

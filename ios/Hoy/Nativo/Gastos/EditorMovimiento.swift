@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Editar o borrar un gasto (la hoja que sale al tocar un movimiento). Guarda con el leer-modificar-escribir de
-/// DatosGastos; sin red avisa en vez de dejarlo a medias.
+/// DatosGastos; sin red el cambio se ve ya y sale solo al volver la conexión.
 struct EditorMovimiento: View {
     let movimiento: Movimiento
     @Environment(\.dismiss) private var cierra

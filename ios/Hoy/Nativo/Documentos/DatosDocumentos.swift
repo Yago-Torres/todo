@@ -151,8 +151,6 @@ final class DatosDocumentos {
     private(set) var error: String?
     /// Los que tienen su fichero guardado en este iPhone (se ven sin red).
     private(set) var enLocal: Set<String> = []
-    /// Subidos sin red: se enseñan hasta que la cola los mande.
-    private(set) var pendientes: [DocumentoTom] = []
     var aviso: AvisoTom?
 
     private var ultimaCarga: Date?
@@ -184,7 +182,12 @@ final class DatosDocumentos {
     }
 
     private func aplica(_ r: Respuesta) {
-        docs = r.docs
+        // los subidos sin red vienen en la copia local con su id provisional (Operaciones)
+        docs = r.docs.map { d in
+            var d = d
+            d.provisional = d.id.hasPrefix("tmp:")
+            return d
+        }
         var n = Self.nombresPorDefecto
         for (k, v) in r.cats { n[k] = v }
         nombres = n
@@ -207,7 +210,6 @@ final class DatosDocumentos {
             copia = fecha
             error = nil
             ultimaCarga = Date()
-            if fecha == nil { pendientes = [] }
         } catch let e as DecodingError {
             error = "No entiendo lo que devuelve /api/documentos (\(e.localizedDescription))"
         } catch {
@@ -246,7 +248,9 @@ final class DatosDocumentos {
     /// y se guarda en ella para la próxima vez.
     func ficheroParaVer(_ d: DocumentoTom) async throws -> URL {
         var datos: Data
-        if let r = Local.lee(d.clave) {
+        // subido sin red: su copia está con el id provisional o, si ya salió, con el de verdad
+        let ahora = Local.clave("GET", "/api/documentos/\(Local.alias(d.id))/fichero")
+        if let r = Local.lee(d.clave) ?? Local.lee(ahora) {
             datos = r.cuerpo
         } else {
             let (bajado, tipo) = try await API.ficheroDocumento(d.id)
@@ -295,19 +299,17 @@ final class DatosDocumentos {
             avisa(aviso.isEmpty ? "Guardado: \(ficha.n)" : "Guardado. Te recuerdo renovarlo el \(FechasES.larga(aviso))")
             return true
         } catch let e as APIError where e.sinRed {
-            let cabeceras = ["content-type": b.tipo, "x-doc": API.cabeceraDocumento(meta)]
+            let id = "tmp:\(b.id.uuidString)"
+            let cabeceras = ["content-type": b.tipo, "x-doc": API.cabeceraDocumento(meta), "x-tom-tmp": id, "x-tom-dia": Fecha.hoy()]
             guard Local.encola(metodo: "POST", ruta: "/api/documentos", cuerpo: b.datos, cabeceras: cabeceras) else {
                 avisa("No se ha guardado: \(e.localizedDescription)", error: true)
                 return false
             }
-            let ext = (b.nombre as NSString).pathExtension
-            let id = "tmp:\(b.id.uuidString)"
-            withAnimation(Tema.Muelle.pantalla) {
-                pendientes.append(DocumentoTom(id: id, n: ficha.n, cat: ficha.cat, titular: ficha.titular,
-                                               caduca: ficha.caduca ?? "", notas: ficha.notas,
-                                               fichero: "\(id).\(ext.isEmpty ? "pdf" : ext)", subido: Fecha.hoy(), provisional: true))
-            }
-            avisa("Guardado en este iPhone. Se subirá al volver la conexión")
+            // el fichero ya está en el iPhone: se puede abrir sin red desde ya
+            Local.guarda(Local.clave("GET", "/api/documentos/\(id)/fichero"), cuerpo: b.datos, tipo: b.tipo, version: nil, fecha: Date())
+            Operaciones.recalcula(Operaciones.documentos)
+            pintaLocal()
+            avisa("Guardado en este iPhone. Se subirá en cuanto haya conexión")
             return true
         } catch {
             avisa("No se ha guardado: \(error.localizedDescription)", error: true)
@@ -315,11 +317,27 @@ final class DatosDocumentos {
         }
     }
 
-    func edita(_ d: DocumentoTom, ficha: FichaDocumento) async -> Bool {
-        guard !d.provisional else {
-            avisa("Este documento aún no se ha subido. Cámbialo cuando vuelva la conexión.", error: true)
-            return false
+    /// La copia local de la lista (con lo pendiente encima), a la pantalla.
+    private func pintaLocal() {
+        if let r = Local.lee(Local.clave("GET", Self.ruta)), let x = try? JSONDecoder().decode(Respuesta.self, from: r.cuerpo) {
+            withAnimation(Tema.Muelle.pantalla) { aplica(x) }
         }
+    }
+
+    /// Quita de la cola la subida de un documento que aún no ha salido, y lo que iba detrás sobre él.
+    private func olvidaSubida(_ id: String) -> Bool {
+        let suyos = Local.cambios().filter { c in
+            c.estado == .pendiente && (c.cabeceras["x-tom-tmp"] == id || c.ruta.contains(id))
+        }
+        guard suyos.contains(where: { $0.cabeceras["x-tom-tmp"] == id }) else { return false }
+        for c in suyos { Local.descarta(c.id) }
+        Local.borra(Local.clave("GET", "/api/documentos/\(id)/fichero"))
+        Operaciones.recalcula(Self.ruta)
+        pintaLocal()
+        return true
+    }
+
+    func edita(_ d: DocumentoTom, ficha: FichaDocumento) async -> Bool {
         withAnimation(Tema.Muelle.pantalla) {
             if let i = docs.firstIndex(where: { $0.id == d.id }) {
                 docs[i].n = ficha.n
@@ -335,7 +353,7 @@ final class DatosDocumentos {
                let aviso = o["aviso"] as? String, !aviso.isEmpty {
                 avisa("Guardado. Te recuerdo renovarlo el \(FechasES.larga(aviso))")
             } else {
-                avisa(r == nil ? "Guardado. Se enviará al volver la conexión" : "Guardado")
+                avisa(r == nil ? "Guardado. Se enviará en cuanto haya conexión" : "Guardado")
             }
             return true
         } catch {
@@ -346,8 +364,10 @@ final class DatosDocumentos {
     }
 
     func borra(_ d: DocumentoTom) async {
-        if d.provisional {
-            withAnimation(Tema.Muelle.pantalla) { pendientes.removeAll { $0.id == d.id } }
+        // subido sin red y aún en la cola: basta con no subirlo
+        if d.provisional, olvidaSubida(d.id) {
+            Haptica.shared.toca(.desmarcar)
+            avisa("Borrado: \(d.n)")
             return
         }
         Haptica.shared.toca(.desmarcar)
@@ -358,7 +378,7 @@ final class DatosDocumentos {
                 // en la papelera del servidor; aquí se queda el fichero por si lo deshaces
                 avisa("Borrado: \(d.n)") { [weak self] in await self?.restaura(d) }
             } else {
-                avisa("Borrado. Se enviará al volver la conexión")
+                avisa("Borrado. Se enviará en cuanto haya conexión")
             }
         } catch {
             avisa("No se ha borrado: \(error.localizedDescription)", error: true)
@@ -377,7 +397,7 @@ final class DatosDocumentos {
 
     // MARK: lo que se pinta
 
-    var todos: [DocumentoTom] { pendientes + docs }
+    var todos: [DocumentoTom] { docs }
 
     /// Lo que caduca en 90 días (o ya caducó), sin las garantías: lo que hay que renovar.
     var pronto: [DocumentoTom] {
