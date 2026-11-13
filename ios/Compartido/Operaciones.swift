@@ -292,6 +292,7 @@ enum Operaciones {
         if ingreso { nuevo["tipo"] = (a["tipo"] as? String) ?? "extra" } else {
             nuevo["src"] = (a["src"] as? String) ?? "web"
             nuevo["comercio"] = ""
+            for k in ["viaje", "reparto"] { if let v = a[k] as? String { nuevo[k] = v } }   // saldar un viaje compartido
         }
         l.append(nuevo)
         e[clave] = l

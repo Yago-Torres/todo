@@ -46,9 +46,11 @@ struct ResumenGastos: Decodable {
     var sugeridoTotal = 0.0
     var pareja = ""
     var hucha: Hucha?
+    /// Las cuentas de cada viaje (por id): total, lo pagado por cada uno, mi parte y lo que la pareja me debe.
+    var cuentas: [String: CuentaViaje] = [:]
 
     enum CodingKeys: String, CodingKey {
-        case inicio, fin, dias, hechos, actual, total, aparte, presu, ingreso, extra, proyeccion, n, cats, serie, historico, insights, suscripciones, ingresos, pareja, hucha, recurrentes
+        case inicio, fin, dias, hechos, actual, total, aparte, presu, ingreso, extra, proyeccion, n, cats, serie, historico, insights, suscripciones, ingresos, pareja, hucha, recurrentes, cuentas
         case diaCobro = "dia_cobro"
         case seriePrevia = "serie_previa"
         case sugeridoTotal = "sugerido_total"
@@ -135,15 +137,21 @@ struct ResumenGastos: Decodable {
         var cat = ""
         var nota = ""
         var comercio = ""
+        var src = "web"
 
         enum CodingKeys: String, CodingKey {
-            case id, dia, importe, tipo, cat, nota, comercio
+            case id, dia, importe, tipo, cat, nota, comercio, src
         }
 
         init(from d: Decoder) throws {
             let c = try d.container(keyedBy: CodingKeys.self)
             id = c.v(.id, ""); dia = c.v(.dia, ""); importe = c.v(.importe, 0); tipo = c.v(.tipo, "extra")
-            cat = c.v(.cat, ""); nota = c.v(.nota, ""); comercio = c.v(.comercio, "")
+            cat = c.v(.cat, ""); nota = c.v(.nota, ""); comercio = c.v(.comercio, ""); src = c.v(.src, "web")
+        }
+
+        /// El título de la fila: la nota, el comercio o, sin ellos, qué es.
+        var titulo: String {
+            !nota.isEmpty ? nota : !comercio.isEmpty ? comercio : (tipo == "devuelve" ? "Te devuelven" : "Ingreso")
         }
     }
 
@@ -152,14 +160,60 @@ struct ResumenGastos: Decodable {
         var aportado = 0.0
         var gastado = 0.0
         var saldo = 0.0
+        /// Cuántos ciclos más hacen falta para que vuelva a cero (0 si no está en negativo).
+        var ciclosACero = 0
+        var plan: [Paso] = []
 
         enum CodingKeys: String, CodingKey {
-            case aporte, aportado, gastado, saldo
+            case aporte, aportado, gastado, saldo, plan
+            case ciclosACero = "ciclos_a_cero"
+        }
+
+        /// Un ciclo de la hucha: lo que se aparta, lo que se fue en viajes y cómo queda. Los futuros, hasta volver a cero.
+        struct Paso: Decodable, Hashable {
+            var inicio = ""
+            var fin = ""
+            var aparta = 0.0
+            var gastado = 0.0
+            var saldo = 0.0
+            var futuro = false
+
+            enum CodingKeys: String, CodingKey { case inicio, fin, aparta, gastado, saldo, futuro }
+
+            init(from d: Decoder) throws {
+                let c = try d.container(keyedBy: CodingKeys.self)
+                inicio = c.v(.inicio, ""); fin = c.v(.fin, ""); aparta = c.v(.aparta, 0); gastado = c.v(.gastado, 0)
+                saldo = c.v(.saldo, 0); futuro = c.v(.futuro, false)
+            }
         }
 
         init(from d: Decoder) throws {
             let c = try d.container(keyedBy: CodingKeys.self)
             aporte = c.v(.aporte, 0); aportado = c.v(.aportado, 0); gastado = c.v(.gastado, 0); saldo = c.v(.saldo, 0)
+            ciclosACero = c.v(.ciclosACero, 0); plan = c.v(.plan, [])
+        }
+    }
+
+    /// Las cuentas de un viaje (las calcula el servidor; en uno compartido lee los gastos de la pareja).
+    struct CuentaViaje: Decodable, Hashable {
+        var total = 0.0
+        var pagado = 0.0
+        var pagadoPareja = 0.0
+        var parte = 0.0
+        var meDebe = 0.0
+        /// Los gastos de la pareja en ese viaje: solo para verlos (se cambian en su app).
+        var suyos: [Movimiento] = []
+
+        enum CodingKeys: String, CodingKey {
+            case total, pagado, parte, suyos
+            case pagadoPareja = "pagado_pareja"
+            case meDebe = "me_debe"
+        }
+
+        init(from d: Decoder) throws {
+            let c = try d.container(keyedBy: CodingKeys.self)
+            total = c.v(.total, 0); pagado = c.v(.pagado, 0); pagadoPareja = c.v(.pagadoPareja, 0)
+            parte = c.v(.parte, 0); meDebe = c.v(.meDebe, 0); suyos = c.v(.suyos, [])
         }
     }
 
@@ -175,6 +229,7 @@ struct ResumenGastos: Decodable {
         sugeridoTotal = c.v(.sugeridoTotal, 0)
         pareja = (try? c.decodeIfPresent(String.self, forKey: .pareja)) ?? ""
         hucha = try? c.decodeIfPresent(Hucha.self, forKey: .hucha)
+        cuentas = c.v(.cuentas, [:])
     }
 
     // MARK: cuentas que hace la web al pintar la cabecera
@@ -202,12 +257,14 @@ struct Movimiento: Decodable, Identifiable, Hashable {
     var viaje = ""
     var orig = 0.0
     var moneda = ""
+    /// En un viaje compartido, de quién es: medias | mio | suyo | pago | cobro (pago y cobro saldan, no son gasto).
+    var reparto = "medias"
     var lineas: [Linea] = []
     /// Apuntado sin red: espera en la cola de Local a que vuelva la conexión.
     var pendiente = false
 
     enum CodingKeys: String, CodingKey {
-        case id, dia, importe, cat, nota, comercio, src, viaje, orig, moneda, lineas
+        case id, dia, importe, cat, nota, comercio, src, viaje, orig, moneda, lineas, reparto
     }
 
     struct Linea: Decodable, Hashable {
@@ -233,7 +290,7 @@ struct Movimiento: Decodable, Identifiable, Hashable {
         let c = try d.container(keyedBy: CodingKeys.self)
         id = c.v(.id, ""); dia = c.v(.dia, ""); importe = c.v(.importe, 0); cat = c.v(.cat, "")
         nota = c.v(.nota, ""); comercio = c.v(.comercio, ""); src = c.v(.src, "web"); viaje = c.v(.viaje, "")
-        orig = c.v(.orig, 0); moneda = c.v(.moneda, ""); lineas = c.v(.lineas, [])
+        orig = c.v(.orig, 0); moneda = c.v(.moneda, ""); lineas = c.v(.lineas, []); reparto = c.v(.reparto, "medias")
     }
 
     /// El título de la fila: lo que dice el comercio o la nota; si no, la categoría.
@@ -258,9 +315,31 @@ struct EstadoGastos: Decodable {
     var reglas: [ReglaGasto] = []
     var rechazadas: [String] = []
     var recurrentes: [String: String] = [:]
+    /// Lo que entra aparte del sueldo (extras y lo que te devuelven): aquí se editan, la copia local lleva lo pendiente.
+    var ingresos: [ResumenGastos.IngresoCiclo] = []
+    var ajustes = Ajustes()
 
     enum CodingKeys: String, CodingKey {
-        case cats, gastos, viajes, reglas, rechazadas, recurrentes
+        case cats, gastos, viajes, reglas, rechazadas, recurrentes, ingresos, ajustes
+    }
+
+    /// Cuánto cobras, qué día y lo que apartas para viajes cada ciclo.
+    struct Ajustes: Decodable, Hashable {
+        var ingreso = 0.0
+        var diaCobro = 1
+        var hucha = 0.0
+
+        enum CodingKeys: String, CodingKey {
+            case ingreso, hucha
+            case diaCobro = "dia_cobro"
+        }
+
+        init() {}
+
+        init(from d: Decoder) throws {
+            let c = try d.container(keyedBy: CodingKeys.self)
+            ingreso = c.v(.ingreso, 0); diaCobro = c.v(.diaCobro, 1); hucha = c.v(.hucha, 0)
+        }
     }
 
     struct CategoriaBase: Decodable, Identifiable, Hashable {
@@ -285,15 +364,29 @@ struct EstadoGastos: Decodable {
         var hasta = ""
         var presu = 0.0
         var moneda = "EUR"
+        /// Euros por unidad de la moneda del viaje (0 = sin poner).
+        var cambio = 0.0
+        /// Compartido con la pareja: cada uno apunta lo que paga en su instancia.
+        var con = false
 
         enum CodingKeys: String, CodingKey {
-            case id, n, desde, hasta, presu, moneda
+            case id, n, desde, hasta, presu, moneda, cambio, con
+        }
+
+        init(id: String, n: String, desde: String, hasta: String, presu: Double, moneda: String, cambio: Double, con: Bool) {
+            self.id = id; self.n = n; self.desde = desde; self.hasta = hasta; self.presu = presu
+            self.moneda = moneda; self.cambio = cambio; self.con = con
         }
 
         init(from d: Decoder) throws {
             let c = try d.container(keyedBy: CodingKeys.self)
             id = c.v(.id, ""); n = c.v(.n, ""); desde = c.v(.desde, ""); hasta = c.v(.hasta, "")
-            presu = c.v(.presu, 0); moneda = c.v(.moneda, "EUR")
+            presu = c.v(.presu, 0); moneda = c.v(.moneda, "EUR"); cambio = c.v(.cambio, 0); con = c.v(.con, false)
+        }
+
+        /// Lo que se guarda (la forma de clean() en el servidor).
+        var crudo: [String: Any] {
+            ["id": id, "n": n, "desde": desde, "hasta": hasta, "presu": presu, "moneda": moneda, "cambio": cambio, "con": con]
         }
     }
 
@@ -301,6 +394,7 @@ struct EstadoGastos: Decodable {
         let c = try d.container(keyedBy: CodingKeys.self)
         cats = c.v(.cats, []); gastos = c.v(.gastos, []); viajes = c.v(.viajes, [])
         reglas = c.v(.reglas, []); rechazadas = c.v(.rechazadas, []); recurrentes = c.v(.recurrentes, [:])
+        ingresos = c.v(.ingresos, []); ajustes = c.v(.ajustes, Ajustes())
     }
 }
 

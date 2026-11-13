@@ -85,7 +85,7 @@ struct PantallaGastos: View {
                 if !r.recurrentes.isEmpty { RecurrentesGastos() }
                 else if !r.suscripciones.isEmpty { SuscripcionesGastos(r: r) }   // un servidor de antes
             case "reglas": BloqueReglas()
-            case "ingresos": if !r.ingresos.isEmpty { IngresosGastos(r: r) }
+            case "ingresos": IngresosGastos(r: r)
             case "movimientos": MovimientosGastos(r: r, filtro: $filtro, abrir: { abierto = $0 })
             default: EmptyView()
             }
@@ -336,6 +336,9 @@ private struct ApuntarRapido: View {
     @State private var importe = ""
     @State private var nota = ""
     @State private var cat: String?
+    @State private var dia = Date()
+    /// En un viaje en otra moneda, lo que apuntas va en esa por defecto (como la web).
+    @State private var moneda = ""
     @State private var enviando = false
     @State private var respuesta: String?
     @State private var fallo = false
@@ -359,7 +362,21 @@ private struct ApuntarRapido: View {
                     .foregroundStyle(Tema.texto)
                     .frame(maxWidth: 140)
                     .accessibilityLabel("Importe en euros")
-                Text("€").font(Tema.fuente(.destacado)).foregroundStyle(Tema.suave)
+                if tipo == .gasto, let v = datos.viajeEnOtraMoneda {
+                    Menu {
+                        Picker("Moneda", selection: $moneda) {
+                            Text("\(v.moneda) (\(MonedaViaje.simbolo(v.moneda)))").tag(v.moneda)
+                            Text("EUR (€)").tag("EUR")
+                        }
+                    } label: {
+                        Text(MonedaViaje.simbolo(moneda.isEmpty ? v.moneda : moneda))
+                            .font(Tema.fuente(.destacado)).foregroundStyle(Tema.acento)
+                    }
+                    .accessibilityLabel("Moneda: \(moneda.isEmpty ? v.moneda : moneda)")
+                    .onAppear { if moneda.isEmpty { moneda = v.moneda } }
+                } else {
+                    Text("€").font(Tema.fuente(.destacado)).foregroundStyle(Tema.suave)
+                }
                 TextField(tipo == .gasto ? "Nota o comercio" : tipo == .devuelve ? "Quién y de qué" : "De quién",
                           text: $nota)
                     .font(Tema.fuente(.texto))
@@ -378,6 +395,10 @@ private struct ApuntarRapido: View {
                     }
                 }
             }
+            DatePicker("Día", selection: $dia, in: ...Date(), displayedComponents: .date)
+                .font(Tema.fuente(.texto)).foregroundStyle(Tema.texto)
+                .environment(\.locale, Locale(identifier: "es_ES"))
+                .tint(Tema.acento)
             Button {
                 envia()
             } label: {
@@ -432,12 +453,17 @@ private struct ApuntarRapido: View {
         Task {
             defer { enviando = false }
             do {
-                let texto = try await datos.apunta(tipo: tipo, importe: x, nota: nota, cat: tipo == .extra ? nil : cat)
+                var extra: [String: Any] = [:]
+                if tipo == .gasto, datos.viajeEnOtraMoneda != nil, !moneda.isEmpty { extra["moneda"] = moneda }
+                let texto = try await datos.apunta(tipo: tipo, importe: x, nota: nota, cat: tipo == .extra ? nil : cat,
+                                                   dia: FechaGasto.dia(dia), extra: extra)
                 toques += 1
                 fallo = false
                 respuesta = texto
                 importe = ""
                 nota = ""
+                cat = nil
+                dia = Date()
             } catch {
                 Haptica.shared.toca(.error)
                 fallo = true
@@ -469,7 +495,7 @@ private struct CategoriasGastos: View {
                 .font(Tema.fuente(.pequeno, peso: .semibold))
                 .foregroundStyle(Tema.acento)
             }
-            if editando { ajustes }
+            if editando { AjustesCicloGastos(r: r, aviso: $aviso) }
             let visibles = r.cats.filter { $0.gastado != 0 || $0.presu > 0 || editando }
             if visibles.isEmpty {
                 Text("Nada en este ciclo.").font(Tema.fuente(.texto)).foregroundStyle(Tema.suave)
@@ -496,26 +522,6 @@ private struct CategoriasGastos: View {
         }
         .carta()
         .animation(Tema.Muelle.pantalla, value: editando)
-    }
-
-    private var ajustes: some View {
-        VStack(alignment: .leading, spacing: Tema.Espacio.s) {
-            let total = r.cats.reduce(0) { $0 + $1.presu }
-            Text(total > 0 ? "Presupuesto total: \(Eur.entero(total)) al ciclo."
-                           : "Los sugeridos suman \(Eur.entero(r.sugeridoTotal)) al ciclo.")
-                .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
-            Button("Usar sugeridos") {
-                Haptica.shared.toca(.marcar)
-                Task {
-                    do { try await datos.usaSugeridos(); aviso = nil }
-                    catch { Haptica.shared.toca(.error); aviso = DatosGastos.mensaje(error) }
-                }
-            }
-            .font(Tema.fuente(.pequeno, peso: .semibold))
-            .padding(.horizontal, 12).padding(.vertical, 7)
-            .background(Tema.acentoSuave, in: Capsule())
-            .foregroundStyle(Tema.acento)
-        }
     }
 
     private func fila(_ c: ResumenGastos.Categoria) -> some View {
@@ -626,58 +632,7 @@ private struct FilaPresupuesto: View {
     }
 }
 
-// MARK: viajes, suscripciones, ingresos (solo lectura: se crean y se editan en la web)
-
-private struct ViajesGastos: View {
-    let r: ResumenGastos
-    @State private var datos = DatosGastos.shared
-
-    var body: some View {
-        let viajes = datos.estado?.viajes ?? []
-        if !viajes.isEmpty || (r.hucha?.aporte ?? 0) > 0 {
-            VStack(alignment: .leading, spacing: Tema.Espacio.m) {
-                Text("Viajes").font(Tema.fuente(.seccion)).foregroundStyle(Tema.texto)
-                if let h = r.hucha, h.aporte > 0 {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Hucha de viajes").font(Tema.fuente(.texto)).foregroundStyle(Tema.texto)
-                            Text("Aparta \(Eur.entero(h.aporte)) cada ciclo")
-                                .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
-                        }
-                        Spacer()
-                        VStack(alignment: .trailing, spacing: 2) {
-                            Text(Eur.texto(h.saldo)).font(Tema.fuente(.texto, peso: .semibold)).monospacedDigit()
-                                .foregroundStyle(h.saldo < 0 ? Tema.peligro : Tema.texto)
-                            Text("saldo").font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
-                        }
-                    }
-                }
-                ForEach(viajes.sorted { $0.desde > $1.desde }) { v in
-                    let gastado = datos.movimientos.filter { $0.viaje == v.id }.reduce(0) { $0 + $1.importe }
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(v.n).font(Tema.fuente(.texto)).foregroundStyle(Tema.texto)
-                                Text("\(FechaGasto.corta(v.desde)) – \(FechaGasto.corta(v.hasta))")
-                                    .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
-                            }
-                            Spacer()
-                            HStack(spacing: 0) {
-                                Text(Eur.texto(gastado)).foregroundStyle(Tema.texto)
-                                if v.presu > 0 { Text(" / \(Eur.entero(v.presu))").foregroundStyle(Tema.suave) }
-                            }
-                            .font(Tema.fuente(.texto)).monospacedDigit()
-                        }
-                        if v.presu > 0 { BarraPresupuesto(valor: gastado, maximo: v.presu).frame(height: 6) }
-                    }
-                }
-                Text("Para crear o cambiar un viaje, usa la web de gastos.")
-                    .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.tenue)
-            }
-            .carta()
-        }
-    }
-}
+// MARK: suscripciones (un servidor de antes, sin «recurrentes»)
 
 private struct SuscripcionesGastos: View {
     let r: ResumenGastos
@@ -701,38 +656,6 @@ private struct SuscripcionesGastos: View {
                     }
                     Spacer()
                     Text(Eur.texto(s.importe)).font(Tema.fuente(.texto)).monospacedDigit().foregroundStyle(Tema.texto)
-                }
-            }
-        }
-        .carta()
-    }
-}
-
-private struct IngresosGastos: View {
-    let r: ResumenGastos
-    @State private var datos = DatosGastos.shared
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Tema.Espacio.m) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Ingresos").font(Tema.fuente(.seccion)).foregroundStyle(Tema.texto)
-                Spacer()
-                Text("+" + Eur.texto(r.ingresos.reduce(0) { $0 + $1.importe }))
-                    .font(Tema.fuente(.pequeno)).monospacedDigit().foregroundStyle(Tema.acento)
-            }
-            ForEach(r.ingresos.sorted { $0.dia > $1.dia }) { i in
-                HStack(spacing: Tema.Espacio.m) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(!i.nota.isEmpty ? i.nota : !i.comercio.isEmpty ? i.comercio
-                             : (i.tipo == "devuelve" ? "Te devuelven" : "Ingreso"))
-                            .font(Tema.fuente(.texto)).foregroundStyle(Tema.texto).lineLimit(1)
-                        Text([FechaGasto.titulo(i.dia),
-                              i.tipo == "devuelve" ? "te devuelven de \(datos.nombreCat(i.cat))" : "ingreso extra"]
-                            .joined(separator: " · "))
-                            .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
-                    }
-                    Spacer()
-                    Text("+" + Eur.texto(i.importe)).font(Tema.fuente(.texto)).monospacedDigit().foregroundStyle(Tema.acento)
                 }
             }
         }

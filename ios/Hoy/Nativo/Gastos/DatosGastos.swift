@@ -26,8 +26,9 @@ final class DatosGastos {
     var cargando: Bool { enCurso > 0 }
     private(set) var error: String?
 
-    /// El último borrado, para deshacerlo unos segundos.
-    private(set) var borrado: (instancia: InstanciaGastos, crudo: [String: Any], texto: String)?
+    /// Lo último que se puede deshacer unos segundos (un borrado, lo recién apuntado, un viaje…): el texto del aviso y
+    /// la operación de la cola que lo deshace.
+    private(set) var borrado: (instancia: InstanciaGastos, deshacer: [String: Any], texto: String)?
     private var tareaBorrado: Task<Void, Never>?
 
     private func clave(_ inst: InstanciaGastos, _ dia: String) -> String { "\(inst.rawValue)|\(dia)" }
@@ -159,7 +160,8 @@ final class DatosGastos {
 
     /// Apunta un gasto (o un ingreso). Devuelve el texto del servidor (con los avisos de presupuesto) o el aviso de que
     /// se enviará al volver la conexión.
-    func apunta(tipo: TipoApunte, importe: Double, nota: String, cat: String?, dia: String = Fecha.hoy()) async throws -> String {
+    func apunta(tipo: TipoApunte, importe: Double, nota: String, cat: String?, dia: String = Fecha.hoy(),
+                extra: [String: Any] = [:]) async throws -> String {
         guard importe.isFinite, importe > 0 else { throw APIError(mensaje: "El importe tiene que ser mayor que cero") }
         let inst = instancia
         let redondeado = (importe * 100).rounded() / 100
@@ -169,9 +171,14 @@ final class DatosGastos {
         if !limpia.isEmpty { json["nota"] = limpia }
         if tipo != .extra, let cat, !cat.isEmpty { json["cat"] = cat }
         if tipo != .gasto { json["tipo"] = tipo.rawValue }
+        for (k, v) in extra { json[k] = v }   // moneda, viaje, reparto (saldar un viaje compartido)
         let ruta = "\(inst.base)/\(tipo == .gasto ? "gasto" : "ingreso")"
+        let quitar: [String: Any] = tipo == .gasto
+            ? ["op": "gasto.borra", "id": id, "resumen": "Quitar el gasto de \(Eur.texto(redondeado))"]
+            : ["op": "ingreso.borra", "id": id, "resumen": "Quitar el ingreso de \(Eur.texto(redondeado))"]
         guard let crudo = try await API.escribeOEncola(ruta, json: json) else {
             pintaLocal(inst)   // la copia local ya lo lleva (Operaciones)
+            ofreceDeshacer(inst, "Apuntado: \(Eur.texto(redondeado))", quitar)
             return "\(tipo.verbo) de \(Eur.texto(redondeado)). \(API.avisoEncolado)."
         }
         let objeto = try? JSONSerialization.jsonObject(with: crudo) as? [String: Any]
@@ -184,6 +191,7 @@ final class DatosGastos {
         // lo recién apuntado entra en el ciclo de hoy: se pide de nuevo ese (y se vuelve a él si se miraba otro)
         if inst == instancia, ref != Fecha.hoy() { withAnimation(Tema.Muelle.pantalla) { ref = Fecha.hoy() } }
         await carga()
+        ofreceDeshacer(inst, "Apuntado: \(Eur.texto(redondeado))", quitar)
         return texto
     }
 
@@ -225,13 +233,14 @@ final class DatosGastos {
         var comercio: String
         var nota: String
         var viaje: String
+        var reparto: String = "medias"
     }
 
     func edita(_ m: Movimiento, _ c: Cambios) async throws {
         let inst = instancia
         let importe = (c.importe * 100).rounded() / 100
         let cambios: [String: Any] = ["importe": importe, "dia": c.dia, "cat": c.cat, "comercio": c.comercio,
-                                      "nota": c.nota, "viaje": c.viaje]
+                                      "nota": c.nota, "viaje": c.viaje, "reparto": c.reparto]
         try await opera(inst, ["op": "gasto.edita", "id": m.id, "cambios": cambios,
                                "resumen": "Cambiar el gasto de \(Eur.texto(importe))"])
         await refresca(inst)
@@ -249,23 +258,28 @@ final class DatosGastos {
             .flatMap { ($0["gastos"] as? [[String: Any]])?.first { ($0["id"] as? String) == m.id } }
         try await opera(inst, ["op": "gasto.borra", "id": m.id, "resumen": "Borrar el gasto de \(Eur.texto(m.importe))"])
         if let quitado {
-            borrado = (inst, quitado, "Borrado: \(Eur.texto(m.importe))")
-            tareaBorrado?.cancel()
-            tareaBorrado = Task { [weak self] in
-                try? await Task.sleep(for: .seconds(7))
-                guard !Task.isCancelled else { return }
-                await MainActor.run { withAnimation(Tema.Muelle.pantalla) { self?.borrado = nil } }
-            }
+            ofreceDeshacer(inst, "Borrado: \(Eur.texto(m.importe))",
+                           ["op": "gasto.restaura", "id": m.id, "gasto": quitado, "resumen": "Recuperar un gasto borrado"])
         }
         await refresca(inst)
+    }
+
+    /// Enseña «Deshacer» siete segundos; al tocarlo se manda `op` (por la cola, como todo).
+    func ofreceDeshacer(_ inst: InstanciaGastos, _ texto: String, _ op: [String: Any]) {
+        withAnimation(Tema.Muelle.pantalla) { borrado = (inst, op, texto) }
+        tareaBorrado?.cancel()
+        tareaBorrado = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(7))
+            guard !Task.isCancelled else { return }
+            await MainActor.run { withAnimation(Tema.Muelle.pantalla) { self?.borrado = nil } }
+        }
     }
 
     func deshazBorrado() async throws {
         guard let b = borrado else { return }
         tareaBorrado?.cancel()
         withAnimation(Tema.Muelle.pantalla) { borrado = nil }
-        try await opera(b.instancia, ["op": "gasto.restaura", "id": (b.crudo["id"] as? String) ?? "", "gasto": b.crudo,
-                                      "resumen": "Recuperar un gasto borrado"])
+        try await opera(b.instancia, b.deshacer)
         await refresca(b.instancia)
     }
 

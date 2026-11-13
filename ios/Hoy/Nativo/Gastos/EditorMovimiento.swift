@@ -12,6 +12,7 @@ struct EditorMovimiento: View {
     @State private var comercio: String
     @State private var nota: String
     @State private var viaje: String
+    @State private var reparto: String
     @State private var trabajando = false
     @State private var error: String?
     @State private var confirmaBorrar = false
@@ -25,6 +26,13 @@ struct EditorMovimiento: View {
         _comercio = State(initialValue: m.comercio)
         _nota = State(initialValue: m.nota)
         _viaje = State(initialValue: m.viaje)
+        _reparto = State(initialValue: m.reparto)
+    }
+
+    /// El reparto solo cuenta en un viaje compartido con la pareja.
+    private var pareja: String {
+        guard let v = datos.estado?.viajes.first(where: { $0.id == viaje }), v.con else { return "" }
+        return datos.resumen?.pareja ?? ""
     }
 
     private var cifra: Double? {
@@ -89,6 +97,16 @@ struct EditorMovimiento: View {
                             Picker("Viaje", selection: $viaje) {
                                 Text("Ninguno: cuenta en el ciclo").tag("")
                                 ForEach(viajes) { Text($0.n).tag($0.id) }
+                            }
+                            .labelsHidden()
+                            .tint(Tema.acento)
+                        }
+                    }
+                    if !pareja.isEmpty {
+                        Divider().overlay(Tema.linea)
+                        fila("De quién es") {
+                            Picker("De quién es", selection: $reparto) {
+                                ForEach(RepartoViaje.opciones(pareja), id: \.id) { Text($0.n).tag($0.id) }
                             }
                             .labelsHidden()
                             .tint(Tema.acento)
@@ -176,7 +194,7 @@ struct EditorMovimiento: View {
         error = nil
         let c = DatosGastos.Cambios(importe: x, dia: FechaGasto.dia(dia), cat: cat,
                                     comercio: comercio.trimmingCharacters(in: .whitespaces),
-                                    nota: nota.trimmingCharacters(in: .whitespaces), viaje: viaje)
+                                    nota: nota.trimmingCharacters(in: .whitespaces), viaje: viaje, reparto: reparto)
         Task {
             defer { trabajando = false }
             do {
