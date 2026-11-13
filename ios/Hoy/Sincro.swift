@@ -387,7 +387,7 @@ enum Sincro {
         let manana = Fecha.dia(Date().addingTimeInterval(24 * 3600))
         return ["/api/state", "/api/hoy", "/api/sueno", "/api/carrera", "/api/bandeja", "/api/documentos",
                 "/api/fantasma", "/api/ajustes", "/api/escalada", "/api/pantalla",
-                "/api/gastos/estado", "/api/gastos/resumen?dia=\(hoy)", "/api/comida/estado", "/api/comida/lista",
+                "/api/gastos/estado", "/api/gastos/resumen?dia=\(hoy)", "/api/comida/estado", "/api/comida/lista", "/api/comida/cesta", "/api/comida/alimentos",
                 "/api/toca?dia=\(hoy)", "/api/toca?dia=\(manana)", "/api/presupuesto"]
     }
 
