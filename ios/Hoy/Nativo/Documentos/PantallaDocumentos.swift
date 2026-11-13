@@ -182,16 +182,12 @@ struct PantallaDocumentos: View {
             .listRowSeparatorTint(Tema.linea)
             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                 Button(role: .destructive) { Task { await datos.borra(d) } } label: { Label("Borrar", systemImage: "trash") }
-                if !d.provisional {
-                    Button { editando = d } label: { Label("Cambiar", systemImage: "pencil") }
-                        .tint(Tema.aviso)
-                }
+                Button { editando = d } label: { Label("Cambiar", systemImage: "pencil") }
+                    .tint(Tema.aviso)
             }
             .contextMenu {
-                if !d.provisional {
-                    Button { abre(d) } label: { Label("Ver", systemImage: "eye") }
-                    Button { editando = d } label: { Label("Cambiar datos", systemImage: "pencil") }
-                }
+                Button { abre(d) } label: { Label("Ver", systemImage: "eye") }
+                Button { editando = d } label: { Label("Cambiar datos", systemImage: "pencil") }
                 Button(role: .destructive) { Task { await datos.borra(d) } } label: { Label("Borrar", systemImage: "trash") }
             }
     }
@@ -199,10 +195,6 @@ struct PantallaDocumentos: View {
     // MARK: acciones
 
     private func abre(_ d: DocumentoTom) {
-        guard !d.provisional else {
-            datos.avisa("Este documento se subirá cuando vuelva la conexión.")
-            return
-        }
         guard abriendo == nil else { return }
         Haptica.shared.toca(.marcar)
         Task {

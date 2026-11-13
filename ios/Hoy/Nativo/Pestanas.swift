@@ -36,7 +36,10 @@ struct Pestanas: View {
                     guard puedeArrastrar(g), abs(dx) > 80 || rapido else { return }
                     paso(dx < 0 ? 1 : -1)
                 })
-            Dock(actual: Navegador.seccion(navegador.pestana)) { navegador.toca($0) }
+            VStack(spacing: Tema.Espacio.s) {
+                IndicadorCola()   // «N cambios por enviar» (Cola/), solo si hay algo en la cola
+                Dock(actual: Navegador.seccion(navegador.pestana)) { navegador.toca($0) }
+            }
                 .padding(.bottom, 2)
                 .ignoresSafeArea(.keyboard)
         }

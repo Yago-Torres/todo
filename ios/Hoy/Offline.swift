@@ -83,6 +83,7 @@ struct SeccionSinConexion: View {
 
     private func descarta(_ c: Local.Cambio) {
         Local.descarta(c.id)
+        Operaciones.recalcula(para: c)
         recarga()
     }
 

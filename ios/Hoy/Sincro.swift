@@ -44,14 +44,41 @@ final class Red: @unchecked Sendable {
 enum Sincro {
     private actor Turno {
         private var ocupado = false
+        /// Alguien pidió vaciar mientras otro vaciaba: al acabar, otra vuelta (lo recién apuntado no espera).
+        private var otraVez = false
+        private var despertador: Task<Void, Never>?
 
         func toma() -> Bool {
-            if ocupado { return false }
+            if ocupado {
+                otraVez = true
+                return false
+            }
             ocupado = true
+            otraVez = false
             return true
         }
 
-        func suelta() { ocupado = false }
+        /// Suelta el turno, salvo que haya que dar otra vuelta (entonces true y se sigue teniendo).
+        func suelta() -> Bool {
+            if otraVez {
+                otraVez = false
+                return true
+            }
+            ocupado = false
+            return false
+        }
+
+        /// Vuelve a vaciar cuando toque el reintento del primero de la cola (con la app abierta).
+        func programa(_ cuando: Date?) {
+            despertador?.cancel()
+            guard let cuando else { return }
+            let espera = max(1, min(3600, cuando.timeIntervalSinceNow))
+            despertador = Task {
+                try? await Task.sleep(nanoseconds: UInt64(espera * 1_000_000_000))
+                guard !Task.isCancelled else { return }
+                await Sincro.vacia()
+            }
+        }
     }
 
     enum Contestacion {
@@ -61,11 +88,19 @@ enum Sincro {
     }
 
     private enum Envio {
-        case hecho
+        /// Con lo que contestó el servidor (y su X-Version), si sirve para algo.
+        case hecho(Data?, String?)
         case sinRed
         case fallo(Int, String)
         case choque(String)
+        /// El servidor no lo acepta y no lo va a aceptar por mucho que se repita (400, 404…): a la vista para descartarlo.
+        case rechazo(String)
+        /// Espera a otro cambio (no cuenta como intento).
+        case espera(String)
     }
+
+    /// Los códigos que no se arreglan reintentando.
+    private static let rechazos: Set<Int> = [400, 404, 410, 413, 415, 422]
 
     private static let turno = Turno()
     private static let claveUltimaPrecarga = "localPrecarga"
@@ -88,10 +123,19 @@ enum Sincro {
     static func vacia(forzar: Bool = false) async -> Int {
         guard Almacen.claves != nil else { return 0 }
         guard await turno.toma() else { return 0 }
-        let enviados = await recorre(forzar: forzar)
-        await turno.suelta()
+        var enviados = 0
+        repeat {
+            enviados += await recorre(forzar: forzar)
+        } while await turno.suelta()
+        // si el primero espera su reintento, se vuelve a probar a esa hora sin esperar a nada más
+        let primero = Local.cambios().first { $0.estado == .pendiente }
+        await turno.programa(primero.map { $0.proximo ?? Date().addingTimeInterval(60) })
         if enviados > 0 {
-            await MainActor.run { WidgetCenter.shared.reloadAllTimelines() }
+            Local.limpiaAlias()
+            await MainActor.run {
+                WidgetCenter.shared.reloadAllTimelines()
+                NotificationCenter.default.post(name: .tomSincronizado, object: enviados)
+            }
         }
         return enviados
     }
@@ -104,18 +148,29 @@ enum Sincro {
             // en orden: si el primero espera su reintento, los de detrás también
             if !forzar, let proximo = c.proximo, proximo > Date() { break }
             switch await envia(c) {
-            case .hecho:
+            case .hecho(let respuesta, let version):
                 Local.borraCambio(c.id, rev: c.rev)
+                Operaciones.alMandar(c, respuesta: respuesta, version: version)
                 enviados += 1
             case .sinRed:
                 break bucle
+            case .espera(let motivo):
+                Local.espera(c.id, hasta: Date().addingTimeInterval(60), motivo: motivo)
+                break bucle
+            case .rechazo(let motivo):
+                Local.actualiza(c.id, estado: .error, intentos: c.intentos + 1, error: motivo, proximo: nil)
+                Operaciones.recalcula(para: c)   // lo rechazado deja de verse en la copia
+                avisa("El servidor no ha aceptado un cambio",
+                      "\(c.resumen): \(motivo). Lo tienes en «cambios por enviar», encima de la barra, para descartarlo.")
             case .fallo(let codigo, let motivo):
                 let intentos = c.intentos + 1
                 // un 4xx no se arregla solo: 5 intentos. Un 5xx es la Pi o una app de detrás caída: más paciencia
                 let limite = codigo >= 500 ? 10 : 5
                 if intentos >= limite {
                     Local.actualiza(c.id, estado: .error, intentos: intentos, error: motivo, proximo: nil)
-                    avisa("Un cambio no se ha podido guardar", "\(c.resumen): \(motivo). Lo tienes en Configurar → Sin conexión.")
+                    Operaciones.recalcula(para: c)
+                    avisa("Un cambio no se ha podido guardar",
+                          "\(c.resumen): \(motivo). No se ha perdido: lo tienes en «cambios por enviar», encima de la barra.")
                 } else {
                     let espera = min(3600, 30 * pow(2, Double(intentos - 1)))
                     Local.actualiza(c.id, estado: .pendiente, intentos: intentos, error: motivo,
@@ -125,7 +180,7 @@ enum Sincro {
             case .choque(let motivo):
                 Local.actualiza(c.id, estado: .conflicto, intentos: c.intentos + 1, error: motivo, proximo: nil)
                 avisa("Cambio sin guardar por un conflicto",
-                      "\(c.resumen): \(motivo). No se ha perdido: lo tienes en Configurar → Sin conexión.")
+                      "\(c.resumen): \(motivo). No se ha perdido: lo tienes en «cambios por enviar», encima de la barra.")
             }
         }
         if enviados > 0 { Local.ultimaSincronizacion = Date() }
@@ -133,22 +188,112 @@ enum Sincro {
     }
 
     private static func envia(_ c: Local.Cambio) async -> Envio {
+        if c.metodo == "OP" { return await enviaOperacion(c) }
         if c.metodo == "PUT" && esEstadoCompleto(c.rutaSinQuery) { return await fusionaYEnvia(c) }
-        guard var p = try? API.peticion(c.ruta, metodo: c.metodo) else { return .fallo(0, "Faltan las claves") }
-        p.httpBody = c.cuerpo
-        if c.cuerpo != nil {
+        // lo creado sin red (tmp:…) y las tareas que cambiaron de id: con el id de ahora
+        let (ruta, cuerpo) = Operaciones.resuelveIds(ruta: c.ruta, cuerpo: c.cuerpo)
+        let idEnviado = cuerpo.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }?["id"] as? String
+        if ruta.contains("tmp:") || (idEnviado?.hasPrefix("tmp:") ?? false) {
+            let creador = Local.cambios().first { otro in
+                guard let tmp = otro.cabeceras["x-tom-tmp"] else { return false }
+                return ruta.contains(tmp) || idEnviado == tmp
+            }
+            if let creador, creador.estado == .pendiente, creador.id < c.id {
+                return .espera("Espera a que salga «\(creador.resumen)»")
+            }
+            return .rechazo("Va sobre algo creado sin conexión que no llegó a guardarse. Descártalo")
+        }
+        guard var p = try? API.peticion(ruta, metodo: c.metodo) else { return .fallo(0, "Faltan las claves") }
+        p.httpBody = cuerpo
+        if c.metodo == "POST", c.rutaSinQuery == "/api/documentos" { p.timeoutInterval = 120 }
+        if cuerpo != nil {
             p.setValue(c.cabeceras["content-type"] ?? "application/json", forHTTPHeaderField: "Content-Type")
         }
         // un documento subido sin red: sus datos (nombre, tipo, caducidad…) viajan en esta cabecera
         if let doc = c.cabeceras["x-doc"] { p.setValue(doc, forHTTPHeaderField: "X-Doc") }
         switch await pide(p) {
-        case .ok:
-            return .hecho
+        case .ok(let datos, _):
+            apuntaIds(c, idEnviado: idEnviado, respuesta: datos)
+            return .hecho(datos, nil)
         case .sinRed:
             return .sinRed
         case .estado(let codigo, let datos):
+            if rechazos.contains(codigo) { return .rechazo(motivo(codigo, datos)) }
             return .fallo(codigo, motivo(codigo, datos))
         }
+    }
+
+    /// Tras crear o cambiar una tarea o un documento: el id que le dio el servidor, para lo que venga detrás.
+    private static func apuntaIds(_ c: Local.Cambio, idEnviado: String?, respuesta: Data) {
+        let r = c.rutaSinQuery
+        guard r.hasPrefix("/api/tarea") || r.hasPrefix("/api/documentos") else { return }
+        let objeto = (try? JSONSerialization.jsonObject(with: respuesta)) as? [String: Any]
+        guard let nuevo = (objeto?["id"] as? String) ?? (objeto?["id"] as? NSNumber)?.stringValue else { return }
+        if let tmp = c.cabeceras["x-tom-tmp"] {
+            Local.ponAlias(tmp, nuevo)
+            // el fichero subido sin red ya estaba en el iPhone: ahora con su id de verdad
+            if r == "/api/documentos", let copia = Local.lee(Local.clave("GET", "/api/documentos/\(tmp)/fichero")) {
+                Local.guarda(Local.clave("GET", "/api/documentos/\(nuevo)/fichero"), cuerpo: copia.cuerpo, tipo: copia.tipo,
+                             version: nil, fecha: Date(), forzar: true)
+                Local.borra(Local.clave("GET", "/api/documentos/\(tmp)/fichero"))
+            }
+        } else if let idEnviado, r.hasPrefix("/api/tarea") {
+            Local.ponAlias(idEnviado, nuevo)
+        }
+    }
+
+    // MARK: operaciones con intención (Compartido/Operaciones.swift)
+
+    /// GET del estado fresco → la operación encima → PUT (con X-Version en /api/state). En un 409, otra vuelta.
+    private static func enviaOperacion(_ c: Local.Cambio) async -> Envio {
+        let ruta = c.rutaSinQuery
+        let p = Operaciones.pendiente(c)
+        let esState = ruta == Operaciones.state
+        for _ in 0..<5 {
+            guard let pg = try? API.peticion(ruta) else { return .fallo(0, "Faltan las claves") }
+            var estado: [String: Any]
+            let version: String?
+            let fresco: Data
+            switch await pide(pg) {
+            case .sinRed:
+                return .sinRed
+            case .estado(let codigo, let datos):
+                return .fallo(codigo, motivo(codigo, datos))
+            case .ok(let datos, let http):
+                guard let e = (try? JSONSerialization.jsonObject(with: datos)) as? [String: Any] else {
+                    return .fallo(500, "El servidor no devuelve JSON")
+                }
+                estado = e
+                fresco = datos
+                version = http.value(forHTTPHeaderField: "X-Version")
+            }
+            let antes = estado
+            do {
+                try Operaciones.aplica(p, en: ruta, &estado, estricto: true)
+            } catch let r as Operaciones.Rechazo {
+                return .rechazo(r.mensaje)
+            } catch {
+                return .rechazo(error.localizedDescription)
+            }
+            if Fusion.igual(antes, estado) { return .hecho(fresco, version) }   // ya estaba así en el servidor
+            guard let cuerpo = try? JSONSerialization.data(withJSONObject: estado),
+                  var put = try? API.peticion(ruta, metodo: "PUT") else { return .fallo(400, "No se puede preparar el envío") }
+            put.httpBody = cuerpo
+            put.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            if esState, let version { put.setValue(version, forHTTPHeaderField: "X-Version") }
+            switch await pide(put) {
+            case .ok(let d, let http):
+                return .hecho(d, http.value(forHTTPHeaderField: "X-Version"))
+            case .sinRed:
+                return .sinRed
+            case .estado(409, _):
+                continue   // alguien escribió entre el GET y el PUT: se lee lo nuevo y se aplica otra vez
+            case .estado(let codigo, let d):
+                if rechazos.contains(codigo) { return .rechazo(motivo(codigo, d)) }
+                return .fallo(codigo, motivo(codigo, d))
+            }
+        }
+        return .fallo(409, "El estado cambia sin parar en el servidor")
     }
 
     /// Un PUT del estado entero hecho sin red no puede pisar lo que cambió mientras tanto (el bot, los timers de la Pi,
@@ -179,8 +324,8 @@ enum Sincro {
             var cabeceraVersion = esState ? c.cabeceras["x-version"] : nil
             if let base {
                 do {
-                    guard let fundido = try Fusion.fusiona(base, local, remoto) else { return .hecho }
-                    if Fusion.igual(fundido, remoto) { return .hecho }   // ya estaba todo en el servidor
+                    guard let fundido = try Fusion.fusiona(base, local, remoto) else { return .hecho(nil, nil) }
+                    if Fusion.igual(fundido, remoto) { return .hecho(nil, nil) }   // ya estaba todo en el servidor
                     cuerpo = fundido
                     cabeceraVersion = version
                 } catch let choque as Fusion.Choque {
@@ -200,7 +345,9 @@ enum Sincro {
                 Local.guarda(Local.clave("GET", ruta), cuerpo: d,
                              tipo: http.value(forHTTPHeaderField: "Content-Type") ?? "application/json",
                              version: http.value(forHTTPHeaderField: "X-Version"), fecha: fechaDe(http), forzar: true)
-                return .hecho
+                Local.guarda(Operaciones.claveBase(ruta), cuerpo: d, tipo: "application/json",
+                             version: http.value(forHTTPHeaderField: "X-Version"), fecha: fechaDe(http), forzar: true)
+                return .hecho(nil, nil)
             case .sinRed:
                 return .sinRed
             case .estado(409, _):
@@ -269,10 +416,17 @@ enum Sincro {
         guard case .ok(let datos, let http) = await pide(p) else { return false }
         let clave = Local.clave("GET", ruta)
         let soloRuta = ruta.components(separatedBy: "?").first ?? ruta
+        let tipo = http.value(forHTTPHeaderField: "Content-Type") ?? "application/json"
+        let version = http.value(forHTTPHeaderField: "X-Version")
+        if Operaciones.afectables.contains(soloRuta) {
+            // lo del servidor como base y, encima, lo que aún no ha salido (no se tapa con lo de antes)
+            let vista = Operaciones.llega(ruta, datos, tipo: tipo, version: version, fecha: fechaDe(http))
+            if ruta == "/api/hoy" { Almacen.guardaHoy(vista) }
+            return true
+        }
         // lo cambiado aquí que aún no ha salido no se tapa con lo del servidor
         if pendientes.contains(soloRuta), Local.lee(clave)?.local == true { return true }
-        Local.guarda(clave, cuerpo: datos, tipo: http.value(forHTTPHeaderField: "Content-Type") ?? "application/json",
-                     version: http.value(forHTTPHeaderField: "X-Version"), fecha: fechaDe(http))
+        Local.guarda(clave, cuerpo: datos, tipo: tipo, version: version, fecha: fechaDe(http))
         if ruta == "/api/hoy" { Almacen.guardaHoy(datos) }
         return true
     }
@@ -442,4 +596,9 @@ enum Fusion {
         for (i, x) in l.enumerated() where puestos.contains(lk[i]) && !enRemoto.contains(lk[i]) { fuera.append(x) }
         return fuera
     }
+}
+
+extension Notification.Name {
+    /// Sincro ha mandado cambios de la cola (object: cuántos). Las pantallas recargan de la copia local.
+    static let tomSincronizado = Notification.Name("tomSincronizado")
 }
