@@ -24,23 +24,58 @@ struct PoseEsc {
     func ve(_ i: Int) -> Bool { c[i] >= Self.umbral }
     var hayCuerpo: Bool { c.filter { $0 >= Self.umbral }.count >= 6 }
 
-    /// La persona más clara del resultado de Vision; nil si no hay nadie.
-    init?(_ resultados: [VNHumanBodyPoseObservation]?) {
-        func total(_ o: VNHumanBodyPoseObservation) -> Float {
-            ((try? o.recognizedPoints(.all)) ?? [:]).values.reduce(0) { $0 + $1.confidence }
+    /// El escalador entre las personas que ve Vision (como quien_escala de ~/escalada/analizar.py): con un centro
+    /// del tronco anterior (`cerca`, 0-1), la más cercana a él, para no saltar a un amigo que está de pie al lado;
+    /// sin él, la de pies más altos (la que está en la pared) o, si no se ven pies, la más centrada. nil si no hay nadie.
+    init?(_ resultados: [VNHumanBodyPoseObservation]?, cerca: CGPoint? = nil) {
+        var candidatas: [PoseEsc] = []
+        for cuerpo in resultados ?? [] {
+            guard let puntos = try? cuerpo.recognizedPoints(.all) else { continue }
+            var p = [CGPoint](repeating: .zero, count: Self.n)
+            var c = [Float](repeating: 0, count: Self.n)
+            for (i, j) in VistaPrevia.articulaciones.enumerated() {
+                if let q = puntos[j], q.confidence > 0 {
+                    p[i] = CGPoint(x: q.location.x, y: 1 - q.location.y)
+                    c[i] = q.confidence
+                }
+            }
+            let pose = PoseEsc(p: p, c: c)
+            if pose.hayCuerpo { candidatas.append(pose) }
         }
-        guard let cuerpo = (resultados ?? []).max(by: { total($0) < total($1) }),
-              let puntos = try? cuerpo.recognizedPoints(.all) else { return nil }
-        var p = [CGPoint](repeating: .zero, count: Self.n)
-        var c = [Float](repeating: 0, count: Self.n)
-        for (i, j) in VistaPrevia.articulaciones.enumerated() {
-            if let q = puntos[j], q.confidence > 0 {
-                p[i] = CGPoint(x: q.location.x, y: 1 - q.location.y)
-                c[i] = q.confidence
+        let elegida: PoseEsc?
+        if let cerca {
+            elegida = candidatas.min { a, b in
+                Self.distancia(a.centroTronco, cerca) < Self.distancia(b.centroTronco, cerca)
+            }
+        } else {
+            let conPies = candidatas.filter { $0.ve(17) || $0.ve(18) }
+            if !conPies.isEmpty {
+                elegida = conPies.min { $0.pies < $1.pies }
+            } else {
+                elegida = candidatas.min { a, b in
+                    Self.distancia(a.centroTronco, CGPoint(x: 0.5, y: 0.5)) < Self.distancia(b.centroTronco, CGPoint(x: 0.5, y: 0.5))
+                }
             }
         }
-        self.init(p: p, c: c)
-        guard hayCuerpo else { return nil }
+        guard let elegida else { return nil }
+        self = elegida
+    }
+
+    private static func distancia(_ a: CGPoint?, _ b: CGPoint) -> CGFloat {
+        guard let a else { return .greatestFiniteMagnitude }
+        return hypot(a.x - b.x, a.y - b.y)
+    }
+
+    /// La altura de los pies (0-1, y hacia abajo): menor es más alto.
+    private var pies: CGFloat {
+        let ys = [17, 18].filter(ve).map { p[$0].y }
+        return ys.isEmpty ? 1 : ys.reduce(0, +) / CGFloat(ys.count)
+    }
+
+    /// El centro del tronco (entre hombros y caderas), 0-1.
+    var centroTronco: CGPoint? {
+        guard let t = tronco(CGSize(width: 1, height: 1)) else { return nil }
+        return CGPoint(x: (t.0.x + t.1.x) / 2, y: (t.0.y + t.1.y) / 2)
     }
 
     init(p: [CGPoint], c: [Float]) {

@@ -42,6 +42,8 @@ final class MotorVivo: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, @
         var estela: [PuntoEstela]
         var tam: CGSize
         var alcance: Alcance
+        /// Cuándo se vio a alguien por última vez (reloj de CACurrentMediaTime).
+        var visto: Double
     }
 
     // MARK: lo que ve la pantalla (solo en el hilo principal)
@@ -75,11 +77,13 @@ final class MotorVivo: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, @
     @ObservationIgnored private var _tam: CGSize = .zero
     @ObservationIgnored private var _alcance = Alcance()
     @ObservationIgnored private var _tronco: CGFloat = 0
+    @ObservationIgnored private var _visto: Double = CACurrentMediaTime()
     @ObservationIgnored private var visionOcupada = false
     @ObservationIgnored private var pedido: (giro: CGAffineTransform, colores: ColoresEsq)?
 
     // solo en la cola de Vision
     @ObservationIgnored private var suavizador = SuavizadorPose()
+    @ObservationIgnored private var ultimoCentro: (t: Double, p: CGPoint)?
     private let peticion = VNDetectHumanBodyPoseRequest()
 
     // solo en la cola de vídeo
@@ -277,17 +281,26 @@ final class MotorVivo: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, @
         cerrojo.lock()
         pedido = nil
         cerrojo.unlock()
+        // que iOS deje terminar de escribir los vídeos aunque salgas de la app justo al parar
+        let fondo = TareaFondo()
+        fondo.id = UIApplication.shared.beginBackgroundTask(withName: "Guardar el vídeo de escalada") {
+            MainActor.assumeIsolated { fondo.acaba() }
+        }
         colaVideo.async { [self] in
             let g = grabadora
             grabadora = nil
             guard let g else {
                 DispatchQueue.main.async {
-                    self.grabando = false
-                    self.inicioGrabacion = nil
+                    MainActor.assumeIsolated {
+                        self.grabando = false
+                        self.inicioGrabacion = nil
+                        fondo.acaba()
+                    }
                 }
                 return
             }
             g.termina { limpio, esqueleto in
+                fondo.acaba()
                 self.grabando = false
                 self.inicioGrabacion = nil
                 if let limpio, let esqueleto {
@@ -315,7 +328,7 @@ final class MotorVivo: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, @
     func instantanea() -> Instantanea {
         cerrojo.lock()
         defer { cerrojo.unlock() }
-        return Instantanea(pose: _pose, estela: _estela, tam: _tam, alcance: _alcance)
+        return Instantanea(pose: _pose, estela: _estela, tam: _tam, alcance: _alcance, visto: _visto)
     }
 
     @MainActor func reiniciaAlcance() {
@@ -379,6 +392,17 @@ final class MotorVivo: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, @
                 PintorEsq.pinta(ctx, pose: pose, estela: estela, ahora: t, duracionEstela: Self.duracionEstela,
                                 tamImagen: tam, escala: 1, aPx: { CGPoint(x: $0.x * w, y: $0.y * h) }, colores: colores)
             }
+            if g.fallo {
+                grabadora = nil
+                cerrojo.lock()
+                pedido = nil
+                cerrojo.unlock()
+                DispatchQueue.main.async {
+                    self.grabando = false
+                    self.inicioGrabacion = nil
+                    self.aviso = "No se ha podido empezar a grabar. Prueba otra vez; si sigue, cierra y abre el modo en vivo."
+                }
+            }
         }
     }
 
@@ -387,7 +411,10 @@ final class MotorVivo: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, @
     private func analiza(_ pb: CVPixelBuffer, _ t: Double) {
         let tam = CGSize(width: CVPixelBufferGetWidth(pb), height: CVPixelBufferGetHeight(pb))
         let manejador = VNImageRequestHandler(cvPixelBuffer: pb, orientation: .up, options: [:])
-        let cruda: PoseEsc? = (try? manejador.perform([peticion])) != nil ? PoseEsc(peticion.results) : nil
+        // el escalador: el más cercano al de antes (si se perdió hace poco); así no salta a quien mira de pie
+        let cerca = ultimoCentro.flatMap { t - $0.t < 1.5 ? $0.p : nil }
+        let cruda: PoseEsc? = (try? manejador.perform([peticion])) != nil ? PoseEsc(peticion.results, cerca: cerca) : nil
+        if let c = cruda?.centroTronco { ultimoCentro = (t, c) }
         let pose = suavizador.filtra(cruda, t)
         let vale = pose.hayCuerpo
         let centro = vale ? pose.centro(tam) : nil
@@ -403,6 +430,7 @@ final class MotorVivo: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, @
         }
         _estela.removeAll { t - $0.t > Self.duracionEstela }
         guard vale else { return }
+        _visto = t
         if let tronco { _tronco = _tronco == 0 ? tronco : _tronco * 0.9 + tronco * 0.1 }
         let pies = [17, 18].filter(pose.ve).map { pose.p[$0].y }
         let manos = [10, 11].filter(pose.ve).map { pose.p[$0].y }
@@ -427,7 +455,7 @@ final class Grabadora {
     private let aLimpio: AVAssetWriterInputPixelBufferAdaptor
     private let aEsq: AVAssetWriterInputPixelBufferAdaptor
     private var empezado = false
-    private var fallo = false
+    private(set) var fallo = false
 
     init(tam: CGSize, giro: CGAffineTransform) throws {
         let id = Grabadora.id()
@@ -444,6 +472,9 @@ final class Grabadora {
         fecha.value = ISO8601DateFormatter().string(from: Date()) as NSString
         wLimpio.metadata = [fecha]
         wEsq.metadata = [fecha]
+        // cada 5 s queda escrito un trozo válido: si la app muere grabando, se salva casi todo
+        wLimpio.movieFragmentInterval = CMTime(seconds: 5, preferredTimescale: 600)
+        wEsq.movieFragmentInterval = CMTime(seconds: 5, preferredTimescale: 600)
 
         func ajustes(_ w: AVAssetWriter, bits: Int) -> [String: Any] {
             var a: [String: Any] = [AVVideoCodecKey: AVVideoCodecType.hevc, AVVideoWidthKey: Int(tam.width),
@@ -493,7 +524,11 @@ final class Grabadora {
     func escribe(_ pb: CVPixelBuffer, _ t: CMTime, pinta: (CGContext) -> Void) {
         guard !fallo else { return }
         if !empezado {
-            guard wLimpio.startWriting(), wEsq.startWriting() else {
+            let a = wLimpio.startWriting(), b = wEsq.startWriting()
+            guard a, b else {
+                // si arranca solo uno, fuera los dos: nada de un vídeo sin su pareja
+                if a { wLimpio.cancelWriting() }
+                if b { wEsq.cancelWriting() }
                 fallo = true
                 return
             }
@@ -550,5 +585,17 @@ final class Grabadora {
             let l = wLimpio.status == .completed ? limpio : nil, e = wEsq.status == .completed ? esqueleto : nil
             MainActor.assumeIsolated { fin(l, e) }
         }
+    }
+}
+
+/// La tarea de fondo de iOS mientras se cierran los vídeos; se acaba una sola vez.
+@MainActor
+final class TareaFondo {
+    var id = UIBackgroundTaskIdentifier.invalid
+
+    func acaba() {
+        guard id != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(id)
+        id = .invalid
     }
 }

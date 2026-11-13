@@ -137,65 +137,74 @@ enum MontadorPresumir {
 
         for k in 0..<n {
             try Task.checkCancellation()
-            let tSalida = Double(k) / Double(fps)
-            let tf = fuente(tSalida)
-            while let sig = siguiente, sig.0 <= tf {
-                previo = sig
-                siguiente = lee()
-            }
-            guard let a = previo ?? siguiente else { break }
-            let r = ritmo(tf)
-            var imagen = derecha(a.1, orientacion)
-            if r < 0.99, let pr = previo, let sig = siguiente, sig.0 > pr.0 {
-                // a cámara lenta se funden los dos fotogramas vecinos: va suave aunque el vídeo sea de 30 fps
-                let w = max(0, min(1, (tf - pr.0) / (sig.0 - pr.0)))
-                imagen = imagen.applyingFilter("CIDissolveTransition", parameters: [
-                    kCIInputTargetImageKey: derecha(sig.1, orientacion), kCIInputTimeKey: w,
-                ])
-            }
-            // el encuadre sigue al centro de gravedad, sin sacudidas
-            let pose = poseEn(tf, muestras)
-            let c = pose?.centro(derecho).map { CGPoint(x: $0.x / derecho.width, y: $0.y / derecho.height) }
-            let objX = max(0, min(ws - CGFloat(ancho), (c?.x ?? 0.5) * ws - CGFloat(ancho) / 2))
-            let objY = max(0, min(hs - CGFloat(alto), (c?.y ?? 0.5) * hs - CGFloat(alto) * 0.55))
-            camX = camX.map { $0 + (objX - $0) * 0.08 } ?? objX
-            camY = camY.map { $0 + (objY - $0) * 0.08 } ?? objY
-            let cx = camX ?? 0, cy = camY ?? 0
-            let encuadrada = imagen
-                .transformed(by: CGAffineTransform(scaleX: sc, y: sc))
-                .transformed(by: CGAffineTransform(translationX: -cx, y: -(hs - cy - CGFloat(alto))))
-                .composited(over: negro)
-            let compuesta = sombras.composited(over: encuadrada).cropped(to: rect)
-
+            // el escritor va a su ritmo: se espera fuera del autoreleasepool (no se puede esperar dentro)
             while !entrada.isReadyForMoreMediaData {
+                guard escritor.status == .writing else {
+                    throw escritor.error ?? APIError(mensaje: "Se ha cortado la escritura del vídeo")
+                }
                 try await Task.sleep(nanoseconds: 2_000_000)
             }
-            guard let pool = adaptador.pixelBufferPool else { throw APIError(mensaje: "El iPhone no deja escribir el vídeo") }
-            var pbSalida: CVPixelBuffer?
-            CVPixelBufferPoolCreatePixelBuffer(nil, pool, &pbSalida)
-            guard let pbSalida else { continue }
-            ci.render(compuesta, to: pbSalida, bounds: rect, colorSpace: espacio)
+            // cada fotograma suelta su memoria al acabar (CIImage, búferes): si no, un vídeo largo agota la RAM
+            let sigue = try autoreleasepool { () throws -> Bool in
+                let tSalida = Double(k) / Double(fps)
+                let tf = fuente(tSalida)
+                while let sig = siguiente, sig.0 <= tf {
+                    previo = sig
+                    siguiente = lee()
+                }
+                guard let a = previo ?? siguiente else { return false }
+                let r = ritmo(tf)
+                var imagen = derecha(a.1, orientacion)
+                if r < 0.99, let pr = previo, let sig = siguiente, sig.0 > pr.0 {
+                    // a cámara lenta se funden los dos fotogramas vecinos: va suave aunque el vídeo sea de 30 fps
+                    let w = max(0, min(1, (tf - pr.0) / (sig.0 - pr.0)))
+                    imagen = imagen.applyingFilter("CIDissolveTransition", parameters: [
+                        kCIInputTargetImageKey: derecha(sig.1, orientacion), kCIInputTimeKey: w,
+                    ])
+                }
+                // el encuadre sigue al centro de gravedad, sin sacudidas
+                let pose = poseEn(tf, muestras)
+                let c = pose?.centro(derecho).map { CGPoint(x: $0.x / derecho.width, y: $0.y / derecho.height) }
+                let objX = max(0, min(ws - CGFloat(ancho), (c?.x ?? 0.5) * ws - CGFloat(ancho) / 2))
+                let objY = max(0, min(hs - CGFloat(alto), (c?.y ?? 0.5) * hs - CGFloat(alto) * 0.55))
+                camX = camX.map { $0 + (objX - $0) * 0.08 } ?? objX
+                camY = camY.map { $0 + (objY - $0) * 0.08 } ?? objY
+                let cx = camX ?? 0, cy = camY ?? 0
+                let encuadrada = imagen
+                    .transformed(by: CGAffineTransform(scaleX: sc, y: sc))
+                    .transformed(by: CGAffineTransform(translationX: -cx, y: -(hs - cy - CGFloat(alto))))
+                    .composited(over: negro)
+                let compuesta = sombras.composited(over: encuadrada).cropped(to: rect)
 
-            CVPixelBufferLockBaseAddress(pbSalida, [])
-            if let base = CVPixelBufferGetBaseAddress(pbSalida),
-               let ctx = CGContext(data: base, width: ancho, height: alto, bitsPerComponent: 8,
-                                   bytesPerRow: CVPixelBufferGetBytesPerRow(pbSalida), space: espacio,
-                                   bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue) {
-                ctx.translateBy(x: 0, y: CGFloat(alto))
-                ctx.scaleBy(x: 1, y: -1)
-                let estela = muestras.filter { $0.t <= tf && tf - $0.t <= 1.6 }
-                    .compactMap { m in m.centro.map { PuntoEstela(t: m.t, p: $0) } }
-                PintorEsq.pinta(ctx, pose: pose, estela: estela, ahora: tf, duracionEstela: 1.6, tamImagen: derecho,
-                                escala: sc, aPx: { CGPoint(x: $0.x * ws - cx, y: $0.y * hs - cy) }, colores: o.colores)
-                rotulos(ctx, o, tSalida: tSalida, total: total, ritmo: r)
+                guard let pool = adaptador.pixelBufferPool else { throw APIError(mensaje: "El iPhone no deja escribir el vídeo") }
+                var pbSalida: CVPixelBuffer?
+                CVPixelBufferPoolCreatePixelBuffer(nil, pool, &pbSalida)
+                guard let pbSalida else { return true }
+                ci.render(compuesta, to: pbSalida, bounds: rect, colorSpace: espacio)
+
+                CVPixelBufferLockBaseAddress(pbSalida, [])
+                if let base = CVPixelBufferGetBaseAddress(pbSalida),
+                   let ctx = CGContext(data: base, width: ancho, height: alto, bitsPerComponent: 8,
+                                       bytesPerRow: CVPixelBufferGetBytesPerRow(pbSalida), space: espacio,
+                                       bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue) {
+                    ctx.translateBy(x: 0, y: CGFloat(alto))
+                    ctx.scaleBy(x: 1, y: -1)
+                    let estela = muestras.filter { $0.t <= tf && tf - $0.t <= 1.6 }
+                        .compactMap { m in m.centro.map { PuntoEstela(t: m.t, p: $0) } }
+                    PintorEsq.pinta(ctx, pose: pose, estela: estela, ahora: tf, duracionEstela: 1.6, tamImagen: derecho,
+                                    escala: sc, aPx: { CGPoint(x: $0.x * ws - cx, y: $0.y * hs - cy) }, colores: o.colores)
+                    rotulos(ctx, o, tSalida: tSalida, total: total, ritmo: r)
+                }
+                CVPixelBufferUnlockBaseAddress(pbSalida, [])
+                adaptador.append(pbSalida, withPresentationTime: CMTime(value: Int64(k), timescale: fps))
+                let p = 0.5 + 0.5 * Double(k + 1) / Double(n)
+                if p - ultimoAviso >= 0.01 {
+                    ultimoAviso = p
+                    progreso(p, "Montando el vídeo…")
+                }
+                return true
             }
-            CVPixelBufferUnlockBaseAddress(pbSalida, [])
-            adaptador.append(pbSalida, withPresentationTime: CMTime(value: Int64(k), timescale: fps))
-            let p = 0.5 + 0.5 * Double(k + 1) / Double(n)
-            if p - ultimoAviso >= 0.01 {
-                ultimoAviso = p
-                progreso(p, "Montando el vídeo…")
-            }
+            if !sigue { break }
         }
         lector.cancelReading()
         entrada.markAsFinished()
@@ -225,22 +234,33 @@ enum MontadorPresumir {
         var r: [Muestra] = []
         var i = 0
         var ultimoAviso = -1.0
-        while let sb = salida.copyNextSampleBuffer() {
+        var ultimoCentro: (t: Double, p: CGPoint)?
+        while true {
             try Task.checkCancellation()
-            defer { i += 1 }
-            guard i % salto == 0, let pb = CMSampleBufferGetImageBuffer(sb) else { continue }
-            let t = CMSampleBufferGetPresentationTimeStamp(sb).seconds
-            let manejador = VNImageRequestHandler(cvPixelBuffer: pb, orientation: orientacion, options: [:])
-            let cruda: PoseEsc? = (try? manejador.perform([peticion])) != nil ? PoseEsc(peticion.results) : nil
-            let pose = suavizador.filtra(cruda, t)
-            let vale = pose.hayCuerpo
-            let c = vale ? pose.centro(tam).map { CGPoint(x: $0.x / tam.width, y: $0.y / tam.height) } : nil
-            r.append(Muestra(t: t, pose: vale ? pose : nil, centro: c))
-            let p = 0.5 * min(1, t / duracion)
-            if p - ultimoAviso >= 0.01 {
-                ultimoAviso = p
-                progreso(p, "Sacando el esqueleto…")
+            // cada fotograma suelta su memoria al acabar (búferes, resultados de Vision)
+            let sigue = autoreleasepool { () -> Bool in
+                guard let sb = salida.copyNextSampleBuffer() else { return false }
+                defer { i += 1 }
+                guard i % salto == 0, let pb = CMSampleBufferGetImageBuffer(sb) else { return true }
+                let t = CMSampleBufferGetPresentationTimeStamp(sb).seconds
+                let manejador = VNImageRequestHandler(cvPixelBuffer: pb, orientation: orientacion, options: [:])
+                // el escalador: el más cercano al de antes, para no saltar a quien mira de pie
+                let cerca = ultimoCentro.flatMap { t - $0.t < 1.5 ? $0.p : nil }
+                let cruda: PoseEsc? = (try? manejador.perform([peticion])) != nil
+                    ? PoseEsc(peticion.results, cerca: cerca) : nil
+                if let c = cruda?.centroTronco { ultimoCentro = (t, c) }
+                let pose = suavizador.filtra(cruda, t)
+                let vale = pose.hayCuerpo
+                let c = vale ? pose.centro(tam).map { CGPoint(x: $0.x / tam.width, y: $0.y / tam.height) } : nil
+                r.append(Muestra(t: t, pose: vale ? pose : nil, centro: c))
+                let p = 0.5 * min(1, t / duracion)
+                if p - ultimoAviso >= 0.01 {
+                    ultimoAviso = p
+                    progreso(p, "Sacando el esqueleto…")
+                }
+                return true
             }
+            if !sigue { break }
         }
         lector.cancelReading()
         return r

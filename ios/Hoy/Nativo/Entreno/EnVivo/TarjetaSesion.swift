@@ -17,21 +17,32 @@ struct ResumenSesion {
         f.dateFormat = "yyyyMMdd"
         let dia = f.string(from: Date())
         let xs = EscaladaDatos.shared.intentos.filter { $0.intento.hasPrefix(dia) }
-        let pendientes = EscaladaDatos.shared.pendientes.filter { p in
-            p.intento.hasPrefix(dia) && !xs.contains { $0.intento == p.intento }
+        // los de camino también cuentan: los pendientes del servidor y las subidas que lleva el iPhone
+        var otros: [(intento: String, bloque: String, color: String)] = []
+        for p in EscaladaDatos.shared.pendientes where p.intento.hasPrefix(dia) {
+            otros.append((p.intento, p.nombre.isEmpty ? "Bloque \(p.color)" : p.nombre, p.color))
+        }
+        for (i, v) in Escalada.shared.vivos where i.hasPrefix(dia) && v.fase != "error" {
+            otros.append((i, v.nombre.isEmpty ? "Bloque \(v.color)" : v.nombre, v.color))
+        }
+        var vistos = Set(xs.map(\.intento))
+        var todos: [(intento: String, bloque: String, color: String)] = xs.map { ($0.intento, $0.bloque, $0.color) }
+        for o in otros where !vistos.contains(o.intento) {
+            vistos.insert(o.intento)
+            todos.append(o)
         }
         var orden: [String] = []
         var colores: [String: String] = [:]
-        for x in xs where !orden.contains(x.bloque) {
+        for x in todos.sorted(by: { $0.intento < $1.intento }) where !orden.contains(x.bloque) {
             orden.append(x.bloque)
             colores[x.bloque] = x.color
         }
         let encadenados = Set(xs.filter { $0.resultado == "hecho" }.map(\.bloque)).count
-        let horas = (xs.map(\.intento) + pendientes.map(\.intento)).compactMap(segundos).sorted()
+        let horas = todos.map(\.intento).compactMap(segundos).sorted()
         let minutos = horas.count >= 2 ? max(1, (horas.last! - horas.first!) / 60) : nil
-        return ResumenSesion(intentos: xs.count + pendientes.count, bloques: orden.count, encadenados: encadenados,
+        return ResumenSesion(intentos: todos.count, bloques: orden.count, encadenados: encadenados,
                              nivelMax: xs.compactMap(\.dificultad).max(), minutos: minutos,
-                             colores: orden.compactMap { colores[$0] })
+                             colores: orden.compactMap { colores[$0] }.filter { !$0.isEmpty })
     }
 
     /// 20261113-183005 → segundos del día.
@@ -56,7 +67,7 @@ struct VistaTarjetaSesion: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text("Hoy en el rocódromo").estiloEtiqueta().foregroundStyle(Tema.acento)
-            Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Locale(identifier: "es_ES"))).capitalized)
+            Text(Self.fecha)
                 .font(Tema.fuente(.titulo)).foregroundStyle(Tema.texto)
             Grid(horizontalSpacing: 14, verticalSpacing: 14) {
                 GridRow {
@@ -88,6 +99,12 @@ struct VistaTarjetaSesion: View {
         .padding(28)
         .frame(width: 360, height: 450, alignment: .topLeading)
         .background(Tema.fondo)
+    }
+
+    /// «Viernes, 13 de noviembre»: mayúscula solo en la primera letra.
+    private static var fecha: String {
+        let t = Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(Locale(identifier: "es_ES")))
+        return t.prefix(1).uppercased() + t.dropFirst()
     }
 
     private func cifra(_ v: String, _ t: String, acento: Bool = false) -> some View {

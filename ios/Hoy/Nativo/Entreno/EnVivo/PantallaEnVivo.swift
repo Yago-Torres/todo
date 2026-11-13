@@ -91,6 +91,9 @@ struct PantallaEnVivo: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     Spacer()
+                    if motor.estado == .listo {
+                        AvisoNoTeVeo(motor: motor)
+                    }
                     if let a = motor.aviso {
                         Text(a)
                             .font(Tema.fuente(.pequeno))
@@ -191,7 +194,7 @@ struct PantallaEnVivo: View {
                                 .font(Tema.fuente(.pequeno, peso: .semibold))
                                 .monospacedDigit()
                                 .foregroundStyle(actual ? colores.centroSwiftUI : Tema.texto)
-                                .frame(width: actual ? 44 : 36, height: actual ? 44 : 36)
+                                .frame(width: 44, height: 44)
                                 .background(.ultraThinMaterial, in: Circle())
                                 .rotationEffect(giro)
                         }
@@ -497,6 +500,25 @@ struct HojaResultadoVivo: View {
                 Haptica.shared.toca(.error)
             }
             guardando = false
+        }
+    }
+}
+
+/// Tras 2 s sin ver a nadie: que se aleje hasta salir entero.
+private struct AvisoNoTeVeo: View {
+    let motor: MotorVivo
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 0.5)) { _ in
+            if CACurrentMediaTime() - motor.instantanea().visto > 2 {
+                Label("No te veo: aléjate hasta salir entero", systemImage: "figure.stand")
+                    .font(Tema.fuente(.texto, peso: .semibold))
+                    .foregroundStyle(Tema.texto)
+                    .padding(.horizontal, Tema.Espacio.l).padding(.vertical, Tema.Espacio.s)
+                    .background(.ultraThinMaterial, in: Capsule())
+                    .padding(.bottom, Tema.Espacio.s)
+                    .transition(.opacity)
+            }
         }
     }
 }
