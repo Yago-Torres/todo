@@ -2,25 +2,19 @@ import ActivityKit
 import Foundation
 import UIKit
 import UserNotifications
-import WebKit
 
 /// La Live Activity del modo serie a serie. La alimenta la pantalla nativa de Entreno (Hoy/Nativo/Entreno,
-/// muestraNativo y `nativo`) y, por si acaso, la web de /entreno.html sigue pudiendo: manda por el puente
-/// {accion:"entreno", estado} al abrir la sesión, en cada serie y al empezar o acabar un descanso, y {accion:"entrenoFin"}.
-///
-/// Con la sesión nativa abierta, «Serie hecha» la marca la propia pantalla nativa, también con la app en segundo plano
-/// (el intent corre en el proceso de la app). Lo de abajo es para la web:
+/// muestraNativo y `nativo`).
 ///
 /// «Serie hecha» desde la isla o la pantalla de bloqueo:
-/// - app delante: se pulsa la serie en la web (window.HoyEntreno.serieHecha()) y la web devuelve el estado nuevo.
-/// - app en segundo plano, suspendida o cerrada: el JavaScript de la web está parado, así que la actividad avanza
-///   aquí sola (siguiente serie y descanso, con su aviso) y la serie queda pendiente en Almacen. Al volver a primer
-///   plano, o cuando la web reabre la sesión tras recargar, se marcan en la web las pendientes.
+/// - con la sesión nativa abierta, la marca la propia pantalla, también con la app en segundo plano (el intent corre
+///   en el proceso de la app).
+/// - sin ella (iOS cerró la app), la actividad avanza aquí sola (siguiente serie y descanso, con su aviso) y la serie
+///   queda pendiente en Almacen; al reabrirse la sesión nativa se marcan las pendientes.
 @MainActor
 final class Entreno {
     static let shared = Entreno()
 
-    weak var web: WKWebView?
     /// La sesión nativa abierta: marca la serie que toca (false si no se pudo, p. ej. faltan las repes).
     var nativo: (() -> Bool)?
     private var actividad: Activity<EntrenoActividad>?
@@ -30,9 +24,9 @@ final class Entreno {
         EntrenoPuente.manejador = { [weak self] in await self?.serieHecha() }
         NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification,
                                                object: nil, queue: .main) { _ in
-            Task { @MainActor in Entreno.shared.encola { await $0.aplicaPendientes() } }
+            Task { @MainActor in Entreno.shared.aplicaPendientesNativas() }
         }
-        // las que quedaran de antes (app cerrada a medias): si la sesión sigue, se reabre y manda el estado
+        // las que quedaran de antes (app cerrada a medias): si la sesión sigue, se reabre y manda el estado nuevo
         for vieja in Activity<EntrenoActividad>.activities {
             Task { await vieja.end(nil, dismissalPolicy: .immediate) }
         }
@@ -50,26 +44,14 @@ final class Entreno {
         }
     }
 
-    // MARK: mensajes de la web
-
-    func recibe(_ datos: [String: Any]) {
-        guard let estado = EntrenoActividad.ContentState(web: datos) else { return }
-        let nombre = (datos["nombre"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Entreno"
-        EntrenoPuente.programaAviso(estado)
-        encola { yo in
-            await yo.muestra(nombre, estado)
-            await yo.aplicaPendientes()
-        }
-    }
-
     /// La pantalla nativa: el estado nuevo (al abrir, en cada serie y al empezar o acabar un descanso).
     func muestraNativo(_ nombre: String, _ estado: EntrenoActividad.ContentState) {
         EntrenoPuente.programaAviso(estado)
         encola { yo in await yo.muestra(nombre, estado) }
     }
 
-    /// Las «Serie hecha» que se pulsaron con la app cerrada (EntrenoPuente.avanzaSinWeb las cuenta): con la sesión
-    /// nativa abierta, se marcan aquí.
+    /// Las «Serie hecha» que se pulsaron con la app cerrada (EntrenoPuente.avanzaSola las cuenta): con la sesión
+    /// nativa abierta, se marcan aquí (al reabrirla y al volver a primer plano).
     func aplicaPendientesNativas() {
         guard let nativo else { return }
         let d = Almacen.defaults
@@ -110,55 +92,6 @@ final class Entreno {
             _ = nativo()
             return
         }
-        if UIApplication.shared.applicationState == .active, web != nil,
-           (await evalua("window.HoyEntreno ? (window.HoyEntreno.serieHecha(), true) : false") as? Bool) == true {
-            return   // la web la marcó (o enfocó las repes que faltan) y ya mandó el estado nuevo
-        }
-        await EntrenoPuente.avanzaSinWeb()
-    }
-
-    /// Las series marcadas con la web dormida. serieHecha() de la web: true = marcada, false = no se pudo (sin repes:
-    /// se descartan, no vaya a quedarse reintentando), null = aún no hay sesión abierta (se guardan para luego).
-    private func aplicaPendientes() async {
-        if nativo != nil { return aplicaPendientesNativas() }
-        guard UIApplication.shared.applicationState == .active, web != nil else { return }
-        let d = Almacen.defaults
-        var quedan = d.integer(forKey: EntrenoPuente.clavePendientes)
-        while quedan > 0 {
-            d.set(quedan - 1, forKey: EntrenoPuente.clavePendientes)
-            let r = await evalua("window.HoyEntreno ? window.HoyEntreno.serieHecha() : null")
-            if r is NSNull || r == nil {
-                d.set(quedan, forKey: EntrenoPuente.clavePendientes)
-                return
-            }
-            if r as? Bool != true {
-                d.removeObject(forKey: EntrenoPuente.clavePendientes)
-                return
-            }
-            quedan -= 1
-        }
-    }
-
-    private func evalua(_ js: String) async -> Any? {
-        guard let web else { return nil }
-        return await withCheckedContinuation { (c: CheckedContinuation<Any?, Never>) in
-            web.evaluateJavaScript(js) { resultado, _ in c.resume(returning: resultado) }
-        }
-    }
-}
-
-extension EntrenoActividad.ContentState {
-    /// El estado tal como lo manda la web; finDescanso en milisegundos desde 1970 (0 = sin descanso).
-    init?(web d: [String: Any]) {
-        guard let ejercicio = d["ejercicio"] as? String else { return nil }
-        func entero(_ k: String) -> Int { (d[k] as? NSNumber)?.intValue ?? 0 }
-        self.ejercicio = ejercicio
-        serie = entero("serie")
-        total = entero("total")
-        detalle = d["detalle"] as? String ?? ""
-        descanso = entero("descanso")
-        hecho = (d["hecho"] as? NSNumber)?.boolValue ?? false
-        let ms = (d["finDescanso"] as? NSNumber)?.doubleValue ?? 0
-        finDescanso = ms > 0 ? Date(timeIntervalSince1970: ms / 1000) : nil
+        await EntrenoPuente.avanzaSola()
     }
 }

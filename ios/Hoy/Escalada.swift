@@ -8,12 +8,11 @@ import UIKit
 import UniformTypeIdentifiers
 import UserNotifications
 import Vision
-import WebKit
 
-/// Subir un intento de escalada desde la app: la web pide la hoja ({accion:"escalada-subir"}), se elige el vídeo con
+/// Subir un intento de escalada desde la app: la pantalla de Entreno abre la hoja (`hojaVisible`), se elige el vídeo con
 /// PhotosPicker (sin permiso de fototeca), se comprime aquí, sube con un URLSession en segundo plano a POST /api/escalada
 /// y, mientras sube, Vision saca una vista previa del esqueleto (POST /api/escalada/<intento>/previa). El análisis bueno
-/// lo sigue haciendo ~/escalada en el PC o en la Pi. La web se entera con el evento «tom-escalada».
+/// lo sigue haciendo ~/escalada en el PC o en la Pi. La pantalla nativa sigue cada subida en `vivos`.
 ///
 /// Cloudflare (plan gratis) corta las peticiones de más de 100 MB: por eso se comprime hasta que pese 95 MB o menos.
 @MainActor @Observable
@@ -21,7 +20,6 @@ final class Escalada {
     static let shared = Escalada()
     static let coloresPorDefecto = ["amarillo", "naranja", "rojo", "rosa", "morado", "azul", "verde", "blanco", "negro"]
 
-    @ObservationIgnored weak var web: WKWebView?
     var hojaVisible = false
     var colores = Escalada.coloresPorDefecto
     var quien = "Yago"
@@ -30,7 +28,7 @@ final class Escalada {
     var progreso: Double?
     var aviso: String?
     var fallidas: [DatosIntento] = []
-    /// Lo último que se sabe de cada subida en curso (lo mismo que el evento «tom-escalada»), para la pantalla nativa.
+    /// Lo último que se sabe de cada subida en curso, para la pantalla nativa.
     var vivos: [String: (fase: String, progreso: Double?, texto: String, color: String, nombre: String)] = [:]
 
     private init() {}
@@ -154,28 +152,17 @@ final class Escalada {
                 emite(d.intento, "previa", datos: d)
             }
         } catch {
-            // sin previa: la web enseña «subiendo…» y luego el análisis
+            // sin previa: se ve «subiendo…» y luego el análisis
         }
     }
 
-    // MARK: la web
+    // MARK: el progreso
 
-    /// window.dispatchEvent(new CustomEvent("tom-escalada", {detail: {intento, fase, progreso, texto, color, nombre}})).
+    /// Lo último de cada subida (fase, progreso, texto): para la isla y la pantalla nativa.
     func emite(_ intento: String, _ fase: String, progreso: Double? = nil, texto: String = "", datos: DatosIntento? = nil) {
         Isla.subida(fase: fase, progreso: progreso, texto: texto)   // el progreso en la isla, también con la app fuera
         let antes = vivos[intento]
         vivos[intento] = (fase, progreso, texto, datos?.color ?? antes?.color ?? "", datos?.nombre ?? antes?.nombre ?? "")
-        guard let web else { return }
-        var detalle: [String: Any] = ["intento": intento, "fase": fase, "texto": texto]
-        if let progreso, progreso.isFinite { detalle["progreso"] = min(1, max(0, progreso)) }
-        if let datos {
-            detalle["color"] = datos.color
-            detalle["nombre"] = datos.nombre
-        }
-        guard let json = try? JSONSerialization.data(withJSONObject: detalle),
-              let texto = String(data: json, encoding: .utf8) else { return }
-        web.evaluateJavaScript("window.dispatchEvent(new CustomEvent(\"tom-escalada\",{detail:\(texto)}));true",
-                               completionHandler: nil)
     }
 
     // MARK: el vídeo

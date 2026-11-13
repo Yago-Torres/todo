@@ -13,7 +13,7 @@ struct EntrenoActividad: ActivityAttributes {
         var total: Int
         var detalle: String       // «70 kg · 8-10 rep»
         var finDescanso: Date?
-        var descanso: Int         // segundos de descanso tras esta serie (la web: 90, o 60 si va por tiempo)
+        var descanso: Int         // segundos de descanso tras esta serie (90, o 60 si va por tiempo)
         var hecho: Bool           // no queda serie conocida: sesión acabada, o marcada fuera de la app y falta la siguiente
     }
 
@@ -48,17 +48,17 @@ enum EntrenoPuente {
     static let clavePendientes = "entrenoPendientes"
     private static let avisoId = "entreno.descanso"   // sin el prefijo «hoy.»: Avisos borra los suyos por prefijo
 
-    /// Lo pone la app cuando hay WKWebView (Hoy/Entreno.swift). Sin él (app lanzada en frío solo para el intent)
-    /// se avanza aquí y la web se pone al día al volver.
+    /// Lo pone la app al arrancar (Hoy/Entreno.swift). Sin él (app lanzada en frío solo para el intent) se avanza
+    /// aquí y la sesión nativa marca las pendientes al reabrirse.
     static var manejador: (() async -> Void)?
 
     static func serieHecha() async {
-        if let manejador { await manejador() } else { await avanzaSinWeb() }
+        if let manejador { await manejador() } else { await avanzaSola() }
     }
 
-    /// Con la web dormida: la serie se apunta como pendiente (la web la marca al volver), la actividad avanza a
+    /// Sin la sesión nativa abierta: la serie se apunta como pendiente (se marca al reabrirla), la actividad avanza a
     /// la siguiente serie con su descanso y se programa el aviso del final.
-    static func avanzaSinWeb() async {
+    static func avanzaSola() async {
         guard let actividad = Activity<EntrenoActividad>.activities.first(where: { $0.activityState == .active }) else { return }
         var e = actividad.content.state
         guard !e.hecho else { return }

@@ -2,7 +2,6 @@ import ActivityKit
 import Foundation
 
 /// Lo que Tom pone en la isla dinámica además del entreno serie a serie (EntrenoActividad):
-/// - descanso suelto ({accion:"descanso", segundos, siguiente} desde la web); si hay entreno en marcha, va en el suyo,
 /// - el pase del freno de apps («Instagram · 4:59»),
 /// - la subida de un intento de escalada (comprimiendo / subiendo % / listo),
 /// - «Día en la isla» (opcional, Configurar): anillos de hábitos, pasos y sueño hasta las 22:00.
@@ -42,34 +41,6 @@ enum Isla {
             let caducada = (e.fin.map { $0 < ahora } ?? false) || e.listo
             let diaAcabado = a.attributes.tipo == "dia" && (!Almacen.defaults.bool(forKey: claveDia) || finDelDia() < ahora)
             if caducada || diaAcabado { Task { await a.end(nil, dismissalPolicy: .immediate) } }
-        }
-    }
-
-    // MARK: descanso
-
-    static func descanso(segundos: Int, siguiente: String) {
-        let fin = Date().addingTimeInterval(TimeInterval(max(0, segundos)))
-        // con el entreno serie a serie en la isla, el descanso va en su actividad
-        if let e = Activity<EntrenoActividad>.activities.first(where: { $0.activityState == .active }) {
-            var s = e.content.state
-            s.finDescanso = segundos > 0 ? fin : nil
-            if segundos > 0 { s.descanso = segundos }
-            EntrenoPuente.programaAviso(s)
-            Task { await e.update(s.contenido) }
-            return
-        }
-        guard segundos > 0 else {
-            quita("descanso")
-            return
-        }
-        pon("descanso", .init(titulo: "Descanso", detalle: siguiente.isEmpty ? "" : "Siguiente: \(siguiente)",
-                              icono: "timer", inicio: Date(), fin: fin))
-        // se quita sola un poco después de acabar (si la app sigue viva; si no, al volver)
-        Task {
-            try? await Task.sleep(for: .seconds(Double(segundos) + 3))
-            if let a = actividad("descanso"), (a.content.state.fin ?? .distantFuture) <= Date() {
-                await a.end(nil, dismissalPolicy: .immediate)
-            }
         }
     }
 

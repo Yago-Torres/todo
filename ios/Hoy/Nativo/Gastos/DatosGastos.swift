@@ -76,7 +76,7 @@ final class DatosGastos {
             let (crudo, fecha) = try await API.leeOCopia(rutaResumen(inst, dia))
             let r = try JSONDecoder().decode(ResumenGastos.self, from: crudo)
             let k = clave(inst, dia)
-            resumenes[k] = r
+            withAnimation(Tema.Muelle.pantalla) { resumenes[k] = r }
             copias[k] = fecha
             error = nil
             if fecha == nil, Local.numeroPendientes() == 0 { pendientes[inst] = nil }
@@ -92,6 +92,9 @@ final class DatosGastos {
     }
 
     func recarga() async { await carga() }
+
+    /// Lo guardado del ciclo que se ve, ya en memoria antes de abrir la pantalla (Precarga).
+    func precarga() { pintaGuardado(instancia, ref) }
 
     private func pintaGuardado(_ inst: InstanciaGastos, _ dia: String) {
         let k = clave(inst, dia)
