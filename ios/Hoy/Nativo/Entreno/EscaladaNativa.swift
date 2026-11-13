@@ -161,6 +161,8 @@ struct TarjetaEscalada: View {
     @State private var datos = EscaladaDatos.shared
     @State private var subida = Escalada.shared
     @State private var abierto: String?
+    @State private var presumir = false
+    @State private var tarjetaHoy = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tema.Espacio.m) {
@@ -179,6 +181,21 @@ struct TarjetaEscalada: View {
                     Label("Subir intento", systemImage: "video.badge.plus").frame(maxWidth: .infinity, minHeight: 44)
                 }
                 .buttonStyle(BotonEnt())
+            }
+            HStack(spacing: Tema.Espacio.s) {
+                Button {
+                    presumir = true
+                } label: {
+                    Label("Para presumir", systemImage: "sparkles").frame(maxWidth: .infinity, minHeight: 40)
+                }
+                .buttonStyle(BotonEnt(alto: 40))
+                .accessibilityHint("Crea en el iPhone un vídeo vertical con el esqueleto y cámara lenta")
+                Button {
+                    tarjetaHoy = true
+                } label: {
+                    Label("Tarjeta de hoy", systemImage: "rectangle.portrait.on.rectangle.portrait").frame(maxWidth: .infinity, minHeight: 40)
+                }
+                .buttonStyle(BotonEnt(alto: 40))
             }
             if let t = subida.trabajo {
                 HStack {
@@ -212,6 +229,8 @@ struct TarjetaEscalada: View {
             }
         }
         .carta()
+        .sheet(isPresented: $presumir) { HojaPresumir() }
+        .sheet(isPresented: $tarjetaHoy) { HojaTarjetaSesion() }
         .task(id: datos.hayQueSondear) {
             while datos.hayQueSondear && !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(10))

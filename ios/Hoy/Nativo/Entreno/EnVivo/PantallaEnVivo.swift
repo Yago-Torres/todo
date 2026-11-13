@@ -416,6 +416,7 @@ struct HojaResultadoVivo: View {
     @Environment(\.dismiss) private var cerrar
     @State private var compartir = false
     @State private var analizar = false
+    @State private var presumir = false
     @State private var guardando = false
     @State private var aviso: String?
 
@@ -429,11 +430,17 @@ struct HojaResultadoVivo: View {
                         .clipShape(RoundedRectangle(cornerRadius: Tema.Radio.carta))
                         .accessibilityLabel("El intento grabado con el esqueleto")
                     Button {
+                        presumir = true
+                    } label: {
+                        Label("Vídeo para presumir", systemImage: "sparkles")
+                    }
+                    .buttonStyle(BotonEnt(principal: true))
+                    Button {
                         compartir = true
                     } label: {
                         Label("Compartir con el esqueleto", systemImage: "square.and.arrow.up")
                     }
-                    .buttonStyle(BotonEnt(principal: true))
+                    .buttonStyle(BotonEnt())
                     Button {
                         guarda()
                     } label: {
@@ -468,6 +475,9 @@ struct HojaResultadoVivo: View {
             .sheet(isPresented: $compartir) {
                 HojaCompartir(cosas: [resultado.esqueleto])
                     .presentationDetents([.medium, .large])
+            }
+            .sheet(isPresented: $presumir) {
+                HojaPresumir(video: resultado.limpio)
             }
             .sheet(isPresented: $analizar) {
                 HojaEscalada(archivo: resultado.limpio)
