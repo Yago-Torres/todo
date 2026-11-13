@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import Observation
 import WidgetKit
 
@@ -15,37 +16,77 @@ final class Aspecto {
         static let eleccion = "apariencia.eleccion"
         static let disposicion = "apariencia.disposicion"
         static let pendiente = "apariencia.pendiente"
+        /// El tema ya resuelto de la última vez: para pintar el primer fotograma sin decodificar el catálogo.
+        static let instantanea = "apariencia.instantanea"
     }
 
     private(set) var catalogo: Catalogo?
     private(set) var eleccion = Eleccion()
     private(set) var disposicion: [String: Bloques] = [:]
-    /// El tema ya construido (colores resueltos una vez, no en cada acceso).
+    /// El tema ya construido (colores resueltos una vez, no en cada acceso), con el filtro del modo noche si toca.
     private(set) var tema = Tema()
+    /// Modo noche ahora mismo (Noche.swift): oscuro y con el filtro cálido.
+    private(set) var noche = false
+    /// Lo que se pintó la última vez, mientras el catálogo aún no está (el primer momento tras arrancar).
+    private(set) var instantanea: TemaGuardado?
 
+    /// El tema sin el filtro de noche.
+    @ObservationIgnored private var base = Tema()
     @ObservationIgnored private var envio: Task<Void, Never>?
 
     init() {
         let d = Almacen.defaults
-        // el guardado si ya es v2 (con temas); si no, la copia del bundle
-        let guardado = d.data(forKey: Clave.catalogo).flatMap { try? JSONDecoder().decode(Catalogo.self, from: $0) }
-        catalogo = guardado?.temas != nil ? guardado
+        let elegida = d.data(forKey: Clave.eleccion).flatMap { try? JSONDecoder().decode(Eleccion.self, from: $0) }
+        disposicion = d.data(forKey: Clave.disposicion)
+            .flatMap { try? JSONDecoder().decode([String: Bloques].self, from: $0) } ?? [:]
+        noche = Noche.activa()
+        if let elegida, let inst = d.data(forKey: Clave.instantanea).flatMap({ try? JSONDecoder().decode(TemaGuardado.self, from: $0) }),
+           inst.eleccion == elegida {
+            // arranque rápido: el tema de la última vez tal cual, y el catálogo (60 KB de JSON) después de pintar
+            eleccion = elegida
+            instantanea = inst
+            base = inst.tema
+            tema = conNoche(base)
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .milliseconds(300))
+                self?.cargaCatalogo()
+            }
+        } else {
+            catalogo = Self.leeCatalogo()
+            if let elegida { eleccion = elegida } else if let def = catalogo?.defecto { eleccion = def }
+            base = construye()
+            tema = conNoche(base)
+            guardaInstantanea()
+        }
+        vigilaNoche()
+    }
+
+    /// El guardado si ya es v2 (con temas); si no, la copia del bundle.
+    private static func leeCatalogo() -> Catalogo? {
+        let guardado = Almacen.defaults.data(forKey: Clave.catalogo).flatMap { try? JSONDecoder().decode(Catalogo.self, from: $0) }
+        return guardado?.temas != nil ? guardado
             : Bundle.main.url(forResource: "apariencia", withExtension: "json")
                 .flatMap { try? Data(contentsOf: $0) }
                 .flatMap { try? JSONDecoder().decode(Catalogo.self, from: $0) } ?? guardado
-        if let e = d.data(forKey: Clave.eleccion).flatMap({ try? JSONDecoder().decode(Eleccion.self, from: $0) }) {
-            eleccion = e
-        } else if let def = catalogo?.defecto {
-            eleccion = def
+    }
+
+    /// Tras el arranque rápido: el catálogo de verdad. Si el tema sale igual que el guardado, no se repinta nada.
+    private func cargaCatalogo() {
+        guard catalogo == nil else { return }
+        catalogo = Self.leeCatalogo()
+        let antes = instantanea
+        base = construye()
+        if !TemaGuardado(base, eleccion: eleccion, decoracion: nil, sonido: nil).mismoAspecto(antes) {
+            withAnimation(.easeInOut(duration: 0.35)) { tema = conNoche(base) }
         }
-        disposicion = d.data(forKey: Clave.disposicion)
-            .flatMap { try? JSONDecoder().decode([String: Bloques].self, from: $0) } ?? [:]
-        tema = construye()
+        instantanea = nil
+        guardaInstantanea()
     }
 
     // MARK: lo que se lee
 
     var esquema: ColorScheme? {
+        if noche { return .dark }
         switch eleccion.modo {
         case "claro": return .light
         case "oscuro": return .dark
@@ -75,7 +116,8 @@ final class Aspecto {
         guard e != eleccion else { return }
         withAnimation(.easeInOut(duration: 0.35)) {
             eleccion = e
-            tema = construye()
+            base = construye()
+            tema = conNoche(base)
         }
         guardaLocal()
         programaEnvio()
@@ -106,7 +148,10 @@ final class Aspecto {
             Almacen.defaults.set(crudo, forKey: Clave.catalogo)
             await MainActor.run {
                 self.catalogo = c
-                self.tema = self.construye()
+                self.instantanea = nil
+                self.base = self.construye()
+                self.tema = self.conNoche(self.base)
+                self.guardaInstantanea()
             }
         }
         if Almacen.defaults.bool(forKey: Clave.pendiente) {
@@ -126,7 +171,8 @@ final class Aspecto {
         withAnimation(.easeInOut(duration: 0.35)) {
             if let e = r.apariencia { eleccion = e }
             if let d = r.disposicion { disposicion = d }
-            tema = construye()
+            base = construye()
+            tema = conNoche(base)
         }
         guardaLocal()
     }
@@ -156,12 +202,69 @@ final class Aspecto {
         let d = Almacen.defaults
         if let e = try? JSONEncoder().encode(eleccion) { d.set(e, forKey: Clave.eleccion) }
         if let x = try? JSONEncoder().encode(disposicion) { d.set(x, forKey: Clave.disposicion) }
+        guardaInstantanea()
         guardaParaWidget()
+    }
+
+    /// El tema resuelto, para el próximo arranque (solo con el catálogo ya cargado: si no, lo de ahora es lo guardado).
+    private func guardaInstantanea() {
+        guard catalogo != nil else { return }
+        let t = TemaGuardado(base, eleccion: eleccion, decoracion: decoracion, sonido: juegoSonidos)
+        if let x = try? JSONEncoder().encode(t) { Almacen.defaults.set(x, forKey: Clave.instantanea) }
+    }
+
+    // MARK: modo noche
+
+    private func conNoche(_ t: Tema) -> Tema {
+        guard noche else { return t }
+        var x = t
+        x.paleta = t.paleta.nocturna()
+        return x
+    }
+
+    /// Mira cada medio minuto y al volver a la app si entra o sale la noche.
+    private func vigilaNoche() {
+        NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil,
+                                               queue: .main) { _ in
+            Task { @MainActor in Aspecto.shared.revisaNoche() }
+        }
+        Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(30))
+                self?.revisaNoche()
+            }
+        }
+    }
+
+    @MainActor
+    func revisaNoche() {
+        let ahora = Noche.activa()
+        guard ahora != noche else { return }
+        // un fundido de un segundo: los colores (y el claro/oscuro del sistema) pasan sin saltos
+        TransicionFundido.cambia {
+            self.noche = ahora
+            self.tema = self.conNoche(self.base)
+        }
+        WidgetCenter.shared.reloadAllTimelines()
+    }
+
+    /// Configurar → Apariencia → Modo noche.
+    @MainActor
+    func ponNoche(_ a: AjustesNoche) {
+        guard a != Noche.ajustes else { return }
+        Noche.ajustes = a
+        revisaNoche()
+        WidgetCenter.shared.reloadAllTimelines()
     }
 
     // MARK: construir el tema
 
     private func construye() -> Tema {
+        // tras el arranque rápido aún puede faltar el catálogo: sin él saldrían la letra y las esquinas por defecto
+        if catalogo == nil {
+            catalogo = Self.leeCatalogo()
+            instantanea = nil
+        }
         var t = Tema()
         let def = catalogo?.defecto ?? Eleccion()
         let g = Oklch.genera(base: Oklch.esHex(eleccion.base) ? eleccion.base : def.base,
@@ -197,9 +300,10 @@ final class Aspecto {
         return t
     }
 
-    /// La familia de iOS de una letra del catálogo (nil = SF Pro).
+    /// La familia de iOS de una letra del catálogo (nil = SF Pro, o si no se ha podido registrar). La registra la
+    /// primera vez (Letras): al arrancar, solo las del tema elegido.
     func familia(_ id: String) -> String? {
-        guard let f = catalogo?.fuente(id), let n = f.familia_ios, !n.isEmpty else { return nil }
+        guard let f = catalogo?.fuente(id), let n = f.familia_ios, !n.isEmpty, Letras.lista(n) else { return nil }
         return n
     }
 
@@ -208,5 +312,72 @@ final class Aspecto {
         let g = Oklch.genera(base: eleccion.base, acento: eleccion.acento)
         ColoresGuardados.guarda(claro: g.claro.tokens, oscuro: g.oscuro.tokens)
         WidgetCenter.shared.reloadAllTimelines()
+    }
+}
+
+/// El tema resuelto tal como se pintó (colores, letras, esquinas, fondo, decoración y sonidos), para el próximo arranque.
+struct TemaGuardado: Codable, Equatable {
+    var eleccion: Eleccion
+    /// token → [claro, oscuro]
+    var colores: [String: [String]]
+    var texto: String?
+    var titulo: String?
+    var cifras: String?
+    var radios: [Double]
+    var fondo: Double
+    var decoracion: String?
+    var sonido: String?
+
+    init(_ t: Tema, eleccion: Eleccion, decoracion: String?, sonido: String?) {
+        self.eleccion = eleccion
+        var c: [String: [String]] = [:]
+        for (nombre, campo) in Paleta.campos { c[nombre] = [t.paleta[keyPath: campo].claro, t.paleta[keyPath: campo].oscuro] }
+        colores = c
+        texto = t.fuentes.texto
+        titulo = t.fuentes.titulo
+        cifras = t.fuentes.cifras
+        radios = [t.radios.carta, t.radios.boton, t.radios.celda]
+        fondo = t.fondo
+        self.decoracion = decoracion
+        self.sonido = sonido
+    }
+
+    var tema: Tema {
+        var t = Tema()
+        for (nombre, campo) in Paleta.campos {
+            if let par = colores[nombre], par.count == 2 { t.paleta[keyPath: campo] = .init(claro: par[0], oscuro: par[1]) }
+        }
+        t.fuentes = Fuentes(texto: texto, titulo: titulo, cifras: cifras)
+        if radios.count == 3 { t.radios = Radios(carta: radios[0], boton: radios[1], celda: radios[2]) }
+        t.fondo = fondo
+        return t
+    }
+
+    /// Lo mismo de ver (sin mirar decoración ni sonidos).
+    func mismoAspecto(_ otro: TemaGuardado?) -> Bool {
+        guard let otro else { return false }
+        return colores == otro.colores && texto == otro.texto && titulo == otro.titulo && cifras == otro.cifras
+            && radios == otro.radios && fondo == otro.fondo
+    }
+}
+
+extension Paleta {
+    /// Todos los tokens con su nombre (el de calma.css), para guardarlos y para el filtro de noche.
+    static let campos: [(String, WritableKeyPath<Paleta, Paleta.Token>)] = [
+        ("fondo", \.fondo), ("carta", \.carta), ("carta_luz", \.cartaLuz), ("carta2", \.carta2), ("texto", \.texto),
+        ("suave", \.suave), ("tenue", \.tenue), ("linea", \.linea), ("acento", \.acento),
+        ("acento_texto", \.acentoTexto), ("acento_suave", \.acentoSuave), ("peligro", \.peligro), ("aviso", \.aviso),
+        ("dock", \.dock), ("dock_texto", \.dockTexto), ("gota", \.gota), ("gota_texto", \.gotaTexto), ("ascii", \.ascii),
+    ]
+
+    /// La paleta del modo noche: el lado oscuro de cada token pasado por el filtro cálido (Noche.filtra), igual en
+    /// claro y en oscuro (de noche siempre se pinta oscuro, pero así no salta nada mientras cambia el sistema).
+    func nocturna() -> Paleta {
+        var p = self
+        for (nombre, campo) in Self.campos {
+            let o = Noche.filtra(self[keyPath: campo].oscuro, acento: Noche.tokensAcento.contains(nombre))
+            p[keyPath: campo] = .init(claro: o, oscuro: o)
+        }
+        return p
     }
 }

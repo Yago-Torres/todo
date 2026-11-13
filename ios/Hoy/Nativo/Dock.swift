@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// La barra de abajo, nativa: la misma que la web (calma.css → nav.c-dock), grafito flotante con la gota lima que se
-/// desliza con muelle hasta la sección actual. Hoy y Hábitos son pantallas nativas; el resto abre la web en su ruta.
+/// desliza con muelle hasta la sección actual. Cada entrada abre su pantalla nativa (Registro.swift).
 struct Dock: View {
     struct Entrada: Identifiable {
         let clave: String   // el id en la disposición "app-dock" (orden y ocultos, Configurar → Pantallas)

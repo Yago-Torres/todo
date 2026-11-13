@@ -20,7 +20,7 @@ enum Accesos {
     }
 
     static func maneja(_ tipo: String) {
-        // los ajustes nativos, aunque la web no cargue (era la única puerta)
+        // Configurar, sin pasar por Ajustes
         if tipo == "configurar" {
             Task { @MainActor in Navegador.shared.configurar = true }
             return

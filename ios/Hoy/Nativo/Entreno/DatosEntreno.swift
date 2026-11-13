@@ -74,7 +74,7 @@ final class DatosEntreno {
             }
             let v = http.value(forHTTPHeaderField: "X-Version")
             Local.guarda(Self.clave, cuerpo: datos, tipo: "application/json", version: v, fecha: Sincro.fechaDe(http))
-            adopta(datos, version: v, delServidor: true)
+            withAnimation(Tema.Muelle.pantalla) { adopta(datos, version: v, delServidor: true) }
             copia = nil
         case .sinRed:
             leeCopia()

@@ -46,6 +46,7 @@ struct SeccionApariencia: View {
             Text((aspecto.eleccion.tema == "propio" ? "Tema propio: lo has personalizado abajo." : "Se guarda en el servidor: la web cambia igual.")
                  + " Con «Icono a juego», iOS avisa con un mensaje cada vez que cambia el icono.")
         }
+        SeccionNoche()
         SeccionPersonalizar()
     }
 }
@@ -226,7 +227,7 @@ struct ElegirFuente: View {
                     HStack {
                         let familia = f.familia_ios ?? ""
                         Text(f.nombre)
-                            .font(familia.isEmpty ? Font.system(size: 20) : Font.custom(familia, size: 20))
+                            .font(familia.isEmpty || !Letras.lista(familia) ? Font.system(size: 20) : Font.custom(familia, size: 20))
                             .foregroundStyle(Tema.texto)
                         Spacer()
                         if aspecto.eleccion[keyPath: clave] == f.id { Image(systemName: "checkmark").foregroundStyle(Tema.acento) }

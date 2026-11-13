@@ -38,7 +38,11 @@ final class DatosNativos {
         } else {
             hoy = Almacen.leeHoy()
         }
-        if let r = Local.lee(Local.clave("GET", "/api/state")) { leeEstado(r.cuerpo) }
+        // el estado entero (solo lo usa Hábitos, y pesa) justo después del primer fotograma de Hoy
+        Task { @MainActor [weak self] in
+            guard let self, self.habitos.isEmpty, let r = Local.lee(Local.clave("GET", "/api/state")) else { return }
+            self.leeEstado(r.cuerpo)
+        }
     }
 
     /// Recarga si hace más de `margen` segundos de la última vez (al volver a la pestaña no se pide cada vez).
@@ -51,7 +55,8 @@ final class DatosNativos {
             let (crudo, fecha) = try await API.leeOCopia("/api/hoy")
             let nuevo = try JSONDecoder().decode(Hoy.self, from: crudo)
             if fecha == nil { Almacen.guardaHoy(crudo) }
-            hoy = nuevo
+            // lo que ya se veía (la copia de Local) cambia a lo nuevo con el muelle, sin parpadeos
+            withAnimation(Tema.Muelle.pantalla) { hoy = nuevo }
             copia = fecha
             error = nil
             ultimaCarga = Date()
@@ -60,7 +65,9 @@ final class DatosNativos {
         } catch {
             self.error = error.localizedDescription
         }
-        if let r = try? await API.leeOCopia("/api/state") { leeEstado(r.datos) }
+        if let r = try? await API.leeOCopia("/api/state") {
+            withAnimation(Tema.Muelle.pantalla) { leeEstado(r.datos) }
+        }
     }
 
     func recarga() async {

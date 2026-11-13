@@ -1,7 +1,7 @@
 import CoreHaptics
 import UIKit
 
-/// Los hápticos que pide la web por el puente: {accion:"haptica", patron:"marcar"}.
+/// Los hápticos de Tom, con nombre (marcar, desmarcar, serie…), cada uno con su sonido del tema (Sonidos).
 /// Con Core Haptics si el iPhone lo tiene (el motor arranca la primera vez que hace falta y se rearranca si el
 /// sistema lo para o lo reinicia); si no, con los generadores de UIKit, que se parecen lo que pueden.
 @MainActor
@@ -19,7 +19,7 @@ final class Haptica {
 
     private init() {}
 
-    /// Un patrón desconocido (una web más nueva que la app) suena como un tic suave.
+    /// Por nombre (p. ej. desde Freno); uno desconocido suena como un tic suave.
     func toca(_ nombre: String) {
         toca(Patron(rawValue: nombre) ?? .desmarcar)
     }
@@ -50,7 +50,7 @@ final class Haptica {
             return motor
         }
         let nuevo = try CHHapticEngine()
-        nuevo.playsHapticsOnly = true        // no toca la sesión de audio: los sonidos de la web siguen a lo suyo
+        nuevo.playsHapticsOnly = true        // no toca la sesión de audio: los sonidos de Sonidos siguen a lo suyo
         nuevo.isAutoShutdownEnabled = true   // se apaga solo cuando no suena nada y ahorra batería
         // estos avisos llegan en una cola cualquiera; solo se apunta que hay que volver a arrancarlo
         nuevo.stoppedHandler = { _ in
