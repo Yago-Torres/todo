@@ -9,6 +9,8 @@ struct PantallaHabitos: View {
     @State private var editando = false
     @State private var planificando = false
     @State private var nuevo: BorradorHabito?
+    @State private var descansos = false
+    @State private var rachas = DatosRachas.shared
 
     private let letras = ["L", "M", "X", "J", "V", "S", "D"]
 
@@ -50,8 +52,15 @@ struct PantallaHabitos: View {
             .padding(.bottom, 120)
         }
         .scrollIndicators(.hidden)
-        .refreshable { await datos.recarga() }
+        .refreshable {
+            await datos.recarga()
+            await rachas.recarga()
+        }
         .task { await datos.carga() }
+        .task { await rachas.carga() }
+        .onChange(of: datos.log) { _, _ in Task { await rachas.recarga() } }   // marcar un día pasado cambia la cuenta
+        .celebraHitos()
+        .sheet(isPresented: $descansos) { HojaDescansos() }
         .sheet(isPresented: $editando) { EditorHabitos() }
         .sheet(isPresented: $planificando) { PlanificarSemana() }
         .sheet(item: $nuevo) { FichaHabito(borrador: $0) }
@@ -80,6 +89,8 @@ struct PantallaHabitos: View {
                     Button("Nuevo hábito", systemImage: "plus") { nuevo = BorradorHabito() }
                     Button("Planificar la semana", systemImage: "calendar") { planificando = true }
                     Button("Editar y ordenar", systemImage: "pencil") { editando = true }
+                    Divider()
+                    Button("Descansar hoy, vacaciones y comodines", systemImage: "leaf") { descansos = true }
                 } label: {
                     Text("Editar").font(Tema.fuente(.pequeno, peso: .medium))
                 }
@@ -102,6 +113,7 @@ struct TarjetaHabito: View {
     let hoy: String
     let racha: Int
     @State private var datos = DatosNativos.shared
+    @State private var rachas = DatosRachas.shared
 
     var body: some View {
         let color = Color(hex: habito.c)
@@ -112,10 +124,12 @@ struct TarjetaHabito: View {
                 Text(habito.n).font(Tema.fuente(.destacado)).foregroundStyle(Tema.texto).lineLimit(2)
                 Spacer()
                 if racha > 1 {
-                    Label("\(racha)", systemImage: "flame.fill")
+                    let congelada = rachas.estado(habito.id, hoy).map { $0 != "hecho" && $0 != "pendiente" && $0 != "fallo" } ?? false
+                    Label("\(racha)", systemImage: congelada ? "snowflake" : "flame.fill")
                         .font(Tema.fuente(.pequeno, peso: .semibold)).monospacedDigit()
-                        .foregroundStyle(Tema.aviso)
+                        .foregroundStyle(congelada ? Tema.suave : Tema.aviso)
                         .contentTransition(.numericText())
+                        .accessibilityLabel(congelada ? "Racha de \(racha) días, congelada hoy" : "Racha de \(racha) días")
                 }
                 Text(habito.cada > 1 ? "\(hechos)/\(habito.goal) · cada \(habito.cada) sem." : "\(hechos)/\(habito.goal)")
                     .font(Tema.fuente(.pequeno)).monospacedDigit()
@@ -126,7 +140,7 @@ struct TarjetaHabito: View {
                 ForEach(dias, id: \.self) { dia in
                     Dia(hecho: datos.log[dia]?.contains(habito.id) ?? false,
                         plan: datos.plan[dia]?.contains(habito.id) ?? false,
-                        esHoy: dia == hoy, futuro: dia > hoy, color: color) {
+                        esHoy: dia == hoy, futuro: dia > hoy, color: color, estado: rachas.estado(habito.id, dia)) {
                         let nuevo = !(datos.log[dia]?.contains(habito.id) ?? false)
                         Haptica.shared.toca(nuevo ? .marcar : .desmarcar)
                         Task { await datos.marca(habito.id, hecho: nuevo, dia: dia) }
@@ -147,13 +161,26 @@ struct TarjetaHabito: View {
         let esHoy: Bool
         let futuro: Bool
         let color: Color
+        /// Lo que dice la racha de ese día (DatosRachas.estado): descanso, vacaciones, enfermedad, comodin, fallo…
+        var estado: String? = nil
         let toca: () -> Void
+
+        private var libre: String? {
+            guard !hecho, let estado, ["descanso", "vacaciones", "enfermedad", "comodin"].contains(estado) else { return nil }
+            return estado
+        }
 
         var body: some View {
             Button(action: toca) {
                 ZStack {
                     Circle()
-                        .fill(hecho ? color : Tema.carta2)
+                        .fill(hecho ? color : libre != nil ? color.opacity(0.14) : Tema.carta2)
+                    if let libre {
+                        // día que no cuenta: su icono, y la racha ni sube ni se rompe
+                        Image(systemName: DatosRachas.icono(libre))
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(libre == "comodin" ? Tema.acento : Tema.suave)
+                    }
                     if plan && !hecho {
                         Circle().strokeBorder(color, style: StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
                     }
@@ -172,7 +199,8 @@ struct TarjetaHabito: View {
             }
             .buttonStyle(.plain)
             .disabled(futuro)
-            .accessibilityLabel(hecho ? "Hecho" : plan ? "Planificado" : "Sin hacer")
+            .accessibilityLabel(hecho ? "Hecho" : libre.map { DatosRachas.nombre($0) + ": no cuenta para la racha" }
+                                ?? (estado == "fallo" ? "Sin hacer, se rompió la racha" : plan ? "Planificado" : "Sin hacer"))
         }
     }
 }

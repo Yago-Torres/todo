@@ -151,6 +151,9 @@
   .tira.semanal { gap: 5px; }   /* 4 bloques anchos se leen mejor separados */
   .tira i { flex: 1 1 0; min-width: 3px; height: 14px; display: block; border-radius: 3px; background: var(--carta-2); }
   .tira i.on { background: var(--c); }
+  /* días que no cuentan para la racha (descanso, vacaciones, enfermedad) a rayas; con comodín, de hielo */
+  .tira i.libre { background: repeating-linear-gradient(135deg, var(--carta-2) 0 3px, color-mix(in oklab, var(--c) 35%, var(--carta-2)) 3px 5px); }
+  .tira i.comodin { background: color-mix(in oklab, #7fb8e0 55%, var(--carta-2)); }
   /* borrado: hay que teclear el nombre, nada de confirm() */
   .rs .borrar { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; background: var(--peligro-suave); border-radius: var(--r-s); padding: 10px; }
   .rs .borrar input { flex: 1 1 140px; min-width: 0; border: 1px solid var(--linea); border-radius: var(--r-s); padding: 9px 10px; font-size: 16px; background: var(--carta); }
@@ -455,6 +458,7 @@ function marcar(d, h) {
   // va sola, sin el estado entero: sin red se apunta y sale al volver (sinred.js)
   sinred.marca(d, h, si).then(st => {
     if (st === 401) return puerta(true);
+    if (d !== HOY) cargaRachas();
     $("#estado").textContent = st === 200 ? "Guardado" : "Sin red: se guarda al volver";
   });
   // con GSAP: ola, fantasma → ✓ y racha que rueda (también al desmarcar); sin él, lo de anime.js
@@ -472,11 +476,22 @@ function planear(d, h) {
   guardar();
 }
 
+// La racha la cuenta el servidor (/api/rachas: una sola regla para la web y Tom, con descansos, vacaciones y
+// comodines; ver «Rachas» en CLAUDE.md). base = la de hasta ayer, así marcar hoy suma o resta uno al momento.
+let R = {}, R_HOY = "";
+async function cargaRachas() {
+  const r = await fetch("/api/rachas").catch(() => null);
+  if (!r || !r.ok) return;
+  const j = await r.json();
+  R = Object.fromEntries(j.habitos.map(x => [x.id, x]));
+  R_HOY = j.hoy;
+  render();
+}
+
 function racha(h) {
-  let d = new Date(), n = 0;
-  if (!hecho(iso(d), h)) d = add(d, -1);   // el día en curso todavía no rompe la racha
-  while (hecho(iso(d), h)) { n++; d = add(d, -1); }
-  return n;
+  const x = R[h];
+  if (!x) return 0;
+  return R_HOY === HOY ? x.base + (hecho(HOY, h) ? 1 : 0) : x.racha;
 }
 
 const semana = (ref = new Date()) =>
@@ -509,6 +524,7 @@ function guardar() {
       version = r.headers.get("X-Version") || "";
       S = normaliza(await r.json());   // el servidor devuelve el estado ya limpio
       $("#estado").textContent = "Guardado";
+      cargaRachas();
       fantasma.refresca();
       render();
     } catch (e) {
@@ -525,6 +541,7 @@ async function refresca() {
   S = normaliza(await r.json());
   version = r.headers.get("X-Version") || "";
   render();
+  cargaRachas();
 }
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && !sinGuardar) refresca(); });
 // cada marca que llega trae la versión de antes y la de después: si nadie escribió entre medias, la nueva es la nuestra
@@ -558,6 +575,7 @@ async function cargar() {
     if (!r.ok) throw new Error(r.status);
     S = normaliza(await r.json());
     version = r.headers.get("X-Version") || "";
+    await cargaRachas();
     puerta(false);
     render();
     animaEntrada();
@@ -641,8 +659,9 @@ function tiraDe(h, dias) {
   const tira = el("div", "tira" + (h.goal > 1 ? "" : " semanal"));
   if (h.goal > 1) {
     for (const d of dias) {
-      const i = el("i", hecho(d, h.id) ? "on" : "");
-      i.title = d;
+      const libre = R[h.id]?.dias?.[d];
+      const i = el("i", hecho(d, h.id) ? "on" : libre && libre !== "fallo" && libre !== "pendiente" ? (libre === "comodin" ? "comodin" : "libre") : "");
+      i.title = libre && !hecho(d, h.id) && libre !== "pendiente" ? `${d}: ${libre === "comodin" ? "comodín" : libre === "fallo" ? "se rompió" : libre}` : d;
       tira.append(i);
     }
     return tira;

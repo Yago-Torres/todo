@@ -25,6 +25,14 @@ struct Habito: Codable, Identifiable, Hashable {
     var plan: Bool
     var hecho: Bool
     var racha: Int
+    // de /api/hoy desde las rachas con descansos (al final y opcionales: el init memberwise no cambia)
+    /// Hoy se exige y hay racha (si no se hace, se rompe o gasta un comodín).
+    var juego: Bool? = nil
+    /// Hoy descansa: "descanso", "vacaciones", "enfermedad" o "comodin". La racha está congelada.
+    var libre: String? = nil
+
+    /// La racha está en juego hoy (sin los campos nuevos, como antes: 2 días o más sin hacer).
+    var arriesga: Bool { !hecho && libre == nil && (juego ?? true) && racha >= 2 }
 }
 
 struct HabitoAyer: Codable, Hashable {
@@ -170,7 +178,7 @@ extension Habito {
         }
         self.init(id: id, n: c.texto("n") ?? id, c: c.texto("c") ?? "#1baf7a",
                   plan: c.booleano("plan") ?? false, hecho: c.booleano("hecho") ?? false,
-                  racha: c.entero("racha") ?? 0)
+                  racha: c.entero("racha") ?? 0, juego: c.booleano("juego"), libre: c.texto("libre"))
     }
 }
 

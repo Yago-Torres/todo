@@ -549,14 +549,15 @@ struct FilaRacha: View {
 
     var body: some View {
         let t = Tinta(modo)
-        let peligro = enJuego && !habito.hecho && habito.racha >= 2
+        let peligro = enJuego && habito.arriesga
         Toggle(isOn: habito.hecho, intent: MarcaHabitoIntent(habito: habito.id, nombre: habito.n, hecho: !habito.hecho)) {
             HStack(spacing: 4) {
                 Text(habito.n).font(.system(size: 13, weight: habito.hecho ? .regular : .semibold))
                     .foregroundStyle(habito.hecho ? t.suave : t.texto).lineLimit(1).minimumScaleFactor(0.75)
                 Spacer(minLength: 2)
                 if habito.racha > 0 {
-                    Label("\(habito.racha)", systemImage: "flame.fill").font(.system(size: 12, weight: .semibold))
+                    Label("\(habito.racha)", systemImage: habito.libre != nil && !habito.hecho ? "snowflake" : "flame.fill")
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(peligro ? t.aviso : t.suave)
                 }
             }

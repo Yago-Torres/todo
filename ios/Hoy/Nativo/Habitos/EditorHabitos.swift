@@ -32,6 +32,7 @@ struct EditorHabitos: View {
     @State private var modo: EditMode = .inactive
     @State private var borrador: BorradorHabito?
     @State private var error: String?
+    @State private var descansos = false
 
     var body: some View {
         NavigationStack {
@@ -59,6 +60,14 @@ struct EditorHabitos: View {
                     Text(modo == .active ? "Arrastra por las asas para cambiar el orden."
                          : "Toca un hábito para cambiarlo. Desliza para borrarlo.")
                 }
+                Section {
+                    Button { descansos = true } label: {
+                        Label("Descansos, vacaciones y comodines", systemImage: "leaf")
+                    }
+                    .listRowBackground(Tema.carta)
+                } footer: {
+                    Text("Días que no rompen las rachas: descansar hoy, vacaciones o enfermedad, y los comodines de cada mes.")
+                }
             }
             .environment(\.editMode, $modo)
             .scrollContentBackground(.hidden)
@@ -84,6 +93,7 @@ struct EditorHabitos: View {
             .sheet(item: $borrador) { b in
                 FichaHabito(borrador: b)
             }
+            .sheet(isPresented: $descansos) { HojaDescansos() }
         }
         .onAppear { orden = datos.habitos }
         .onChange(of: datos.habitos) { _, nuevos in orden = nuevos }

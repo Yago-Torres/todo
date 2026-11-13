@@ -350,3 +350,19 @@ Mantén pulsado el icono de Tom → **Ajustes de Tom**. Ahí están las claves, 
 - Los colores, letras, esquinas y muelles salen de `Tema` (Hoy/Tema.swift y Aspecto.swift); ninguna vista pone colores a mano.
 - Las peticiones van por `API` (Compartido/API.swift) con las claves de siempre; lo que deba funcionar sin red, por la
   cola de `Local`/`Sincro` como Hoy y Hábitos.
+
+## Rachas: descansos, vacaciones, comodines y avisos (`Hoy/Nativo/Rachas/`)
+
+La racha la cuenta **solo el servidor** (`rachas()` en main.py, regla en `CLAUDE.md` → «Rachas»): Tom no cuenta nada, solo
+suma el «hecho» de hoy a `base` para que marcar se vea al momento (también sin red).
+- `DatosRachas`: `GET /api/rachas` (sin red, la copia de Local) y `POST /api/descanso`, `/api/comodin`, `/api/vacaciones`
+  por la cola (idempotentes; el id de un periodo lo pone el iPhone).
+- `BloqueRachas`: el bloque «Rachas» de Hoy (id `rachas`): «Mantén tu racha de 12 días» con un botón por hábito que la
+  salva, «Descansar hoy», «Usar comodín», rachas vivas y lo que falta para el siguiente hito (7, 14, 30…).
+- `HojaDescansos`: descansar hoy (por hábito o todos), comodines al mes y periodos de vacaciones/enfermedad. Desde Hoy,
+  Hábitos (menú Editar) y el editor de hábitos. En la semana de Hábitos, los días libres llevan su icono (hoja, cama,
+  sombrilla, copo) y la racha congelada sale con un copo.
+- `AvisosRacha`: a media tarde y última llamada (Configurar → Avisos de racha: activar, horas, hitos), dos como mucho al
+  día; la última llamada se come el repaso de las 22:00. Botones Hecho / Usar comodín / Descansar hoy. Lo programa
+  `Avisos.programa()`.
+- `CelebracionHito`: `.celebraHitos()` en Hoy y Hábitos: llama que crece, número que sube y el confeti de `CelebracionDia`.

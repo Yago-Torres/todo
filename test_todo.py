@@ -333,12 +333,14 @@ def test_guarda():
 
 def test_portada():
     log = {"2026-10-24": ["a"], "2026-10-25": ["a", "b"], "2026-10-26": ["b"]}
+    d = clean({"habits": [{"id": x, "n": x} for x in "abc"], "log": log, "comodines": {"al_mes": 0}})   # diarios, sin comodines
     # hoy sin hacer no rompe la racha; hecho hoy, cuenta
-    assert main.racha(log, "a", "2026-10-26") == 2 and main.racha(log, "b", "2026-10-26") == 2
-    assert main.racha(log, "c", "2026-10-26") == 0
+    assert main.racha(d, "a", "2026-10-26") == 2 and main.racha(d, "b", "2026-10-26") == 2
+    assert main.racha(d, "c", "2026-10-26") == 0
     # la racha que se rompió ayer (la planta de Hoy se mustia con ella): sus días; si ayer se hizo, ninguna
-    assert main.rota(log, "a", "2026-10-26") == 0 and main.rota(log, "a", "2026-10-27") == 2
-    assert main.rota(log, "b", "2026-10-27") == 0 and main.rota(log, "a", "2026-10-28") == 0 and main.rota({}, "a", "2026-10-27") == 0
+    rota = lambda s, h, hoy: next(x["rota"] for x in main.rachas(s, hoy)["habitos"] if x["id"] == h)
+    assert rota(d, "a", "2026-10-26") == 0 and rota(d, "a", "2026-10-27") == 2
+    assert rota(d, "b", "2026-10-27") == 0 and rota(d, "a", "2026-10-28") == 0 and rota(clean({"habits": d["habits"]}), "a", "2026-10-27") == 0
     assert main.trozo(lambda: 1 / 0) == {"error": "division by zero"}
     s = clean({"habits": [{"id": "a", "n": "Correr"}, {"id": "b", "n": "Agua"}, {"id": "c", "n": "Leer"}],
                "log": log, "plan": {"2026-10-26": ["a", "b"]}, "peso": {"2026-10-20": 81, "2026-10-25": 80}})
@@ -696,6 +698,117 @@ def test_semana():
     assert main.semana_de(clean({}), date(2026, 11, 16), hoy)["habitos"] == []   # una semana futura, vacía
 
 
+def test_rachas():
+    H = [{"id": "g", "n": "Gimnasio", "goal": 3}, {"id": "w", "n": "Agua", "goal": 7}, {"id": "l", "n": "Leer", "goal": 2}]
+    r = lambda s, hoy: {x["id"]: x for x in main.rachas(clean(s), hoy)["habitos"]}
+    # diario: cada día cuenta; sin comodines, un día sin hacer la rompe
+    base = {"habits": H, "comodines": {"al_mes": 0}, "log": {f"2026-11-0{i}": ["w"] for i in range(1, 6)}}
+    assert r(base, "2026-11-05")["w"]["racha"] == 5 and r(base, "2026-11-06")["w"]["racha"] == 5
+    assert r(base, "2026-11-06")["w"]["en_juego"] and r(base, "2026-11-06")["w"]["exigido"]
+    assert r(base, "2026-11-07")["w"]["racha"] == 0 and r(base, "2026-11-07")["w"]["rota"] == 5
+    assert r(base, "2026-11-07")["w"]["dias"]["2026-11-06"] == "fallo"
+    # un descanso de ese hábito (o de todos, "*") congela: ni suma ni rompe
+    des = {**base, "descansos": {"2026-11-06": ["w"]}, "log": {**base["log"], "2026-11-07": ["w"]}}
+    x = r(des, "2026-11-07")["w"]
+    assert x["racha"] == 6 and x["dias"]["2026-11-06"] == "descanso", x
+    assert r({**des, "descansos": {"2026-11-06": ["*"]}}, "2026-11-07")["w"]["racha"] == 6
+    # hoy de descanso: no está en juego y lo dice
+    x = r({**base, "descansos": {"2026-11-06": ["w"]}}, "2026-11-06")["w"]
+    assert (x["racha"], x["libre"], x["en_juego"], x["dias"]["2026-11-06"]) == (5, "descanso", False, "descanso"), x
+    # vacaciones / enfermedad: para todos o para algunos; congelan sin romper
+    vac = {**base, "vacaciones": [{"desde": "2026-11-06", "hasta": "2026-11-09", "motivo": "enfermedad", "habitos": ["w"]}],
+           "log": {**base["log"], "2026-11-10": ["w"]}}
+    x = r(vac, "2026-11-10")["w"]
+    assert x["racha"] == 6 and x["dias"]["2026-11-08"] == "enfermedad", x
+    assert r({**vac, "vacaciones": [{**vac["vacaciones"][0], "habitos": []}]}, "2026-11-10")["w"]["racha"] == 6
+    assert r({**vac, "vacaciones": [{**vac["vacaciones"][0], "habitos": ["g"]}]}, "2026-11-10")["w"]["racha"] == 1
+    # con plan esa semana manda el plan: lo no planificado no cuenta, lo planificado sin hacer rompe
+    plan = {"habits": H, "comodines": {"al_mes": 0}, "plan": {"2026-11-09": ["g"], "2026-11-11": ["g"], "2026-11-13": ["g"]},
+            "log": {"2026-11-09": ["g"], "2026-11-11": ["g"]}}
+    x = r(plan, "2026-11-12")["g"]
+    assert (x["racha"], x["exigido"], x["manana"]) == (2, False, True), x
+    assert r(plan, "2026-11-13")["g"]["en_juego"] and r(plan, "2026-11-14")["g"]["racha"] == 0
+    # sin plan esa semana: hay que hacerlo cada ventana días (2/sem → cada 4)
+    assert main.ventana({"goal": 2, "cada": 1}) == 4 and main.ventana({"goal": 7, "cada": 1}) == 1 and main.ventana({"goal": 1, "cada": 2}) == 14
+    libre_ = {"habits": H, "comodines": {"al_mes": 0}, "log": {"2026-11-02": ["l"], "2026-11-05": ["l"]}}
+    assert r(libre_, "2026-11-08")["l"]["racha"] == 2 and not r(libre_, "2026-11-08")["l"]["exigido"]
+    assert r(libre_, "2026-11-09")["l"]["en_juego"] and r(libre_, "2026-11-10")["l"]["racha"] == 0
+    # comodines: se gastan solos el primer día que una racha se rompería; uno cubre todo el día; al acabarse, rompe
+    com = {**base, "comodines": {"al_mes": 1}, "log": {**base["log"], "2026-11-07": ["w"]}}
+    t = main.rachas(clean(com), "2026-11-07")
+    assert t["habitos"][1]["racha"] == 6 and t["habitos"][1]["dias"]["2026-11-06"] == "comodin", t["habitos"][1]
+    assert t["comodines"] == {"al_mes": 1, "usados": ["2026-11-06"], "quedan": 0, "hoy": False}, t["comodines"]
+    assert r({**com, "log": base["log"]}, "2026-11-08")["w"]["racha"] == 0   # el segundo fallo ya no tiene comodín
+    # el mes siguiente vuelven a estar
+    nov = {**base, "comodines": {"al_mes": 1}, "log": {"2026-10-30": ["w"], "2026-11-01": ["w"]}}
+    assert main.rachas(clean(nov), "2026-11-02")["comodines"]["quedan"] == 1 and r(nov, "2026-11-01")["w"]["racha"] == 2
+    # a mano (hoy): congela hoy y cuenta en los del mes
+    t = main.rachas(clean({**base, "comodines": {"al_mes": 2, "usados": ["2026-11-06"]}}), "2026-11-06")
+    assert t["comodines"]["quedan"] == 1 and t["habitos"][1]["libre"] == "comodin" and not t["habitos"][1]["en_juego"]
+    # hitos: el siguiente y lo que falta; el día que se llega, hito
+    sem = {"habits": H, "log": {f"2026-11-0{i}": ["w"] for i in range(1, 8)}}
+    x = r(sem, "2026-11-07")["w"]
+    assert (x["racha"], x["hito"], x["siguiente"], x["falta"]) == (7, 7, 14, 7), x
+    assert r(sem, "2026-11-06")["w"]["falta"] == 1 and r(sem, "2026-11-06")["w"]["hito"] is None
+    # la llamada: la racha mayor en juego y los hábitos que la salvan hoy
+    ll = {"habits": H, "plan": {"2026-11-06": ["g"], "2026-11-04": ["g"]}, "log": {**base["log"], "2026-11-04": ["g", "w"]}}
+    assert main.rachas(clean(ll), "2026-11-06")["llamada"] == "Mantén tu racha de 5 días: Agua y Gimnasio"
+    # el estado guarda todo limpio, y un periodo sin hábitos que existan se cae (no pasa a «todos»)
+    c = clean({"habits": H, "descansos": {"2026-11-06": ["w", "x", "*"], "malo": ["w"]},
+               "vacaciones": [{"desde": "2026-11-09", "hasta": "2026-11-01"}, {"desde": "2026-12-01", "hasta": "2026-12-10", "habitos": ["x"]},
+                              {"desde": "2026-12-01", "hasta": "2026-12-10", "motivo": "raro", "id": "v1"}],
+               "comodines": {"al_mes": 99, "usados": ["2026-11-06", "x"]}})
+    assert c["descansos"] == {"2026-11-06": ["*", "w"]} and c["comodines"] == {"al_mes": 10, "usados": ["2026-11-06"]}, c
+    assert c["vacaciones"] == [{"id": "v1", "desde": "2026-12-01", "hasta": "2026-12-10", "habitos": [], "motivo": "vacaciones"}], c
+    assert clean(c) == c
+
+
+def test_descansos_api():
+    import tempfile
+    from pathlib import Path
+    from fastapi import Response
+    main.PASS, main.SECRET = "x", b"s"
+    main.DB = Path(tempfile.mkdtemp()) / "data.json"
+    hoy = date.today().isoformat()
+    main.put_state({"habits": [{"id": "a", "n": "Leer"}]}, Response(), None, "Bearer x", None)
+    # descanso de hoy: se pone y se quita, idempotente (puede llegar dos veces desde la cola)
+    for _ in range(2):
+        r = main.post_descanso({"id": "a"}, None, "Bearer x")
+    assert r["descansos"] == ["a"] and r["habitos"][0]["libre"] == "descanso", r
+    assert main.post_descanso({"id": "a", "quita": True}, None, "Bearer x")["descansos"] == []
+    try:
+        main.post_descanso({"id": "zz"}, None, "Bearer x")
+        assert False
+    except main.HTTPException as e:
+        assert e.status_code == 404
+    # comodines: cuántos al mes, gastar hoy (no más de los que quedan) y devolverlo
+    assert main.post_comodin({"al_mes": 1}, None, "Bearer x")["comodines"]["quedan"] == 1
+    c = main.post_comodin({}, None, "Bearer x")["comodines"]
+    assert c["hoy"] and c["quedan"] == 0, c
+    assert main.post_comodin({}, None, "Bearer x")["comodines"]["quedan"] == 0   # repetido: no gasta otro
+    try:
+        main.post_comodin({"dia": "2026-01-01"}, None, "Bearer x")
+        assert False
+    except main.HTTPException as e:
+        assert e.status_code in (400, 409)
+    assert main.post_comodin({"quita": True}, None, "Bearer x")["comodines"]["quedan"] == 1
+    # vacaciones: crear, cambiar (mismo id) y borrar
+    v = main.post_vacaciones({"desde": hoy, "hasta": hoy, "motivo": "enfermedad"}, None, "Bearer x")["vacaciones"]
+    assert len(v) == 1 and v[0]["motivo"] == "enfermedad", v
+    v2 = main.post_vacaciones({**v[0], "habitos": ["a"]}, None, "Bearer x")["vacaciones"]
+    assert len(v2) == 1 and v2[0]["habitos"] == ["a"], v2
+    try:
+        main.post_vacaciones({"desde": hoy}, None, "Bearer x")
+        assert False
+    except main.HTTPException as e:
+        assert e.status_code == 400
+    # un PUT de un cliente que no conoce los descansos no los borra
+    main.post_descanso({}, None, "Bearer x")
+    s = main.put_state({"habits": [{"id": "a", "n": "Leer"}]}, Response(), None, "Bearer x", None)
+    assert s["descansos"] == {hoy: ["*"]} and len(s["vacaciones"]) == 1, s
+    assert main.post_vacaciones({"id": v[0]["id"], "quita": True}, None, "Bearer x")["vacaciones"] == []
+
+
 def test_movimiento():
     """movimiento.js (GSAP) y tom.js: el orden de Hoy, el cuentakilómetros, el cielo, la planta y las cifras, con node."""
     import shutil
@@ -836,5 +949,7 @@ if __name__ == "__main__":
     test_pantalla()
     test_tom()
     test_semana()
+    test_rachas()
+    test_descansos_api()
     test_escalada()
     print("ok")

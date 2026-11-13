@@ -124,7 +124,7 @@ struct FichaDato {
             let hechos = base.filter { $0.hecho }.count
             let mejor = h.habitos.max { $0.racha < $1.racha }
             let hora = Calendar.current.component(.hour, from: ahora)
-            let enJuego = hora >= 20 && h.habitos.contains { !$0.hecho && $0.racha >= 2 }
+            let enJuego = hora >= 20 && h.habitos.contains { $0.arriesga }
             let cuenta = "\(hechos)/\(base.count)"
             let dias = mejor?.racha ?? 0
             simbolo = "flame.fill"
