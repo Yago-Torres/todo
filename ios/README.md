@@ -252,7 +252,8 @@ Todo lo de Tom funciona sin conexión y se sincroniza solo al volver (`Compartid
 
 - **Operaciones con intención**, no copias del estado: `{op: "habito.edita", id, cambios}`, `habito.crea/borra/ordena`,
   `plan.pon`, `gasto.edita/borra/restaura`, `presupuesto.pon`, `regla.pon/borra/ordena/rechaza/aplica` y `recurrente.marca`
-  (Gastos, `Compartido/OperacionesGastos.swift`). Van a la cola de Local (método `OP`, ruta = el estado que
+  (Gastos, `Compartido/OperacionesGastos.swift`), y también `viaje.pon/borra/asigna`, `ajustes.pon` (ingreso, día de
+  cobro, hucha) e `ingreso.edita/borra/restaura`. Van a la cola de Local (método `OP`, ruta = el estado que
   tocan) junto a las peticiones de siempre (marcas, tareas, gastos, documentos), en un único orden.
 - **Al apuntarlas** se pintan ya: la copia que se ve es «lo último del servidor (`BASE GET …`) + lo pendiente encima», y se
   rehace al bajar datos frescos, al mandar o al descartar. Sigue ahí aunque se cierre la app.
@@ -280,6 +281,16 @@ Todo lo de Tom funciona sin conexión y se sincroniza solo al volver (`Compartid
 - **Recurrentes** (bloque `suscripciones`, ahora «Recurrentes»): semana, mes o año, con el próximo cargo, total al mes y al
   año; confirmar o ignorar (`recurrente.marca`). Aviso local el día antes (`AvisosRecurrentes.swift`; Configurar →
   Gastos recurrentes, por instancia).
+- **Viajes y hucha** (`ViajesGastos.swift`, `DatosGastosViajes.swift`): crear, cambiar y borrar viajes (nombre, fechas,
+  presupuesto, moneda con el cambio de hoy del BCE por `/cambio`, compartido con la pareja). Al crear uno se lleva los
+  gastos que ya eran suyos (la misma regla que `que_viaje()` del servidor, en `OpsGastos.queViaje`) y se pueden devolver
+  al ciclo con «Deshacer». La hoja del viaje enseña el desglose, las cuentas con la pareja, «Saldar» (un gasto
+  `reparto: pago|cobro`) y sus gastos. La hucha: lo que apartas cada ciclo, las sugerencias 3/4/6 y el plan ciclo a ciclo.
+- **Ajustes del ciclo** (`AjustesGastos.swift`, en «Presupuestos»): cuánto cobras y el día de cobro (vuelve al ciclo de
+  hoy). Sin red se guardan, pero las cuentas del ciclo (las calcula el servidor) no cambian hasta que llegan.
+- **Ingresos** (`IngresosGastos.swift`): editar y borrar (con deshacer). Apuntar lleva día y, en un viaje en otra moneda,
+  la moneda; tras apuntar sale «Deshacer» (una operación `gasto.borra`/`ingreso.borra`). El editor de un gasto de un viaje
+  compartido elige el reparto.
 - Todo por instancia: Yago y Aitana nunca se mezclan.
 
 ## Apariencia, gestos e isla
@@ -382,3 +393,31 @@ suma el «hecho» de hoy a `base` para que marcar se vea al momento (también si
   día; la última llamada se come el repaso de las 22:00. Botones Hecho / Usar comodín / Descansar hoy. Lo programa
   `Avisos.programa()`.
 - `CelebracionHito`: `.celebraHitos()` en Hoy y Hábitos: llama que crece, número que sube y el confeti de `CelebracionDia`.
+
+## Paridad con la web
+
+Repaso función a función de cada página web contra su pantalla de Tom (13/11). Hecho en nativo en esta tanda:
+
+| Web | Faltaba en Tom | Ahora |
+|---|---|---|
+| Gastos | Crear, editar y borrar viajes (moneda y cambio, compartido, saldar, gastos del viaje) | Hecho (`ViajesGastos.swift`) |
+| Gastos | Hucha de viajes: lo que apartas, sugerencias y plan ciclo a ciclo | Hecho |
+| Gastos | Cuánto cobras y día de cobro | Hecho (`AjustesGastos.swift`) |
+| Gastos | Editar y borrar ingresos | Hecho (`IngresosGastos.swift`) |
+| Gastos | Día y moneda al apuntar, deshacer lo apuntado, reparto en el editor | Hecho |
+| Hoy | Tarjeta «Comida» (menú de hoy y compra) y «Tu año» (mapa del año) | Hecho (`BloquesHoyWeb.swift`, bloques `comida` y `anio`) |
+| Hábitos | Calendario del mes (mapa de calor, marcar y planificar cualquier día) | Hecho (`Habitos/CalendarioHabitos.swift`) |
+| Comida | Lista de la compra del menú (tachar, dónde sale más barato) y Cuentas (por cadena, apagar cadenas, ahorro) | Hecho (`Comida/CompraMenu.swift`), refrescar precios incluido |
+
+Ya estaban a la par: Pendientes, Documentos, Ajustes (la apariencia y las pantallas están en Configurar), Entreno
+(el aviso push de la web no aplica: Tom avisa en local), Carrera y Salud (solo lectura en la web).
+
+Lo que queda, con esfuerzo estimado:
+
+| Web | Falta | Esfuerzo |
+|---|---|---|
+| Comida | Editor de ingredientes: buscar, crear, corregir macros, variantes (predeterminada, borrar) y «Rellenar» con Open Food Facts (`/ingrediente`, `/variante`, `/rellena`) | Grande (1 día) |
+| Comida | Fijar a mano el producto de cada cadena (pin) desde la lista de la compra (`/candidatos` + PUT del `pin`) | Medio (2-3 h) |
+| Comida | Elegir variante por ingrediente en la ficha de una receta del menú | Pequeño (1 h) |
+| Hábitos | Tira de 28 días con constancia a 30 días (la web la enseña en «Rachas»; Tom tiene la semana y la racha) | Pequeño (1-2 h) |
+| Gastos | Sin red, cambiar ingreso, día de cobro, hucha o viajes no recalcula las cuentas del ciclo hasta que llega (las calcula el servidor) | Medio: recalcular `resumen()` en el iPhone |
