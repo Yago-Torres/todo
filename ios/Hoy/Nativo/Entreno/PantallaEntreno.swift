@@ -74,7 +74,8 @@ struct PantallaEntreno: View {
             case "musculos": TarjetaMusculos()
             case "progreso": TarjetaProgreso()
             case "historial": TarjetaHistorial()
-            case "carrera": TarjetaCarreraSemana { verCarrera = true }
+            // Carrera es una sección más: se pasa de lado como todas (Pestanas), no en una hoja desde abajo
+            case "carrera": TarjetaCarreraSemana { Navegador.shared.abre("/carrera.html") }
             case "escalada": if escalada.activa { TarjetaEscalada() }
             case "peso": TarjetaPeso()
             default: EmptyView()
