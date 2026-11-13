@@ -151,6 +151,7 @@ enum Freno {
         let desde = Almacen.defaults.double(forKey: claveAbierta(app))
         Almacen.defaults.removeObject(forKey: claveAbierta(app))
         FrenoAvisos.cancela(app)   // cerrada: ya no hay que preguntar «¿sigues?»
+        Almacen.defaults.removeObject(forKey: clavePase(app))   // y la próxima vez que la abras, Tom pregunta otra vez
         guard desde > 0 else { return }
         let segundos = Int(Date().timeIntervalSince1970 - desde)
         guard segundos > 0, segundos < 4 * 3600 else { return }
@@ -207,12 +208,25 @@ enum Freno {
     }
 
     /// Lo que hace la acción de Atajos: el enlace que hay que abrir ahora.
+    /// El pase vale para la apertura que viene justo detrás de «Entrar» (o de «N min más» / una apertura libre):
+    /// 20 s para que la automatización, que salta otra vez al abrirse la app desde Tom, la deje pasar. Si sales y
+    /// vuelves a entrar, aunque queden minutos de pase, Tom vuelve a preguntar (Yago, 13/11). Los minutos siguen
+    /// sirviendo para los «¿sigues?» y la isla.
+    private static func claveVentana(_ app: AppFrenada) -> String { "freno.ventana.\(app.rawValue)" }
+    static func abreVentana(_ app: AppFrenada) {
+        Almacen.defaults.set(Date().addingTimeInterval(20).timeIntervalSince1970, forKey: claveVentana(app))
+    }
+    private static func enVentana(_ app: AppFrenada) -> Bool {
+        Almacen.defaults.double(forKey: claveVentana(app)) > Date().timeIntervalSince1970
+    }
+
     static func alAbrir(_ app: AppFrenada) -> URL {
         recuerda(app)
-        if pase(app) != nil { marcaAbierta(app); return app.enlace }
+        if pase(app) != nil, enVentana(app) { marcaAbierta(app); return app.enlace }
         apunta(app) { $0.aperturas += 1 }
         if deHoy(app).aperturas <= libresAlDia, !pasadoDeLimite(app) {
             daPase(app, minutos: minutosPase)
+            abreVentana(app)
             apunta(app) { $0.minutos += minutosPase }
             iniciaSesion(app)
             return app.enlace
@@ -235,6 +249,7 @@ enum Freno {
         Almacen.defaults.set(hasta.timeIntervalSince1970, forKey: clavePase(app))
         apunta(app) { $0.minutos += minutos }
         marcaAbierta(app)
+        abreVentana(app)
         await FrenoAvisos.programa(app)
         await MainActor.run { Isla.pase(app, hasta: hasta) }
     }
@@ -266,6 +281,7 @@ enum Freno {
 
     static func entra(_ app: AppFrenada, minutos: Int) {
         daPase(app, minutos: minutos)
+        abreVentana(app)
         apuntaEntrada(app)
         apunta(app) { $0.entradas += 1; $0.minutos += minutos }
         iniciaSesion(app)
