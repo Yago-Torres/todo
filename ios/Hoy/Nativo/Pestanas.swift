@@ -7,13 +7,11 @@ struct Pestanas: View {
     let claves: Claves
     @ObservedObject private var navegador = Navegador.shared
     @Environment(\.scenePhase) private var fase
-    /// La sección de antes, para saber hacia qué lado pasa la página.
-    @State private var anterior = "/"
     /// Lo que se ha arrastrado de lado: la pantalla sigue al dedo antes de pasar de página.
     @State private var arrastre: CGFloat = 0
 
     var body: some View {
-        let haciaDelante = Self.indice(navegador.pestana) >= Self.indice(anterior)
+        let haciaDelante = Self.indice(navegador.pestana) >= Self.indice(navegador.anterior)
         ZStack(alignment: .bottom) {
             ZStack {
                 Tema.fondo.ignoresSafeArea()
@@ -44,7 +42,6 @@ struct Pestanas: View {
                 .ignoresSafeArea(.keyboard)
         }
         .animation(Tema.Muelle.pantalla, value: navegador.pestana)
-        .onChange(of: navegador.pestana) { viejo, _ in anterior = viejo }
         // «?hecho=id» de un aviso o del widget: se marca aquí
         .onChange(of: navegador.marcaPendiente, initial: true) { _, id in
             guard let id else { return }

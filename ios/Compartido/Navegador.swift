@@ -9,7 +9,12 @@ final class Navegador: ObservableObject {
 
     /// La pantalla que se ve: la ruta de su sección en el registro ("/", "/habitos.html", "/entreno.html"…). Carrera
     /// tiene la suya ("/carrera.html") aunque en la barra se marque Entreno (ver `seccion`).
-    @Published var pestana: String = "/"
+    @Published var pestana: String = "/" {
+        // la de antes, guardada ANTES de pintar: Pestanas decide con ella hacia qué lado pasa la página
+        willSet { if newValue != pestana { anterior = pestana } }
+    }
+    /// La sección de la que venimos (para el sentido de la transición: siempre de lado, nunca desde abajo).
+    private(set) var anterior: String = "/"
     /// «?hecho=id» (un aviso o el widget, en Hoy o en Hábitos): el hábito que hay que marcar.
     @Published var marcaPendiente: String?
     /// «/pendientes.html?nueva=1» (el control «Apuntar una tarea»): Pendientes enfoca el campo de apuntar.
