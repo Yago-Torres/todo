@@ -41,7 +41,7 @@ enum Avisos {
                                            intentIdentifiers: [], options: [])
         let entreno = UNNotificationCategory(identifier: categoriaEntreno, actions: [accion(accionMueve, "Mover a mañana")],
                                              intentIdentifiers: [], options: [])
-        UNUserNotificationCenter.current().setNotificationCategories([hecho, tarea, entreno])
+        UNUserNotificationCenter.current().setNotificationCategories(Set([hecho, tarea, entreno] + AvisosRacha.categorias))
     }
 
     private static func borraPendientes() async {
@@ -132,6 +132,7 @@ enum Avisos {
 
         nuevos += await avisosDeTareas(cal: cal, hoy0: hoy0)
         nuevos += await avisoDeSemana(cal: cal, hoy0: hoy0)
+        nuevos = AvisosRacha.funde(nuevos + (await AvisosRacha.avisos(cal: cal, hoy0: hoy0)))   // rachas (Nativo/Rachas)
 
         await borraPendientes()
         // iOS guarda como mucho 64 pendientes: primero los más próximos
@@ -243,6 +244,7 @@ final class AvisosDelegado: NSObject, UNUserNotificationCenterDelegate {
         let habito = info["habito"] as? String
         let dia = info["dia"] as? String ?? Fecha.hoy()
         let accion = response.actionIdentifier
+        if AvisosRacha.atiende(response, completionHandler) { return }   // Hecho / Usar comodín / Descansar hoy de las rachas
 
         let tarea = info["tarea"] as? String
         let texto = info["texto"] as? String ?? ""

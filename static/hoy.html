@@ -121,6 +121,10 @@
   .llama { width: 13px; height: 13px; fill: var(--c); margin-right: 3px; transform-origin: 50% 90%; animation: llama 1.8s ease-in-out infinite; }
   @keyframes llama { 0%, 100% { transform: rotate(-4deg) scale(1); } 50% { transform: rotate(3deg) scale(1.06, 1.16); } }
   /* racha en juego (desde las 20:00, 2 días o más sin marcar hoy): el número y el círculo laten en ámbar */
+  /* descansa hoy: la etiqueta en gris y la racha congelada, sin llama */
+  .fila .plan.libre { background: var(--linea); color: var(--suave); }
+  .fila.libre .rn { color: var(--suave); }
+  .fila.libre .llama { display: none; }
   .fila.peligro .rn { color: var(--aviso); animation: late-racha 1.3s ease-in-out infinite; }
   .fila.peligro .llama { fill: var(--aviso); }
   .fila.peligro .bx { border-color: var(--aviso); animation: aura 1.3s ease-in-out infinite; }
@@ -350,6 +354,7 @@ function dia_() {
 }
 
 // ---------- hábitos ----------
+const LIBRE = {descanso: "descanso", vacaciones: "vacaciones", enfermedad: "enfermo", comodin: "comodín"};
 function habitos() {
   const hs = H.habitos, hechos = hs.filter(h => h.hecho).length;
   $("#n-hab").textContent = `${hechos}/${hs.length}`;
@@ -362,8 +367,13 @@ function habitos() {
     b.setAttribute("aria-pressed", h.hecho);
     b.setAttribute("aria-label", `${h.n}, ${h.hecho ? "hecho" : "sin hacer"}`);
     const rn = el("span", "rn" + (h.racha ? "" : " cero"));
-    // racha en juego: desde las 20:00, una racha de 2 días o más que sigue sin marcar late
-    const enJuego = !h.hecho && h.racha >= 2 && new Date().getHours() >= 20;
+    // racha en juego: desde las 20:00, una racha de 2 días o más que hoy se exige (juego, de /api/hoy) y sigue sin marcar late.
+    // Un hábito que descansa hoy (libre: descanso, vacaciones, enfermedad o comodín) lleva su icono y la racha congelada
+    const enJuego = !h.hecho && (h.juego ?? true) && !h.libre && h.racha >= 2 && new Date().getHours() >= 20;
+    if (h.libre && !h.hecho) {
+      b.classList.add("libre");
+      b.setAttribute("aria-label", `${h.n}, ${LIBRE[h.libre] || "descanso"} hoy: la racha de ${h.racha} días está congelada`);
+    }
     if (enJuego) {
       b.classList.add("peligro");
       b.setAttribute("aria-label", `${h.n}, sin hacer: tu racha de ${h.racha} días está en juego`);
@@ -372,6 +382,7 @@ function habitos() {
     rn.append(el("span", "rc", String(h.racha)));
     b.append(Object.assign(el("span", "bx liq"), {innerHTML: mov.circulo(h.hecho)}), el("span", "nom", h.n));
     if (h.plan) b.append(el("span", "plan", "plan"));
+    if (h.libre && !h.hecho) b.append(el("span", "plan libre", LIBRE[h.libre] || "descanso"));
     b.append(rn);
     b.onclick = () => marca(h);
     return b;

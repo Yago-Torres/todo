@@ -11,7 +11,7 @@ struct PantallaHoy: View {
     /// «Semana» (el resumen de /api/semana) va arriba el domingo y el lunes, y abajo y plegada el resto de días.
     static var bloques: [(String, String)] {
         let resto: [(String, String)] = [
-            ("anillos", "Anillos del día"), ("habitos", "Hábitos"), ("entreno", "Entreno"), ("tareas", "Para hoy"),
+            ("anillos", "Anillos del día"), ("habitos", "Hábitos"), ("rachas", "Rachas"), ("entreno", "Entreno"), ("tareas", "Para hoy"),
             ("salud", "Salud"), ("carrera", "Carrera"), ("gastos", "Gastos"),
         ]
         let semana = ("semana", "Semana")
@@ -42,12 +42,14 @@ struct PantallaHoy: View {
         .task { await datos.carga() }
         // completar el día: confeti con los colores del tema, háptica y sonido
         .overlay { CelebracionDia(disparo: toques).ignoresSafeArea() }
+        .celebraHitos()   // llegar a 7, 30, 100… días de racha (Rachas/CelebracionHito.swift)
     }
 
     @ViewBuilder private func bloque(_ id: String) -> some View {
         switch id {
         case "anillos": anillos
         case "habitos": seccionHabitos
+        case "rachas": BloqueRachas()
         case "entreno":
             if let entreno = hoy?.entreno, !entreno.isEmpty { seccionEntreno(entreno) }
         case "tareas":
@@ -457,7 +459,13 @@ struct FilaHabito: View {
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                 Spacer(minLength: Tema.Espacio.s)
-                if habito.plan && !habito.hecho {
+                if let libre = habito.libre, !habito.hecho {
+                    // descansa hoy: su icono (hoja, cama, sombrilla o copo) y la racha congelada
+                    Image(systemName: DatosRachas.icono(libre))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Tema.suave)
+                        .accessibilityLabel(DatosRachas.nombre(libre))
+                } else if habito.plan && !habito.hecho {
                     Text("plan")
                         .estiloEtiqueta()
                         .foregroundStyle(Tema.acento)
@@ -465,10 +473,10 @@ struct FilaHabito: View {
                         .background(Tema.acentoSuave, in: Capsule())
                 }
                 if habito.racha > 1 {
-                    Label("\(habito.racha)", systemImage: "flame.fill")
+                    Label("\(habito.racha)", systemImage: habito.libre != nil && !habito.hecho ? "snowflake" : "flame.fill")
                         .font(Tema.fuente(.pequeno, peso: .semibold))
                         .monospacedDigit()
-                        .foregroundStyle(habito.hecho ? Tema.aviso : Tema.tenue)
+                        .foregroundStyle(habito.hecho ? Tema.aviso : habito.arriesga ? Tema.aviso.opacity(0.7) : Tema.tenue)
                         .contentTransition(.numericText())
                 }
             }
@@ -476,7 +484,8 @@ struct FilaHabito: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(EstiloHundir())
-        .accessibilityLabel("\(habito.n), \(habito.hecho ? "hecho" : "sin hacer")")
+        .accessibilityLabel("\(habito.n), \(habito.hecho ? "hecho" : habito.libre != nil ? "descansa hoy" : "sin hacer")"
+                            + (habito.racha > 1 ? ", racha de \(habito.racha) días" + (habito.arriesga ? " en juego" : "") : ""))
         .accessibilityHint(habito.hecho ? "Toca para desmarcar" : "Toca para marcar")
     }
 }

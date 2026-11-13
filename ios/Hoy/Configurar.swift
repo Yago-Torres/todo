@@ -103,6 +103,8 @@ struct Configurar: View {
                 }
             }
 
+            if avisos { SeccionAvisosRacha() }
+
             if salud {
                 Section {
                     Button {

@@ -36,7 +36,7 @@ struct Resumen {
         tareas = h.tareas ?? []
         gastos = h.gastos
         let hora = Calendar.current.component(.hour, from: ahora)
-        enJuego = hora >= 20 && h.habitos.contains { !$0.hecho && $0.racha >= 2 }
+        enJuego = hora >= 20 && h.habitos.contains { $0.arriesga }
     }
 
     var progresos: [(Double, Color)] {

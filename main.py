@@ -48,6 +48,9 @@ EMPTY = {
     "actividad": {},
     "salud": {},
     "gym": {},
+    "descansos": {},
+    "vacaciones": [],
+    "comodines": {"al_mes": 2, "usados": []},
 }
 
 # ---------- puerta ----------
@@ -123,6 +126,28 @@ def dias(v, ids):
 
 
 TIPOS = {"pesas", "carrera", "movilidad", "otro"}
+MOTIVOS = ("vacaciones", "enfermedad", "descanso")
+
+
+def periodos(v, ids):
+    """Vacaciones o enfermedad: desde-hasta (como mucho un año) para todos los hábitos ([]) o para algunos.
+    Si se borran todos los hábitos de un periodo, el periodo se cae: no puede pasar a valer para todos."""
+    out = []
+    for p in lst(v)[:60]:
+        if not isinstance(p, dict) or not (de := day(p.get("desde"))) or not (a := day(p.get("hasta"))):
+            continue
+        try:
+            if not 0 <= (date.fromisoformat(a) - date.fromisoformat(de)).days <= 366:
+                continue
+        except ValueError:
+            continue
+        pedidos = [str(x) for x in lst(p.get("habitos"))]
+        habitos = sorted(ids & set(pedidos))
+        if pedidos and not habitos:
+            continue
+        out.append({"id": str(p.get("id") or f"{de}-{a}")[:24], "desde": de, "hasta": a, "habitos": habitos,
+                    "motivo": m if (m := str(p.get("motivo") or "")) in MOTIVOS else "vacaciones"})
+    return sorted(out, key=lambda p: p["desde"])
 
 
 def bloque(b):
@@ -264,6 +289,12 @@ def clean(state):
             for k, v in list(dct(state.get("salud")).items())[:4000]
             if len(str(k)) == DAY and (d := dia_salud(v))
         },
+        # descansos que no rompen rachas (ver «Rachas» en CLAUDE.md): día -> hábitos que descansan ("*" = todos)
+        "descansos": dias(state.get("descansos"), ids | {"*"}),
+        "vacaciones": periodos(state.get("vacaciones"), ids),
+        # comodines al mes (se gastan solos al fallar un día) y los días en que se gastó uno a mano
+        "comodines": {"al_mes": entero(dct(state.get("comodines")).get("al_mes"), 0, 10, 2),
+                      "usados": sorted({d for x in lst(dct(state.get("comodines")).get("usados"))[:400] if (d := day(x))})[-200:]},
     }
 
 
@@ -467,6 +498,10 @@ def put_state(state: dict, response: Response, todo_sesion: str = Cookie(None), 
     # Sin cabecera (el bot, los scripts: leen y escriben en el acto) se guarda como siempre.
     if x_version and x_version != version():
         raise HTTPException(409, "El estado ha cambiado en otro sitio")
+    # un cliente que aún no conoce los descansos (una pestaña vieja, una app sin actualizar) no los borra
+    if DB.exists() and (falta := [k for k in ("descansos", "vacaciones", "comodines") if k not in dct(state)]):
+        viejo = dct(json.loads(DB.read_text("utf-8")))
+        state = {**state, **{k: viejo[k] for k in falta if k in viejo}}
     state = clean(state)
     guarda(DB, json.dumps(state, ensure_ascii=False))
     response.headers["X-Version"] = version()
@@ -491,6 +526,86 @@ def marca_habito(a: dict, response: Response, todo_sesion: str = Cookie(None), a
     # con «antes» la página sabe si nadie más escribió entre medias y puede quedarse la versión nueva
     response.headers["X-Version"] = version()
     return {"dia": dia, "hechos": estado["log"].get(dia, []), "antes": antes, "version": version()}
+
+
+# ---------- rachas: descansos, vacaciones y comodines sin el estado entero ----------
+# Como /api/marca: dicen cómo queda (idempotentes), sin X-Version, así que Tom los manda desde la cola sin red.
+cerrojo_estado = threading.Lock()
+
+
+def cambia_estado(fn):
+    with cerrojo_estado:
+        s = clean(dct(json.loads(DB.read_text("utf-8")))) if DB.exists() else clean({})
+        fn(s)
+        s = clean(s)
+        guarda(DB, json.dumps(s, ensure_ascii=False))
+    return rachas(s, date.today().isoformat())
+
+
+@app.get("/api/rachas")
+def get_rachas(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """Las rachas de hoy (racha, en juego, libre, hito siguiente, días de las últimas 6 semanas), comodines y vacaciones."""
+    exige(todo_sesion, authorization)
+    s = clean(dct(json.loads(DB.read_text("utf-8")))) if DB.exists() else clean({})
+    return rachas(s, date.today().isoformat())
+
+
+@app.post("/api/descanso")
+def post_descanso(a: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """{id? (sin id o "*" = todos), dia? (hoy), quita?}: ese día el hábito descansa y su racha no se rompe."""
+    exige(todo_sesion, authorization)
+    dia, hid = day(a.get("dia")) or date.today().isoformat(), str(a.get("id") or "*")
+
+    def aplica(s):
+        if hid != "*" and hid not in {h["id"] for h in s["habits"]}:
+            raise HTTPException(404, "Ese hábito ya no existe")
+        l = set(s["descansos"].get(dia, [])) - {hid}
+        s["descansos"][dia] = sorted(l if a.get("quita") else l | {hid})
+    return cambia_estado(aplica)
+
+
+@app.post("/api/comodin")
+def post_comodin(a: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """{dia? (hoy), quita?}: gasta (o devuelve) un comodín ese día, que congela todas las rachas. {al_mes}: cuántos hay al mes."""
+    exige(todo_sesion, authorization)
+    hoy = date.today().isoformat()
+    dia = day(a.get("dia")) or hoy
+
+    def aplica(s):
+        if "al_mes" in a:
+            s["comodines"]["al_mes"] = entero(a.get("al_mes"), 0, 10, s["comodines"]["al_mes"])
+            if "dia" not in a:
+                return
+        usados = set(s["comodines"]["usados"])
+        if a.get("quita"):
+            usados.discard(dia)
+        elif dia not in usados:
+            if dia > hoy or dia[:7] != hoy[:7]:
+                raise HTTPException(400, "Solo se puede gastar un comodín en un día de este mes que ya haya llegado")
+            if rachas(s, hoy)["comodines"]["quedan"] <= 0:
+                raise HTTPException(409, "No te quedan comodines este mes")
+            usados.add(dia)
+        s["comodines"]["usados"] = sorted(usados)
+    return cambia_estado(aplica)
+
+
+@app.post("/api/vacaciones")
+def post_vacaciones(a: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """{desde, hasta, habitos? ([] = todos), motivo? (vacaciones|enfermedad|descanso), id?}: crea o cambia un periodo
+    en el que no se exige nada y las rachas se congelan. {id, quita: true}: lo borra."""
+    exige(todo_sesion, authorization)
+    pid = str(a.get("id") or "")[:24]
+
+    def aplica(s):
+        otros = [p for p in s["vacaciones"] if p["id"] != pid]
+        if a.get("quita"):
+            s["vacaciones"] = otros
+            return
+        nuevo = periodos([{**a, "id": pid or f"v{int(time.time() * 1000) % 10**10}"}], {h["id"] for h in s["habits"]})
+        if not nuevo:
+            raise HTTPException(400, "Faltan las fechas (desde ≤ hasta, como mucho un año) o los hábitos no existen")
+        s["vacaciones"] = otros + nuevo
+    return cambia_estado(aplica)
 
 
 # ---------- el móvil: cuánto rato en cada app ----------
@@ -1424,22 +1539,118 @@ def plan_carrera(todo_sesion: str = Cookie(None), authorization: str = Header(No
 
 
 # ---------- portada (hoy.html): lo de hoy de cada app en una sola llamada ----------
-def racha(log, hid, hoy):
-    """Días seguidos hechos hasta hoy; el día en curso todavía no la rompe (igual que index.html)."""
-    d, n = date.fromisoformat(hoy), 0
-    if hid not in log.get(hoy, []):
-        d -= timedelta(days=1)
-    while hid in log.get(d.isoformat(), []):
-        n, d = n + 1, d - timedelta(days=1)
-    return n
+# ---------- rachas: UNA definición (la usan /api/hoy, /api/rachas, /api/semana, hoy.html, index.html y Tom) ----------
+# Ver «Rachas» en CLAUDE.md. Un día de un hábito es: hecho (suma 1), libre (descanso, vacaciones, enfermedad o
+# comodín: ni suma ni rompe), no exigido (no cuenta) o exigido sin hacer (rompe, salvo que se gaste un comodín).
+HITOS = (7, 14, 30, 50, 100, 200, 365, 500, 1000)
+HISTORIA = 400   # días hacia atrás que se vuelven a jugar en cada cálculo
 
 
-def rota(log, hid, hoy):
-    """La racha que se rompió ayer (sin hacer ayer, hecho anteayer): sus días. Si ayer se hizo, 0. La planta de Hoy se mustia con ella."""
-    d = date.fromisoformat(hoy) - timedelta(days=1)
-    if hid in log.get(d.isoformat(), []):
-        return 0
-    return racha(log, hid, d.isoformat())
+def ventana(h):
+    """Un hábito sin plan esa semana: cada cuántos días como mucho hay que hacerlo (7/sem → 1, 3/sem → 3, 1 cada 2 sem → 14)."""
+    return -(-7 * h["cada"] // h["goal"])
+
+
+def libre(s, hid, d, comodin=False):
+    """Por qué el día d no cuenta para la racha de hid (descanso, vacaciones, enfermedad, comodin), o None si cuenta."""
+    if {hid, "*"} & set(s["descansos"].get(d, [])):
+        return "descanso"
+    for p in s["vacaciones"]:
+        if p["desde"] <= d <= p["hasta"] and (not p["habitos"] or hid in p["habitos"]):
+            return p["motivo"]
+    return "comodin" if comodin else None
+
+
+def lunes_de(d):
+    x = date.fromisoformat(d)
+    return (x - timedelta(days=x.weekday())).isoformat()
+
+
+def nombres(xs):
+    return xs[0] if len(xs) == 1 else ", ".join(xs[:-1]) + " y " + xs[-1] if xs else ""
+
+
+def rachas(s, hoy):
+    """Juega los días desde el primero con algo (como mucho HISTORIA atrás) hasta ayer y mira cómo está hoy. Los comodines
+    se gastan solos, por orden, el primer día del mes en que una racha viva se rompería (uno cubre todo ese día)."""
+    planificadas = {(hid, lunes_de(d)) for d, ids in s["plan"].items() for hid in ids}
+    manual, al_mes = set(s["comodines"]["usados"]), s["comodines"]["al_mes"]
+    h0 = date.fromisoformat(hoy)
+    con_algo = [d for d in (*s["log"], *s["descansos"], *manual) if d < hoy]
+    d = date.fromisoformat(max(min(con_algo, default=hoy), (h0 - timedelta(days=HISTORIA)).isoformat()))
+    est = {h["id"]: {"n": 0, "hueco": 0, "dias": {}, "rompio": None} for h in s["habits"]}
+    gastados = {}   # mes -> días con comodín (a mano o solo)
+
+    def exige(h, dia, hueco):
+        if (h["id"], lunes_de(dia)) in planificadas:   # una semana con plan manda el plan
+            return h["id"] in s["plan"].get(dia, [])
+        return hueco + 1 >= ventana(h)
+
+    while d < h0:
+        k = d.isoformat()
+        hechos, usados, a_mano = set(s["log"].get(k, [])), gastados.setdefault(k[:7], []), k in manual
+        if a_mano:
+            usados.append(k)
+        caen = []
+        for h in s["habits"]:
+            e = est[h["id"]]
+            if h["id"] in hechos:
+                e["n"], e["hueco"], e["dias"][k] = e["n"] + 1, 0, "hecho"
+            elif m := libre(s, h["id"], k, a_mano):
+                e["dias"][k] = m
+            elif not exige(h, k, e["hueco"]):
+                e["hueco"] += 1
+            elif e["n"]:
+                caen.append(e)
+            else:
+                e["hueco"] = 0   # sin racha no hay nada que romper
+        if caen and len(usados) < al_mes:
+            usados.append(k)
+            for e in caen:
+                e["dias"][k] = "comodin"
+        else:
+            for e in caen:
+                e["rompio"], e["n"], e["hueco"], e["dias"][k] = (k, e["n"]), 0, 0, "fallo"
+        d += timedelta(days=1)
+
+    ayer, manana = (h0 - timedelta(days=1)).isoformat(), (h0 + timedelta(days=1)).isoformat()
+    corte = (h0 - timedelta(days=41)).isoformat()   # seis semanas para el calendario
+    habitos = []
+    for h in s["habits"]:
+        e, hid = est[h["id"]], h["id"]
+        hecho = hid in s["log"].get(hoy, [])
+        m = None if hecho else libre(s, hid, hoy, hoy in manual)
+        exigido = not hecho and not m and exige(h, hoy, e["hueco"])
+        n = e["n"] + hecho
+        hueco = 0 if hecho else e["hueco"] + (not m)
+        dias_h = {k: v for k, v in e["dias"].items() if k >= corte}
+        if hecho or m or exigido:
+            dias_h[hoy] = "hecho" if hecho else m or "pendiente"
+        siguiente = next((x for x in HITOS if x > n), None)
+        habitos.append({
+            "id": hid, "n": h["n"], "c": h["c"], "racha": n, "base": e["n"], "hecho": hecho,
+            # la que se rompió ayer (la planta de Hoy se mustia con ella)
+            "rota": e["rompio"][1] if e["rompio"] and e["rompio"][0] == ayer else 0,
+            "exigido": exigido, "en_juego": exigido and e["n"] > 0, "libre": m,
+            "hito": n if hecho and n in HITOS else None, "siguiente": siguiente, "falta": siguiente - n if siguiente else None,
+            # mañana la pide (para los avisos de mañana; si hoy está en juego, eso va antes)
+            "manana": not libre(s, hid, manana, manana in manual) and exige(h, manana, hueco),
+            "dias": dict(sorted(dias_h.items())),
+        })
+    usados = gastados.get(hoy[:7], []) + ([hoy] if hoy in manual else [])
+    juego = sorted((x for x in habitos if x["en_juego"]), key=lambda x: -x["base"])
+    return {
+        "hoy": hoy, "habitos": habitos, "hitos": list(HITOS),
+        "comodines": {"al_mes": al_mes, "usados": usados, "quedan": max(0, al_mes - len(usados)), "hoy": hoy in manual},
+        "vacaciones": [p for p in s["vacaciones"] if p["hasta"] >= hoy],
+        "descansos": s["descansos"].get(hoy, []),
+        "llamada": f"Mantén tu racha de {juego[0]['base']} {'día' if juego[0]['base'] == 1 else 'días'}: "
+                   f"{nombres([x['n'] for x in juego])}" if juego else None,
+    }
+
+
+def racha(s, hid, hoy):
+    return next((x["racha"] for x in rachas(s, hoy)["habitos"] if x["id"] == hid), 0)
 
 
 def trozo(fn):
@@ -1461,9 +1672,12 @@ def de_otra(nombre, ruta):
 
 def hoy_habitos(s, hoy):
     plan, hecho = set(s["plan"].get(hoy, [])), set(s["log"].get(hoy, []))
+    r = {x["id"]: x for x in rachas(s, hoy)["habitos"]}
     # orden: su sitio en la lista de hábitos, para que la portada reordene al marcar sin perderlo
+    # base: la racha sin contar hoy (marcar suma uno); juego: hoy la pide y hay racha; libre: descansa hoy (y por qué)
     habitos = [{"id": h["id"], "n": h["n"], "c": h["c"], "plan": h["id"] in plan, "hecho": h["id"] in hecho,
-                "racha": racha(s["log"], h["id"], hoy), "rota": rota(s["log"], h["id"], hoy), "orden": i} for i, h in enumerate(s["habits"])]
+                "racha": r[h["id"]]["racha"], "base": r[h["id"]]["base"], "rota": r[h["id"]]["rota"],
+                "juego": r[h["id"]]["en_juego"], "libre": r[h["id"]]["libre"], "orden": i} for i, h in enumerate(s["habits"])]
     habitos.sort(key=lambda h: (not h["plan"], h["hecho"]))   # lo planificado y sin hacer, primero
     pesos = sorted(s["peso"].items())
     semana = [kg for d, kg in pesos if d > (date.fromisoformat(hoy) - timedelta(days=7)).isoformat()]
@@ -1591,13 +1805,13 @@ def media_dias(por_dia, clave, dias):
 def semana_de(s, lunes, hoy):
     """Una semana de lunes a domingo (los días que aún no han llegado no cuentan): hábitos, entrenos, sueño, pasos y peso."""
     dias = [d.isoformat() for d in (lunes + timedelta(days=i) for i in range(7)) if d.isoformat() <= hoy]
-    habitos = []
+    habitos, r = [], {x["id"]: x["racha"] for x in rachas(s, dias[-1])["habitos"]} if dias else {}
     for h in s["habits"]:
         hechos = sum(h["id"] in s["log"].get(d, []) for d in dias)
         # un hábito quincenal no cuenta como meta fallida en su semana de descanso
         objetivo = h["goal"] if h["cada"] == 1 or hechos else 0
         habitos.append({"id": h["id"], "n": h["n"], "c": h["c"], "hechos": hechos, "objetivo": objetivo,
-                        "racha": racha(s["log"], h["id"], dias[-1]) if dias else 0})
+                        "racha": r.get(h["id"], 0)})
     entrenos = [(d, h) for d in dias for h in s["plan"].get(d, []) if es_entreno(s, h)]
     sueno, noches = media_dias(s["salud"], "sueno", dias)
     pasos, con_pasos = media_dias(s["salud"], "pasos", dias)

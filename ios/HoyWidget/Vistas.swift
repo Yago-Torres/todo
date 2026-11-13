@@ -241,7 +241,7 @@ struct FilaHabito: View {
                 if h.racha > 0 {
                     Text("\(h.racha) d")
                         .font(.system(size: 12))
-                        .foregroundStyle(h.racha >= 2 && !h.hecho && enJuego ? Paleta.aviso : Paleta.suave)
+                        .foregroundStyle(h.arriesga && enJuego ? Paleta.aviso : Paleta.suave)
                 }
             }
         }
