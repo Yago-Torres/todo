@@ -72,7 +72,7 @@ enum Operaciones {
     ///   Sin él (al pintar en local) eso se ignora.
     /// - alias: el id de ahora de un id provisional o viejo (Local.alias).
     static func aplica(_ p: Pendiente, en ruta: String, _ copia: inout [String: Any], estricto: Bool = false,
-                       alias: (String) -> String = { $0 }) throws {
+                       alias: @escaping (String) -> String = { $0 }) throws {
         switch (p.metodo, ruta) {
         case ("OP", state):
             try aplicaEstado(p.cuerpo, &copia, estricto: estricto)
@@ -297,7 +297,7 @@ enum Operaciones {
 
     // MARK: tareas (/api/bandeja)
 
-    static func tareaEnBandeja(_ p: Pendiente, _ b: inout [String: Any], alias: (String) -> String) {
+    static func tareaEnBandeja(_ p: Pendiente, _ b: inout [String: Any], alias: @escaping (String) -> String) {
         let a = p.cuerpo
         var tareas = lista(b["tareas"])
         // la tarea puede estar en la copia con el id de antes o con el de ahora
@@ -343,7 +343,7 @@ enum Operaciones {
         return ((try? JSONSerialization.jsonObject(with: d)) as? [String: Any]) ?? [:]
     }
 
-    static func documentoEnLista(_ p: Pendiente, _ l: inout [String: Any], alias: (String) -> String) {
+    static func documentoEnLista(_ p: Pendiente, _ l: inout [String: Any], alias: @escaping (String) -> String) {
         var docs = lista(l["docs"])
         func indice(_ crudo: String) -> Int? {
             let ahora = alias(crudo)
@@ -390,7 +390,7 @@ extension Operaciones {
 
     /// Los de la cola que aún esperan salir, en orden. Sin el cuerpo de los documentos (pueden ser megas).
     static func pendientes(excepto: Int64? = nil) -> [Pendiente] {
-        Local.cambios().filter { $0.estado == .pendiente && $0.id != excepto }.map { c in
+        Local.cambios().filter { $0.estado == .pendiente && $0.id != excepto }.map { c -> Pendiente in
             if c.rutaSinQuery == documentos { return Pendiente(metodo: c.metodo, ruta: c.rutaSinQuery, cuerpo: [:], cabeceras: c.cabeceras) }
             return pendiente(c)
         }
@@ -468,12 +468,13 @@ extension Operaciones {
     /// recalcula la copia. `respuesta` es el estado que devolvió el PUT de una operación (la base nueva).
     static func alMandar(_ c: Local.Cambio, respuesta: Data?, version: String?) {
         let p = pendiente(c)
-        if c.metodo == "OP", c.rutaSinQuery == state || c.rutaSinQuery.hasSuffix("/estado") {
-            if let respuesta { llega(c.rutaSinQuery, respuesta, version: version) }
-            if c.rutaSinQuery == state { recalcula(hoy) }
-            return
+        var restantes = rutas(p)
+        if c.metodo == "OP", let respuesta, restantes.contains(c.rutaSinQuery) {
+            // el estado entero tal como quedó en el servidor: la base nueva
+            llega(c.rutaSinQuery, respuesta, version: version)
+            restantes.removeAll { $0 == c.rutaSinQuery }
         }
-        for ruta in rutas(p) {
+        for ruta in restantes {
             if let b = Local.lee(claveBase(ruta)),
                var objeto = (try? JSONSerialization.jsonObject(with: b.cuerpo)) as? [String: Any] {
                 try? aplica(p, en: ruta, &objeto, alias: Local.alias)

@@ -168,8 +168,8 @@ esconde (la nativa la sustituye). Un enlace de la web a `/`, `/habitos.html` o `
 - `PantallaHoy.swift`: anillos del día, hábitos de hoy, entreno, «Para hoy», salud, carrera y gastos.
 - `PantallaHabitos.swift`: la semana de cada hábito; tocar un día lo marca (desliza para ver semanas anteriores).
   «Editar» (`Habitos/EditorHabitos.swift`, `GestorHabitos.swift`): crear, cambiar (nombre, color, días por semana, cada
-  cuántas semanas), ordenar, borrar y planificar la semana. Escribe con `PUT /api/state` + `X-Version` (reintenta en
-  409) y **pide conexión**: no va a la cola porque reescribir el estado entero desde una copia vieja pisaría cambios.
+  cuántas semanas), ordenar, borrar y planificar la semana. Cada cambio es una operación de la cola (ver «Sin red» abajo):
+  funciona igual sin conexión. Para campos nuevos de un hábito: `GestorHabitos.edita(id, cambios: [...])` / `crea(campos:)`.
 - `Ajustes/`: `/ajustes.html` nativo (`PantallaAjustes`) y las mismas secciones dentro de Configurar
   (`SeccionAjustesTom`): nombre, sonidos, secciones (módulos activo/en la barra), límites del móvil y mascota
   (`EditorMascota`). `ModeloAjustes` lee y guarda `/api/ajustes` (sin apariencia ni disposición: el servidor las
@@ -229,6 +229,26 @@ PantallaEditable(pantalla: "app-entreno", titulo: "Entreno",
 - **Monigotes y cuerpo**: `monigotes.json` y `cuerpo.json` salen de `static/monigotes.js` y del `CUERPO` de
   entreno.html (un script de node que los evalúa). Si cambian en la web, hay que regenerarlos.
 - `/carrera.html` va en su pantalla, pero `Navegador.seccion` la lleva a la pestaña Entreno: desde ahí, «Plan y gráficas».
+
+## Sin red: la cola de operaciones
+
+Todo lo de Tom funciona sin conexión y se sincroniza solo al volver (`Compartido/Operaciones.swift`, `Hoy/Sincro.swift`).
+
+- **Operaciones con intención**, no copias del estado: `{op: "habito.edita", id, cambios}`, `habito.crea/borra/ordena`,
+  `plan.pon`, `gasto.edita/borra/restaura`, `presupuesto.pon`. Van a la cola de Local (método `OP`, ruta = el estado que
+  tocan) junto a las peticiones de siempre (marcas, tareas, gastos, documentos), en un único orden.
+- **Al apuntarlas** se pintan ya: la copia que se ve es «lo último del servidor (`BASE GET …`) + lo pendiente encima», y se
+  rehace al bajar datos frescos, al mandar o al descartar. Sigue ahí aunque se cierre la app.
+- **Al salir**: GET del estado fresco → operación encima → PUT (con `X-Version` en `/api/state`); en un 409, otra vuelta.
+  Nunca pisa lo que hizo el bot o la web. Un 400/404/422 es un rechazo: se avisa con su texto y queda para descartarlo.
+  Otros fallos, reintento con espera creciente (y la app vuelve a probar sola a esa hora).
+- **Ids provisionales**: una tarea o un documento creados sin red llevan `tmp:…` (cabecera `x-tom-tmp`); al llegar se
+  apunta el id real (`Local.alias`, también las tareas que cambian de id al editarlas) y lo de detrás sale con el bueno.
+  Los documentos subidos sin red se abren desde la copia del iPhone.
+- **Cuándo sale**: al volver la red (`Red`), al volver a primer plano, en la tarea de fondo (`Avisos`) y en cuanto se
+  apunta algo con red (`Hoy/Nativo/Cola/EstadoCola.swift`).
+- **Indicador**: encima de la barra, «N cambios por enviar» (`IndicadorCola`); tocarlo abre la lista con reintentar y descartar.
+- Prueba de la lógica pura: `Pruebas/PruebaOperaciones.swift` (fuera de los targets).
 
 ## Apariencia, gestos e isla
 

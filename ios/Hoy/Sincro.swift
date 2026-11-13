@@ -200,7 +200,10 @@ enum Sincro {
         let (ruta, cuerpo) = Operaciones.resuelveIds(ruta: c.ruta, cuerpo: c.cuerpo)
         let idEnviado = cuerpo.flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }?["id"] as? String
         if ruta.contains("tmp:") || (idEnviado?.hasPrefix("tmp:") ?? false) {
-            let creador = Local.cambios().first { $0.cabeceras["x-tom-tmp"].map { ruta.contains($0) || idEnviado == $0 } ?? false }
+            let creador = Local.cambios().first { otro in
+                guard let tmp = otro.cabeceras["x-tom-tmp"] else { return false }
+                return ruta.contains(tmp) || idEnviado == tmp
+            }
             if let creador, creador.estado == .pendiente, creador.id < c.id {
                 return .espera("Espera a que salga «\(creador.resumen)»")
             }
