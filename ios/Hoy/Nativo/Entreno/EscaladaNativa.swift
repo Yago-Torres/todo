@@ -470,23 +470,22 @@ private struct CompetirEscalada: View {
     @State private var enviando = false
 
     var body: some View {
-        let con = datos.intentos.filter(\.fantasma)
+        // solo entre intentos del mismo bloque con nombre: dos «Bloque amarillo» de sitios distintos no se casan
+        let conPared = datos.intentos.filter { $0.fantasma && !Self.clave($0).isEmpty }
+        let con = conPared.filter { x in conPared.contains { $0.intento != x.intento && Self.clave($0) == Self.clave(x) } }
         let hechas = datos.intentos.flatMap { x in x.fantasmas.sorted { $0.key < $1.key }.map { (x, $0.key, $0.value) } }
         VStack(alignment: .leading, spacing: Tema.Espacio.s) {
             Text("⚔️ Competir").font(Tema.fuente(.destacado)).foregroundStyle(Tema.texto)
             Text("Tu intento contra el de otro (o uno tuyo de otro día) en el mismo bloque: lo ves encima de tu vídeo, salís a la vez y en cada presa sale quién llega antes.")
                 .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
             if con.count < 2 {
-                Text("Hacen falta dos intentos del mismo bloque grabados desde el 5 de noviembre.")
+                Text("Hacen falta dos intentos del mismo bloque con el mismo nombre: pónselo al subirlo o elígelo de la lista.")
                     .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
             } else {
                 let a = yo ?? (con.first { $0.quienVisto == "Tú" } ?? con[0]).intento
                 let base = con.first { $0.intento == a }
-                let otros = con.filter { $0.intento != a }
-                    .sorted { p, q in
-                        let pi = p.bloque == base?.bloque, qi = q.bloque == base?.bloque
-                        return pi != qi ? pi : p.intento > q.intento
-                    }
+                let otros = con.filter { $0.intento != a && base.map(Self.clave) == Self.clave($0) }
+                    .sorted { $0.intento > $1.intento }
                 let b = otro.flatMap { o in otros.contains { $0.intento == o } ? o : nil } ?? otros.first?.intento
                 selector("Tú", con, a) { yo = $0 }
                 selector("Contra", otros, b) { otro = $0 }
@@ -515,6 +514,11 @@ private struct CompetirEscalada: View {
         }
         .padding(Tema.Espacio.m)
         .background(Tema.carta2, in: RoundedRectangle(cornerRadius: Tema.Radio.celda))
+    }
+
+    /// El nombre del bloque, sin mayúsculas ni espacios de más: lo que decide si dos intentos son el mismo bloque.
+    static func clave(_ x: IntentoEscalada) -> String {
+        x.nombre.lowercased().split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 
     private func selector(_ t: String, _ xs: [IntentoEscalada], _ actual: String?, _ elige: @escaping (String) -> Void) -> some View {

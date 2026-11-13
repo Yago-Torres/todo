@@ -936,11 +936,11 @@ def ficha_intento(d):
         if f.suffix == ".pide":
             fantasmas[otro] = "preparando"
         elif f.suffix == ".error" and otro not in fantasmas:
-            fantasmas[otro] = "no se ha podido: " + f.read_text("utf-8")[:200]
+            fantasmas[otro] = f.read_text("utf-8")[:200]
     return {"intento": d.name, **{k: m.get(k) or "" for k in ("quien", "color", "nombre", "resultado")},
             "dificultad": m.get("dificultad"), "resumen": c.get("resumen") or "", "caida": c.get("caida") or "",
             **{k: [str(x) for x in c.get(k) or []] for k in ("bien", "mal", "consejos")},
-            "cifras": {k: cifras.get(k) for k in ("duracion_s", "movimientos_mano", "brazo_estirado_colgado_pct", "fluidez")},
+            "cifras": {k: cifras.get(k) for k in ("duracion_s", "movimientos_mano", "brazo_estirado_colgado_pct", "apoyos_pie")},
             "hay": [k for k, fs in FICHEROS_ESCALADA.items() if any((d / f).exists() for f in fs)],
             "fantasma": (d / "1-pared.jpg").exists(), "fantasmas": fantasmas}
 
@@ -1100,6 +1100,9 @@ def pide_fantasma(a: dict, todo_sesion: str = Cookie(None), authorization: str =
         raise HTTPException(400, "Elige otro intento")
     if not (yo / "1-pared.jpg").exists() or not (otro / "1-pared.jpg").exists():
         raise HTTPException(400, "Ese intento es de antes del fantasma: no tiene la pared guardada")
+    nombre = lambda d: " ".join(str(json.loads((d / "intento.json").read_text("utf-8")).get("nombre") or "").lower().split())
+    if not nombre(yo) or nombre(yo) != nombre(otro):
+        raise HTTPException(400, "Solo se compite en el mismo bloque: ponle el mismo nombre a los dos intentos")
     cola = ESCALADA / "fantasmas"
     cola.mkdir(exist_ok=True)
     (cola / f"{yo.name}__{otro.name}.error").unlink(missing_ok=True)

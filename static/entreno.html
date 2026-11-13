@@ -1361,18 +1361,21 @@ cargar();
   }
 
   function competir() {
-    const caja = el("form", "esc-caja"), con = E.intentos.filter(x => x.fantasma);
+    // solo entre intentos del mismo bloque con nombre: dos «Bloque amarillo» de sitios distintos no se pueden casar
+    const nom = x => (x.nombre || "").toLowerCase().split(/\s+/).filter(Boolean).join(" ");
+    const caja = el("form", "esc-caja"), conPared = E.intentos.filter(x => x.fantasma && nom(x));
+    const con = conPared.filter(x => conPared.some(y => y !== x && nom(y) === nom(x)));
     caja.append(el("b", null, "⚔️ Competir"),
       el("p", "esc-pista", "Tu intento contra el de otro (o uno tuyo de otro día) en el mismo bloque: lo ves en azul encima de tu vídeo, salís a la vez y en cada presa sale quién llega antes."));
-    if (con.length < 2) caja.append(el("p", "esc-pista", "Hacen falta dos intentos del mismo bloque grabados desde el 5 de noviembre."));
+    if (con.length < 2) caja.append(el("p", "esc-pista", "Hacen falta dos intentos del mismo bloque con el mismo nombre (ponle nombre al subirlo, o elígelo de la lista)."));
     else {
       const a = el("select", "c-campo"), b = el("select", "c-campo");
       a.append(...con.map(opcion));
       a.value = (con.find(x => quien(x) === "Tú") || con[0]).intento;
       const rellena = () => {
         const x = con.find(y => y.intento === a.value);
-        b.replaceChildren(...con.filter(y => y.intento !== x.intento)
-          .sort((p, q) => (bloque(q) === bloque(x)) - (bloque(p) === bloque(x)) || q.intento.localeCompare(p.intento)).map(opcion));
+        b.replaceChildren(...con.filter(y => y.intento !== x.intento && nom(y) === nom(x))
+          .sort((p, q) => q.intento.localeCompare(p.intento)).map(opcion));
       };
       a.onchange = rellena;
       rellena();
