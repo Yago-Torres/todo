@@ -75,9 +75,16 @@ enum Isla {
 
     // MARK: freno de apps
 
-    static func pase(_ app: String, minutos: Int) {
-        let fin = Date().addingTimeInterval(TimeInterval(minutos * 60))
-        pon("freno", .init(titulo: app, detalle: "Pase de \(minutos) min", icono: "hourglass", inicio: Date(), fin: fin))
+    /// El pase hasta `hasta`. Con avisos «¿sigues?» activos, la actividad se queda «caducada» en cada aviso (staleDate) y
+    /// entonces la isla enseña «¿Sigues?», lo que llevas y «Salir»: lo pinta el sistema solo, la app puede estar dormida.
+    static func pase(_ app: AppFrenada, hasta fin: Date) {
+        let inicio = Freno.inicio(app) ?? Date()
+        let minutos = max(1, Int((fin.timeIntervalSince(inicio) / 60).rounded(.up)))
+        let aviso = FrenoAvisos.siguiente(app)
+        pon("freno", .init(titulo: app.nombre, detalle: "Pase de \(minutos) min", icono: "hourglass", inicio: inicio, fin: fin,
+                           enlace: FrenoAvisos.activos ? app.revision.absoluteString : nil),
+            caduca: min(fin, aviso ?? fin))
+        guard !FrenoAvisos.activos else { return }   // con avisos, se queda en «¿sigues?» hasta cerrar o volver a Tom
         Task {
             try? await Task.sleep(for: .seconds(Double(minutos * 60) + 2))
             if let a = actividad("freno"), (a.content.state.fin ?? .distantFuture) <= Date() {
@@ -85,6 +92,8 @@ enum Isla {
             }
         }
     }
+
+    static func terminaPase() { quita("freno") }
 
     // MARK: subida de escalada
 

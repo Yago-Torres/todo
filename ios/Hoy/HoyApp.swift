@@ -62,7 +62,11 @@ struct HoyApp: App {
         // hoy://freno?app=instagram: lo abre la automatización de Atajos cuando la app no tiene pase (Freno.swift)
         if url.host == "freno" {
             let nombre = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "app" }?.value
-            if let nombre, let app = AppFrenada(rawValue: nombre) { estado.freno = app }
+            let revision = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "revision" }?.value == "1"
+            if let nombre, let app = AppFrenada(rawValue: nombre) {
+                Freno.revision = revision   // desde un «¿sigues?»: sin espera, con lo que llevas
+                estado.freno = app
+            }
             return
         }
         guard let r = URLComponents(url: url, resolvingAgainstBaseURL: false)?
