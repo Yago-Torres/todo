@@ -28,6 +28,8 @@ final class MotorVivo: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, @
         let id = UUID()
         let limpio: URL
         let esqueleto: URL
+        /// Las poses de la grabación (JSON junto al .mov), para la tarjeta de la ruta sin recalcular.
+        var serie: URL?
     }
 
     /// Cuánto se ha subido: del pie más bajo a la mano más alta, en metros aproximados (el tronco mide ~0,5 m).
@@ -76,6 +78,8 @@ final class MotorVivo: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, @
     @ObservationIgnored private var _estela: [PuntoEstela] = []
     @ObservationIgnored private var _tam: CGSize = .zero
     @ObservationIgnored private var _alcance = Alcance()
+    /// Las poses mientras se graba (nil si no se graba).
+    @ObservationIgnored private var _serie: [(Double, PoseEsc?)]?
     @ObservationIgnored private var _tronco: CGFloat = 0
     @ObservationIgnored private var _visto: Double = CACurrentMediaTime()
     @ObservationIgnored private var visionOcupada = false
@@ -272,6 +276,7 @@ final class MotorVivo: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, @
         cerrojo.lock()
         pedido = (giro, colores)
         _alcance = Alcance()
+        _serie = []
         cerrojo.unlock()
     }
 
@@ -280,6 +285,9 @@ final class MotorVivo: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, @
         Haptica.shared.toca(.marcar)
         cerrojo.lock()
         pedido = nil
+        let serie = _serie ?? []
+        _serie = nil
+        let tamSerie = _tam
         cerrojo.unlock()
         // que iOS deje terminar de escribir los vídeos aunque salgas de la app justo al parar
         let fondo = TareaFondo()
@@ -304,7 +312,9 @@ final class MotorVivo: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, @
                 self.grabando = false
                 self.inicioGrabacion = nil
                 if let limpio, let esqueleto {
-                    self.terminado = Resultado(limpio: limpio, esqueleto: esqueleto)
+                    let json = limpio.deletingPathExtension().appendingPathExtension("json")
+                    let hay = SerieGuardada.guarda(serie, tam: tamSerie, en: json)
+                    self.terminado = Resultado(limpio: limpio, esqueleto: esqueleto, serie: hay ? json : nil)
                 } else {
                     self.aviso = "No se ha podido guardar el vídeo. Prueba otra vez; si sigue, cierra y abre el modo en vivo."
                     Haptica.shared.toca(.error)
@@ -425,6 +435,7 @@ final class MotorVivo: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, @
         visionOcupada = false
         _tam = tam
         _pose = vale ? pose : nil
+        if _serie != nil { _serie?.append((t, vale ? pose : nil)) }
         if let centro {
             _estela.append(PuntoEstela(t: t, p: CGPoint(x: centro.x / tam.width, y: centro.y / tam.height)))
         }

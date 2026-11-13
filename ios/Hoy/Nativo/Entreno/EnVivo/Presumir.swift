@@ -15,6 +15,17 @@ struct OpcionesPresumir: @unchecked Sendable {
     var lenta: CGImage?
     var marca: CGImage?
     var colores: ColoresEsq
+    /// La ruta (gráfico tipo Strava): el mini-mapa en una esquina y el resumen de 2 s al final.
+    var miniMapa = true
+    var resumen = true
+    var titulo = ""
+    var fecha = ""
+}
+
+/// Lo que sale de montar: el vídeo y la ruta (para la tarjeta compartible).
+struct HechoPresumir: @unchecked Sendable {
+    var url: URL
+    var ruta: RutaEsc?
 }
 
 enum MontadorPresumir {
@@ -30,7 +41,7 @@ enum MontadorPresumir {
     }
 
     static func monta(_ url: URL, _ o: OpcionesPresumir,
-                      progreso: @escaping @Sendable (Double, String) -> Void) async throws -> URL {
+                      progreso: @escaping @Sendable (Double, String) -> Void) async throws -> HechoPresumir {
         let asset = AVURLAsset(url: url)
         guard let pista = try await asset.loadTracks(withMediaType: .video).first else {
             throw APIError(mensaje: "Ese vídeo no tiene imagen")
@@ -54,6 +65,7 @@ enum MontadorPresumir {
 
         // la cámara lenta: el tramo en que más se mueven las manos
         let tramo = tramoRapido(muestras, tam: derecho)
+        let ruta = RutaEsc(muestras.map { ($0.t, $0.pose) }, tam: derecho)
         func ritmo(_ t: Double) -> Double {
             guard let tr = tramo else { return 1 }
             let (a, b) = tr
@@ -74,6 +86,12 @@ enum MontadorPresumir {
         }
         let total = tau
         let n = max(1, Int(total * Double(fps)))
+        // el resumen de actividad: 2 s al final con la tarjeta de la ruta
+        let tarjeta: CGImage? = o.resumen ? ruta.flatMap {
+            PintorRuta.tarjeta($0, tam: CGSize(width: ancho, height: alto), colores: o.colores, titulo: o.titulo,
+                               fecha: o.fecha).cgImage
+        } : nil
+        let extra = tarjeta == nil ? 0 : Int(fps) * 2
         func fuente(_ salida: Double) -> Double {
             var lo = 0, hi = tabla.count - 1
             while hi - lo > 1 {
@@ -194,10 +212,14 @@ enum MontadorPresumir {
                     PintorEsq.pinta(ctx, pose: pose, estela: estela, ahora: tf, duracionEstela: 1.6, tamImagen: derecho,
                                     escala: sc, aPx: { CGPoint(x: $0.x * ws - cx, y: $0.y * hs - cy) }, colores: o.colores)
                     rotulos(ctx, o, tSalida: tSalida, total: total, ritmo: r)
+                    if o.miniMapa, let ruta {
+                        PintorRuta.miniMapa(ctx, ruta, en: CGRect(x: 48, y: CGFloat(alto) - 300 - 150, width: 300, height: 300),
+                                            hasta: tf, colores: o.colores)
+                    }
                 }
                 CVPixelBufferUnlockBaseAddress(pbSalida, [])
                 adaptador.append(pbSalida, withPresentationTime: CMTime(value: Int64(k), timescale: fps))
-                let p = 0.5 + 0.5 * Double(k + 1) / Double(n)
+                let p = 0.5 + 0.5 * Double(k + 1) / Double(n + extra)
                 if p - ultimoAviso >= 0.01 {
                     ultimoAviso = p
                     progreso(p, "Montando el vídeo…")
@@ -207,13 +229,44 @@ enum MontadorPresumir {
             if !sigue { break }
         }
         lector.cancelReading()
+        if let tarjeta {
+            for j in 0..<extra {
+                try Task.checkCancellation()
+                while !entrada.isReadyForMoreMediaData {
+                    guard escritor.status == .writing else {
+                        throw escritor.error ?? APIError(mensaje: "Se ha cortado la escritura del vídeo")
+                    }
+                    try await Task.sleep(nanoseconds: 2_000_000)
+                }
+                autoreleasepool {
+                    guard let pool = adaptador.pixelBufferPool else { return }
+                    var pb: CVPixelBuffer?
+                    CVPixelBufferPoolCreatePixelBuffer(nil, pool, &pb)
+                    guard let pb else { return }
+                    CVPixelBufferLockBaseAddress(pb, [])
+                    if let base = CVPixelBufferGetBaseAddress(pb),
+                       let ctx = CGContext(data: base, width: ancho, height: alto, bitsPerComponent: 8,
+                                           bytesPerRow: CVPixelBufferGetBytesPerRow(pb), space: espacio,
+                                           bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue) {
+                        ctx.setFillColor(UIColor.black.cgColor)
+                        ctx.fill(rect)
+                        ctx.setAlpha(CGFloat(min(1, Double(j + 1) / 9)))
+                        // sin girar: la tarjeta es un CGImage y el contexto está con la y hacia arriba
+                        ctx.draw(tarjeta, in: rect)
+                    }
+                    CVPixelBufferUnlockBaseAddress(pb, [])
+                    adaptador.append(pb, withPresentationTime: CMTime(value: Int64(n + j), timescale: fps))
+                }
+                progreso(0.5 + 0.5 * Double(n + j + 1) / Double(n + extra), "Montando el resumen…")
+            }
+        }
         entrada.markAsFinished()
         await escritor.finishWriting()
         guard escritor.status == .completed else {
             throw escritor.error ?? APIError(mensaje: "No se ha podido terminar el vídeo")
         }
         progreso(1, "Listo")
-        return destino
+        return HechoPresumir(url: destino, ruta: ruta)
     }
 
     // MARK: la 1.ª pasada
@@ -389,7 +442,8 @@ enum RotulosPresumir {
         return .system(size: tam, weight: peso, design: f.diseno)
     }
 
-    static func haz(nombre: String, color: String, nivel: Int?, intento: Int, encadenado: Bool) -> OpcionesPresumir {
+    static func haz(nombre: String, color: String, nivel: Int?, intento: Int, encadenado: Bool,
+                    miniMapa: Bool = true, resumen: Bool = true) -> OpcionesPresumir {
         let colores = ColoresEsq.delTema()
         let claro = Color(uiColor: colores.punto), oscuro = Color(uiColor: colores.borde)
         let titulo = nombre.isEmpty ? (color.isEmpty ? "Mi bloque" : "Bloque \(color)") : nombre
@@ -428,7 +482,8 @@ enum RotulosPresumir {
         let marca = Text("Tom").font(letra(40, .bold)).foregroundStyle(claro)
 
         return OpcionesPresumir(cabecera: imagen(cabecera), encadenado: encadenado ? imagen(chapa) : nil,
-                                lenta: imagen(lenta), marca: imagen(marca), colores: colores)
+                                lenta: imagen(lenta), marca: imagen(marca), colores: colores,
+                                miniMapa: miniMapa, resumen: resumen, titulo: titulo, fecha: HojaTarjetaRuta.fecha())
     }
 
     private static func chip(_ t: String, _ claro: Color, _ oscuro: Color) -> some View {
@@ -462,7 +517,11 @@ struct HojaPresumir: View {
     @State private var fase = ""
     @State private var hecho: URL?
     @State private var aviso: String?
-    @State private var tarea: Task<Result<URL, Error>, Never>?
+    @State private var tarea: Task<Result<HechoPresumir, Error>, Never>?
+    @State private var miniMapa = true
+    @State private var resumen = true
+    @State private var rutaHecha: RutaParaHoja?
+    @State private var ruta: RutaEsc?
     @State private var compartir = false
     @State private var guardando = false
 
@@ -503,6 +562,9 @@ struct HojaPresumir: View {
                 tarea?.cancel()
                 if let cargado { try? FileManager.default.removeItem(at: cargado) }
             }
+            .sheet(item: $rutaHecha) { r in
+                HojaTarjetaRuta(ruta: r.ruta, titulo: r.titulo)
+            }
             .sheet(isPresented: $compartir) {
                 if let hecho {
                     HojaCompartir(cosas: [hecho]).presentationDetents([.medium, .large])
@@ -535,6 +597,10 @@ struct HojaPresumir: View {
             }
             Stepper("Intento nº \(intento)", value: $intento, in: 1...99)
             Toggle("¡Encadenado!", isOn: $encadenado)
+        }
+        Section("La ruta") {
+            Toggle("Mini-mapa de la ruta", isOn: $miniMapa)
+            Toggle("Resumen de 2 s al final", isOn: $resumen)
         }
         Section {
             if let progreso {
@@ -581,6 +647,14 @@ struct HojaPresumir: View {
                 Label(guardando ? "Guardando…" : "Guardar en Fotos", systemImage: "photo.on.rectangle")
             }
             .disabled(guardando)
+            if let ruta {
+                Button {
+                    let n = nombre.trimmingCharacters(in: .whitespacesAndNewlines)
+                    rutaHecha = RutaParaHoja(ruta: ruta, titulo: n.isEmpty ? (color.isEmpty ? "Mi bloque" : "Bloque \(color)") : n)
+                } label: {
+                    Label("Tarjeta de la ruta", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                }
+            }
             if let aviso {
                 Text(aviso).font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
             }
@@ -621,16 +695,16 @@ struct HojaPresumir: View {
         fase = "Preparando…"
         let n = nombre.trimmingCharacters(in: .whitespacesAndNewlines)
         let o = RotulosPresumir.haz(nombre: n, color: color, nivel: nivel == 0 ? nil : nivel, intento: intento,
-                                     encadenado: encadenado)
-        let t = Task.detached(priority: .userInitiated) { () -> Result<URL, Error> in
+                                     encadenado: encadenado, miniMapa: miniMapa, resumen: resumen)
+        let t = Task.detached(priority: .userInitiated) { () -> Result<HechoPresumir, Error> in
             do {
-                let url = try await MontadorPresumir.monta(fuente, o) { p, f in
+                let hecho = try await MontadorPresumir.monta(fuente, o) { p, f in
                     Task { @MainActor in
                         progreso = p
                         fase = f
                     }
                 }
-                return .success(url)
+                return .success(hecho)
             } catch {
                 return .failure(error)
             }
@@ -640,8 +714,9 @@ struct HojaPresumir: View {
             let r = await t.value
             progreso = nil
             switch r {
-            case .success(let url):
-                withAnimation(Tema.Muelle.pantalla) { hecho = url }
+            case .success(let h):
+                ruta = h.ruta
+                withAnimation(Tema.Muelle.pantalla) { hecho = h.url }
                 Haptica.shared.toca(encadenado ? .record : .marcar)
             case .failure(let e):
                 if !(e is CancellationError) {

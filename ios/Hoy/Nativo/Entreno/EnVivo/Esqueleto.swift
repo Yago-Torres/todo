@@ -241,11 +241,20 @@ struct ColoresEsq: @unchecked Sendable {
     var punto: UIColor
     var centro: UIColor
     var borde: UIColor
+    /// Para la ruta: lo rápido (peligro), el texto secundario y la tarjeta (en oscuro), y la familia de letra del tema.
+    var rapido: UIColor
+    var suave: UIColor
+    var carta: UIColor
+    var familia: String?
 
     static func delTema() -> ColoresEsq {
-        let p = Tema.actual.paleta
+        let t = Tema.actual
+        let p = t.paleta
+        let familia = t.fuentes.titulo.flatMap { Letras.lista($0) ? $0 : nil }
         return ColoresEsq(hueso: UIColor(css: p.acento.oscuro), punto: UIColor(css: p.texto.oscuro),
-                          centro: UIColor(css: p.aviso.oscuro), borde: UIColor(css: p.fondo.oscuro))
+                          centro: UIColor(css: p.aviso.oscuro), borde: UIColor(css: p.fondo.oscuro),
+                          rapido: UIColor(css: p.peligro.oscuro), suave: UIColor(css: p.suave.oscuro),
+                          carta: UIColor(css: p.carta.oscuro), familia: familia)
     }
 
     var huesoSwiftUI: Color { Color(uiColor: hueso) }

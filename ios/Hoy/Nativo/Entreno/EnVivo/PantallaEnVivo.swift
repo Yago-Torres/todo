@@ -420,6 +420,7 @@ struct HojaResultadoVivo: View {
     @State private var compartir = false
     @State private var analizar = false
     @State private var presumir = false
+    @State private var rutaHoja: RutaParaHoja?
     @State private var guardando = false
     @State private var aviso: String?
 
@@ -457,6 +458,12 @@ struct HojaResultadoVivo: View {
                         Label("Analizar en la Pi", systemImage: "cpu")
                     }
                     .buttonStyle(BotonEnt())
+                    Button {
+                        abreRuta()
+                    } label: {
+                        Label("Tarjeta de la ruta", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                    }
+                    .buttonStyle(BotonEnt())
                     if let aviso {
                         Text(aviso).font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
                             .multilineTextAlignment(.center)
@@ -479,6 +486,9 @@ struct HojaResultadoVivo: View {
                 HojaCompartir(cosas: [resultado.esqueleto])
                     .presentationDetents([.medium, .large])
             }
+            .sheet(item: $rutaHoja) { r in
+                HojaTarjetaRuta(ruta: r.ruta, titulo: r.titulo)
+            }
             .sheet(isPresented: $presumir) {
                 HojaPresumir(video: resultado.limpio)
             }
@@ -486,6 +496,17 @@ struct HojaResultadoVivo: View {
                 HojaEscalada(archivo: resultado.limpio)
             }
         }
+    }
+
+    /// La ruta sale de las poses guardadas al grabar: no se recalcula nada.
+    private func abreRuta() {
+        guard let url = resultado.serie, let leido = SerieGuardada.lee(url),
+              let ruta = RutaEsc(leido.0, tam: leido.1) else {
+            aviso = "No hay bastante recorrido para la ruta: graba un intento en el que se te vea entero unos segundos."
+            Haptica.shared.toca(.error)
+            return
+        }
+        rutaHoja = RutaParaHoja(ruta: ruta, titulo: "Mi intento")
     }
 
     private func guarda() {
