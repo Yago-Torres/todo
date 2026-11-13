@@ -99,6 +99,7 @@ final class DatosGastos {
             withAnimation(Tema.Muelle.pantalla) { resumenes[k] = r }
             copias[k] = fecha
             error = nil
+            AvisosRecurrentes.programa(inst, r.recurrentes)
         } catch {
             if resumenes[clave(inst, dia)] == nil { self.error = Self.mensaje(error) }
             else { self.error = nil }
@@ -107,6 +108,7 @@ final class DatosGastos {
            let e = try? JSONDecoder().decode(EstadoGastos.self, from: r.datos) {
             estados[inst] = e
         }
+        await ReglasTom.shared.carga(inst)
         miraCola()
         if inst == .yago { WidgetCenter.shared.reloadAllTimelines() }
     }
@@ -174,6 +176,11 @@ final class DatosGastos {
         }
         let objeto = try? JSONSerialization.jsonObject(with: crudo) as? [String: Any]
         let texto = (objeto?["texto"] as? String) ?? "Apuntado"
+        // elegiste la categoría a mano y no es lo que saldría solo: ¿hacer regla?
+        if let p = objeto?["propuesta"] as? [String: Any], let d = try? JSONSerialization.data(withJSONObject: p),
+           let propuesta = try? JSONDecoder().decode(PropuestaRegla.self, from: d) {
+            ReglasTom.shared.ofrece(propuesta, en: inst)
+        }
         // lo recién apuntado entra en el ciclo de hoy: se pide de nuevo ese (y se vuelve a él si se miraba otro)
         if inst == instancia, ref != Fecha.hoy() { withAnimation(Tema.Muelle.pantalla) { ref = Fecha.hoy() } }
         await carga()
@@ -185,7 +192,7 @@ final class DatosGastos {
     /// Apunta la operación sobre el estado de `inst`, la pinta y la manda. Con red espera a que llegue y, si el servidor
     /// la rechaza (el gasto ya no está…), lanza el motivo. Sin red vuelve enseguida: sale sola al volver la conexión.
     @discardableResult
-    private func opera(_ inst: InstanciaGastos, _ op: [String: Any]) async throws -> Bool {
+    func opera(_ inst: InstanciaGastos, _ op: [String: Any]) async throws -> Bool {
         guard let id = Operaciones.encola("\(inst.base)/estado", op) else {
             throw APIError(mensaje: "No he podido guardar el cambio en el iPhone. Desbloquéalo y vuelve a probar.")
         }
@@ -206,7 +213,7 @@ final class DatosGastos {
         withAnimation(Tema.Muelle.pantalla) { resumenes[k] = r }
     }
 
-    private func refresca(_ inst: InstanciaGastos) async {
+    func refresca(_ inst: InstanciaGastos) async {
         guard inst == instancia else { return }
         await carga()
     }
@@ -228,6 +235,10 @@ final class DatosGastos {
         try await opera(inst, ["op": "gasto.edita", "id": m.id, "cambios": cambios,
                                "resumen": "Cambiar el gasto de \(Eur.texto(importe))"])
         await refresca(inst)
+        // corregiste la categoría: ¿que sea así siempre?
+        if c.cat != m.cat, let p = propuestaTrasCorregir(comercio: c.comercio, nota: c.nota, cat: c.cat) {
+            ReglasTom.shared.ofrece(p, en: inst)
+        }
     }
 
     func borra(_ m: Movimiento) async throws {

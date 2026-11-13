@@ -8,13 +8,30 @@ struct PantallaGastos: View {
     @State private var filtro: String?
     @State private var abierto: Movimiento?
     @State private var aviso: String?
+    @State private var reglas = ReglasTom.shared
 
-    /// Los bloques (ids estables, orden y ocultos en la disposición «app-gastos»).
+    /// Los bloques (ids estables, orden y ocultos en la disposición «app-gastos»). «flujo» es el principal: va
+    /// primero (y `colocaFlujo` lo sube una vez en las disposiciones ya guardadas, que lo dejarían al final).
     static let bloques: [(String, String)] = [
+        ("flujo", "Adónde va el dinero"),
         ("resumen", "Cifra del ciclo"), ("importante", "Lo importante"), ("apuntar", "Apuntar"),
         ("categorias", "Por categoría"), ("graficas", "Gráficas"), ("viajes", "Viajes"),
-        ("suscripciones", "Suscripciones"), ("ingresos", "Ingresos"), ("movimientos", "Movimientos"),
+        ("suscripciones", "Recurrentes"), ("ingresos", "Ingresos"), ("movimientos", "Movimientos"),
+        ("reglas", "Reglas de categoría"),
     ]
+
+    /// Una vez: en una disposición guardada de antes, «flujo» arriba y «reglas» tras «Lo importante».
+    private func colocaFlujo() {
+        let hecho = "gastos.flujoColocado"
+        guard !Almacen.defaults.bool(forKey: hecho) else { return }
+        Almacen.defaults.set(true, forKey: hecho)
+        var b = Aspecto.shared.bloques("app-gastos")
+        guard !b.orden.isEmpty else { return }
+        b.orden.removeAll { $0 == "flujo" || $0 == "reglas" }
+        b.orden.insert("flujo", at: 0)
+        b.orden.insert("reglas", at: (b.orden.firstIndex(of: "importante") ?? 0) + 1)
+        Aspecto.shared.ponBloques("app-gastos", b)
+    }
 
     var body: some View {
         PantallaEditable(pantalla: "app-gastos", titulo: "Gastos", bloques: Self.bloques,
@@ -42,23 +59,32 @@ struct PantallaGastos: View {
             }
         }
         .scrollDismissesKeyboard(.interactively)
-        .task { await datos.carga() }
+        .task { colocaFlujo(); await datos.carga() }
         .sheet(item: $abierto) { m in EditorMovimiento(movimiento: m) }
         .overlay(alignment: .bottom) { if let b = datos.borrado { DeshacerBorrado(texto: b.texto) } }
+        .overlay(alignment: .bottom) {
+            // «¿Siempre así?» tras corregir una categoría (solo en la instancia de la que es)
+            if datos.borrado == nil, let o = reglas.oferta, o.instancia == datos.instancia { OfertaRegla(oferta: o) }
+        }
         .animation(Tema.Muelle.pantalla, value: datos.borrado == nil)
+        .animation(Tema.Muelle.pantalla, value: reglas.oferta)
         .animation(Tema.Muelle.pantalla, value: aviso)
     }
 
     @ViewBuilder private func bloque(_ id: String) -> some View {
         if let r = datos.resumen {
             switch id {
+            case "flujo": FlujoGastos(r: r, filtro: $filtro)
             case "resumen": HeroGastos(r: r)
             case "importante": if !r.insights.isEmpty { InsightsGastos(insights: r.insights) }
             case "apuntar": ApuntarRapido()
             case "categorias": CategoriasGastos(r: r, filtro: $filtro, aviso: $aviso)
             case "graficas": GraficasGastos(r: r)
             case "viajes": ViajesGastos(r: r)
-            case "suscripciones": if !r.suscripciones.isEmpty { SuscripcionesGastos(r: r) }
+            case "suscripciones":
+                if !r.recurrentes.isEmpty { RecurrentesGastos() }
+                else if !r.suscripciones.isEmpty { SuscripcionesGastos(r: r) }   // un servidor de antes
+            case "reglas": BloqueReglas()
             case "ingresos": if !r.ingresos.isEmpty { IngresosGastos(r: r) }
             case "movimientos": MovimientosGastos(r: r, filtro: $filtro, abrir: { abierto = $0 })
             default: EmptyView()

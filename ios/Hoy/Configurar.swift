@@ -104,6 +104,7 @@ struct Configurar: View {
             }
 
             if avisos { SeccionAvisosRacha() }
+            SeccionAvisosRecurrentes()   // Gastos: aviso el día antes de un cargo recurrente
 
             if salud {
                 Section {

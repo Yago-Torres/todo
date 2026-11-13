@@ -273,6 +273,8 @@ enum Operaciones {
             }
             e["cats"] = cats
         default:
+            // reglas de categoría y recurrentes (Compartido/OperacionesGastos.swift)
+            if try ReglasGastos.aplica(op, &e, estricto: estricto) { return }
             if estricto { throw Rechazo("Esta versión de Tom no sabe enviar «\((op["op"] as? String) ?? "")».") }
         }
     }
