@@ -17,6 +17,14 @@ struct TareaVault: Codable, Identifiable, Hashable {
     var grupo: String?
     var fija: Bool?
     var abrir: String?
+    // el board: estado (nueva, activa, bloqueada, hecha), proyectos, historia y de qué historia cuelga
+    var estado: String? = nil
+    var tags: [String]? = nil
+    var historia: Bool? = nil
+    var padre: String? = nil
+    /// [hechas, total] de las subtareas de una historia.
+    var progreso: [Int]? = nil
+    var hecha_el: String? = nil
 
     /// El día, o nil si no tiene (el servidor a veces manda «»).
     var dia: String? { (due?.isEmpty ?? true) ? nil : due }
@@ -63,6 +71,9 @@ struct RevisarVault: Codable, Identifiable, Hashable {
 
 struct Bandeja: Codable {
     var tareas: [TareaVault]
+    /// Las hechas de este ciclo de 3 semanas (la columna «Hecha» del board).
+    var hechas: [TareaVault]
+    var ciclo: CicloBoard?
     var leer: [LecturaVault]
     var notas: [NotaVault]
     var revisar: [RevisarVault]
@@ -70,12 +81,14 @@ struct Bandeja: Codable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Claves.self)
         tareas = (try? c.decode([TareaVault].self, forKey: .tareas)) ?? []
+        hechas = (try? c.decode([TareaVault].self, forKey: .hechas)) ?? []
+        ciclo = try? c.decode(CicloBoard.self, forKey: .ciclo)
         leer = (try? c.decode([LecturaVault].self, forKey: .leer)) ?? []
         notas = (try? c.decode([NotaVault].self, forKey: .notas)) ?? []
         revisar = (try? c.decode([RevisarVault].self, forKey: .revisar)) ?? []
     }
 
-    private enum Claves: String, CodingKey { case tareas, leer, notas, revisar }
+    private enum Claves: String, CodingKey { case tareas, hechas, ciclo, leer, notas, revisar }
 }
 
 @MainActor @Observable
@@ -157,15 +170,21 @@ final class DatosPendientes {
 
     // MARK: apuntar
 
-    func apunta(_ texto: String, due: String?, hora: String?) async -> Bool {
+    /// `tags`, `historia` y `padre` (la historia de la que cuelga, si es una subtarea), para el board.
+    func apunta(_ texto: String, due: String?, hora: String?, tags: [String] = [], historia: Bool = false,
+                padre: String? = nil) async -> Bool {
         let limpio = texto.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !limpio.isEmpty else { return false }
         let provisional = TareaVault(id: "tmp:\(UUID().uuidString)", t: limpio, due: due, hora: due == nil ? nil : hora,
-                                     ruta: nil, nota: nil, grupo: "Pendientes", fija: false, abrir: nil)
+                                     ruta: nil, nota: nil, grupo: "Pendientes", fija: false, abrir: nil,
+                                     estado: "nueva", tags: tags, historia: historia, padre: padre)
         withAnimation(Tema.Muelle.pantalla) { bandeja?.tareas.append(provisional) }
         var json: [String: Any] = ["t": limpio]
         if let due { json["due"] = due }
         if let hora, due != nil { json["hora"] = hora }
+        if !tags.isEmpty { json["tags"] = tags }
+        if historia { json["historia"] = true }
+        if let padre { json["padre"] = padre }
         do {
             let r = try await API.escribeOEncola("/api/tarea", json: json, tmp: provisional.id)
             if let r, let real = try? JSONDecoder().decode(TareaVault.self, from: r) {
@@ -189,7 +208,8 @@ final class DatosPendientes {
 
     // MARK: cambiar
 
-    func edita(_ t: TareaVault, texto: String, due: String?, hora: String?) async {
+    /// `tags` nil = los proyectos se quedan como estaban.
+    func edita(_ t: TareaVault, texto: String, due: String?, hora: String?, tags: [String]? = nil) async {
         let limpio = texto.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !limpio.isEmpty else { return }
         let nuevaHora = due == nil ? nil : hora
@@ -200,11 +220,12 @@ final class DatosPendientes {
                 bandeja?.tareas[i].hora = nuevaHora
             }
         }
-        let json: [String: Any] = ["id": t.id, "t": limpio, "due": due ?? "", "hora": nuevaHora ?? ""]
+        var json: [String: Any] = ["id": t.id, "t": limpio, "due": due ?? "", "hora": nuevaHora ?? ""]
+        if let tags { json["tags"] = tags }
         do {
             let r = try await API.escribeOEncola("/api/tarea/edita", json: json)
             if let r, let real = try? JSONDecoder().decode(TareaVault.self, from: r) {
-                if let i = bandeja?.tareas.firstIndex(where: { $0.id == t.id }) { bandeja?.tareas[i] = real }
+                coloca(real, en: t.id)
                 avisa("Cambiada: \(real.t)")
             } else if r == nil {
                 avisa("Cambiada. Se enviará en cuanto haya conexión")
@@ -223,6 +244,64 @@ final class DatosPendientes {
     /// El día siguiente a lo que tiene (o a hoy, si ya venció o no tiene).
     func manana(de t: TareaVault) -> String {
         FechasES.masDias(max(t.dia ?? Fecha.hoy(), Fecha.hoy()), 1)
+    }
+
+    // MARK: el board
+
+    var todasBoard: [TareaVault] { tareas + (bandeja?.hechas ?? []) }
+
+    func columna(_ e: EstadoBoard, proyecto: String) -> [TareaVault] {
+        todasBoard.filter { $0.estadoBoard == e && (proyecto.isEmpty || $0.etiquetas.contains(proyecto)) }
+    }
+
+    /// Los proyectos con algo abierto, de más a menos tareas.
+    var proyectos: [String] {
+        var n: [String: Int] = [:]
+        for t in tareas { for x in t.etiquetas { n[x, default: 0] += 1 } }
+        return n.keys.sorted { (n[$0] ?? 0, $1) > (n[$1] ?? 0, $0) }
+    }
+
+    /// Pone `t` en su lista (abiertas o hechas, según su estado) en lugar de la que tenía el id `id`.
+    private func coloca(_ t: TareaVault, en id: String) {
+        guard var b = bandeja else { return }
+        let i = b.tareas.firstIndex { $0.id == id }
+        b.tareas.removeAll { $0.id == id }
+        b.hechas.removeAll { $0.id == id }
+        if t.estadoBoard == .hecha {
+            b.hechas.insert(t, at: 0)
+        } else if let i, i <= b.tareas.count {
+            b.tareas.insert(t, at: i)
+        } else {
+            b.tareas.append(t)
+        }
+        bandeja = b
+    }
+
+    /// De una columna a otra. Se ve al momento; sin red va a la cola.
+    func mueve(_ t: TareaVault, a e: EstadoBoard) async {
+        guard t.estadoBoard != e else { return }
+        if t.fija == true && (e == .activa || e == .bloqueada) {
+            avisa("Lo del curro solo se puede tachar", error: true)
+            return
+        }
+        Haptica.shared.toca(.marcar)
+        let antes = t.estadoBoard
+        var movida = t
+        movida.estado = e.rawValue
+        if e == .hecha { movida.hecha_el = Fecha.hoy() }
+        withAnimation(Tema.Muelle.pantalla) { coloca(movida, en: t.id) }
+        do {
+            let r = try await API.escribeOEncola("/api/tarea/estado", json: ["id": t.id, "estado": e.rawValue])
+            if let r, let real = try? JSONDecoder().decode(TareaVault.self, from: r) {
+                withAnimation(Tema.Muelle.pantalla) { coloca(real, en: t.id) }
+                avisa("\(e.nombre): \(real.t)") { [weak self] in await self?.mueve(real, a: antes) }
+            } else {
+                avisa("\(e.nombre). Se enviará en cuanto haya conexión")
+            }
+        } catch {
+            avisa("No se ha movido: \(error.localizedDescription)", error: true)
+            await recarga()
+        }
     }
 
     // MARK: hecha

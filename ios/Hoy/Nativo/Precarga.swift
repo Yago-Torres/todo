@@ -29,7 +29,6 @@ enum Precarga {
         case "/carrera.html": _ = CarreraDatos.shared
         case "/salud.html": _ = DatosSalud.shared
         case "/pendientes.html": _ = DatosPendientes.shared
-        case "/comida.html": _ = DatosComida.shared
         case "/gastos.html": DatosGastos.shared.precarga()
         case "/documentos.html": _ = DatosDocumentos.shared
         case "/ajustes.html": _ = ModeloAjustes.shared

@@ -7,7 +7,6 @@ enum RegistroNativo {
     static let pantallas: [(ruta: String, vista: () -> AnyView)] = [
         ("/", { AnyView(PantallaHoy()) }),
         ("/habitos.html", { AnyView(PantallaHabitos()) }),
-        ("/comida.html", { AnyView(PantallaComida()) }),
         ("/gastos.html", { AnyView(PantallaGastos()) }),
         ("/pendientes.html", { AnyView(PantallaPendientes()) }),
         ("/entreno.html", { AnyView(PantallaEntreno()) }),

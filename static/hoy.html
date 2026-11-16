@@ -16,14 +16,14 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Hoy">
 <link rel="preload" href="/fuentes/instrument-sans-normal-latin.woff2?v=1" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/calma.css?v=a43b06bd">
-<script src="/calma.js?v=a43b06bd"></script>
+<link rel="stylesheet" href="/calma.css?v=f18e764d">
+<script src="/calma.js?v=f18e764d"></script>
 <script src="/anime-4.5.0.min.js"></script>
-<script src="/anima.js?v=a43b06bd"></script>
+<script src="/anima.js?v=f18e764d"></script>
 <script src="/tom.js?v=1"></script>
 <script src="/mascota.js?v=6"></script>
 <script src="/sinred.js?v=1"></script>
-<script src="/hoja.js?v=a43b06bd"></script>
+<script src="/hoja.js?v=f18e764d"></script>
 <script src="/movimiento.js?v=2"></script>
 <script defer src="/gsap-3.13.0.min.js"></script>
 <script defer src="/MorphSVGPlugin-3.13.0.min.js"></script>
@@ -221,7 +221,7 @@
     <span id="fecha"></span>
     <a class="engranaje" href="/ajustes.html" aria-label="Ajustes"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg></a>
     <button class="cartel" id="cartel" type="button" hidden></button>
-    <nav><a class="c-btn mini" href="/habitos.html">Hábitos</a><a class="c-btn mini" href="/pendientes.html">Pendientes</a><a class="c-btn mini" href="/entreno.html">Entreno</a><a class="c-btn mini" href="/salud.html">Salud</a><a class="c-btn mini" href="/comida.html">Comida</a><a class="c-btn mini" href="/gastos.html">Gastos</a></nav>
+    <nav><a class="c-btn mini" href="/habitos.html">Hábitos</a><a class="c-btn mini" href="/pendientes.html">Pendientes</a><a class="c-btn mini" href="/entreno.html">Entreno</a><a class="c-btn mini" href="/salud.html">Salud</a><a class="c-btn mini" href="/gastos.html">Gastos</a></nav>
   </header>
 
   <section class="carta c-carta c-foco s2 grande anillos" aria-label="Tu día">
@@ -261,11 +261,6 @@
   <section data-mod="entreno" class="carta c-carta c-foco s2" aria-labelledby="t-car">
     <h2 id="t-car">Carrera <a href="/carrera.html">Plan</a></h2>
     <div id="carrera"></div>
-  </section>
-
-  <section data-mod="comida" class="carta c-carta c-foco m2" aria-labelledby="t-com">
-    <h2 id="t-com">Comida <a href="/comida.html">Abrir</a></h2>
-    <div id="comida"></div>
   </section>
 
   <section data-mod="gastos" class="carta c-carta c-foco m2" aria-labelledby="t-gas">
@@ -584,21 +579,6 @@ function carrera() {
   caja.append(s);
 }
 
-// ---------- comida ----------
-function comida() {
-  const c = H.comida, caja = $("#comida");
-  if (fallo(caja, c)) return;
-  const ul = el("ul", "menu");
-  for (const m of c.menu) {
-    const li = el("li");
-    li.append(el("i", null, m.franja.slice(0, 3)), el("span", null, m.n), el("u", null, `${m.kcal} kcal`));
-    ul.append(li);
-  }
-  caja.replaceChildren(c.menu.length ? ul : el("p", "vacio", "No hay menú para hoy: genéralo en comida o con /menu."));
-  caja.append(el("p", "bajo", !c.total ? "Sin lista de la compra."
-    : c.falta ? `Falta comprar ${c.falta} de ${c.total}, unos ${eur(c.coste)}.` : "Compra hecha: todo tachado."));
-}
-
 // ---------- gastos ----------
 function gastos() {
   const g = H.gastos, caja = $("#gastos");
@@ -735,7 +715,7 @@ function pinta() {
   const saludo = calma.saludo(hora);
   if ($("#saludo").textContent !== saludo) $("#saludo").textContent = saludo;
   $("#fecha").replaceChildren(el("b", null, `${DIAS[d.getDay()][0].toUpperCase() + DIAS[d.getDay()].slice(1)} ${d.getDate()} de ${MESES[d.getMonth()]}`));
-  habitos(); tareas(); carrera(); comida(); gastos(); piezas(); racha(); anio();
+  habitos(); tareas(); carrera(); gastos(); piezas(); racha(); anio();
   estadoFantasma();
 }
 

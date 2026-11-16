@@ -22,7 +22,7 @@ También como app nativa de iPhone, **Tom**, con Siri y modo voz, gratis con Sid
   ![Los estados del fantasma](docs/fantasma.jpg)
 
 - **Hoy** — la portada: tres anillos (hábitos, pasos y sueño), cifras con su tendencia de 7 días,
-  las tareas que vencen, el año en puntos y tarjetas de las otras apps (comida y gastos).
+  las tareas que vencen, el año en puntos y la tarjeta de gastos.
 - **Hábitos** — marcar el día, rachas con llama, objetivo semanal por hábito, calendario tipo
   mapa de calor de GitHub y planificación arrastrando hábitos a los días. Se marcan también sin red:
   quedan en el móvil y se mandan al volver (`static/sinred.js`), y la app abre con la última copia (`static/sw.js`).

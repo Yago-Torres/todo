@@ -15,13 +15,13 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Pendientes">
 <link rel="preload" href="/fuentes/instrument-sans-normal-latin.woff2?v=1" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/calma.css?v=a43b06bd">
-<script src="/calma.js?v=a43b06bd"></script>
+<link rel="stylesheet" href="/calma.css?v=f18e764d">
+<script src="/calma.js?v=f18e764d"></script>
 <script src="/tom.js?v=1"></script>
 <script src="/mascota.js?v=6"></script>
 <script src="/anime-4.5.0.min.js"></script>
-<script src="/anima.js?v=a43b06bd"></script>
-<script src="/hoja.js?v=a43b06bd"></script>
+<script src="/anima.js?v=f18e764d"></script>
+<script src="/hoja.js?v=f18e764d"></script>
 <style>
   /* de una página a otra, la cabecera vuela y la barra de abajo se queda quieta (calma.css, calma.js) */
   @view-transition { navigation: auto; }
@@ -88,6 +88,84 @@
   .lista-simple a small { flex: none; font-size: var(--t-pequeno); color: var(--suave); }
   .puerta input, .puerta button { width: 100%; }
   @media (prefers-reduced-motion: no-preference) { .tarea.fuera { opacity: 0; transform: translateX(12px); transition: opacity .2s, transform .2s; } }
+
+  /* ---------- el board ---------- */
+  .board { grid-column: 1 / -1; }
+  .b-cab { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 10px; }
+  .b-cab h2 { margin: 0; }
+  .b-acc { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .b-acc .c-seg { min-width: 160px; }
+  .b-filtros { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 10px; }
+  .b-chip { flex: none; border: 1px solid var(--linea); background: none; color: var(--texto); border-radius: 999px; padding: 5px 12px;
+            font-size: var(--t-pequeno); font-weight: 500; }
+  .b-chip small { color: var(--suave); }
+  .b-chip[aria-pressed="true"] { background: var(--acento); border-color: var(--acento); color: var(--acento-texto); }
+  .b-chip[aria-pressed="true"] small { color: inherit; opacity: .8; }
+  .tablero { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-items: start; }
+  /* en el móvil, una columna por pantalla y se pasa de una a otra deslizando */
+  @media (max-width: 919px) {
+    .tablero { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 84%; overflow-x: auto; scroll-snap-type: x mandatory;
+               scrollbar-width: none; margin: 0 -16px; padding: 0 16px; scroll-padding: 0 16px; }
+    .col-b { scroll-snap-align: start; }
+  }
+  .col-b { background: var(--carta-2); border-radius: var(--r); padding: 8px; min-height: 120px; transition: box-shadow .15s; }
+  .col-b.encima { box-shadow: inset 0 0 0 2px var(--acento); }
+  .col-b h3 { margin: 2px 4px 8px; font-size: var(--t-pequeno); font-weight: 600; color: var(--suave); display: flex; gap: 6px; align-items: center; }
+  .col-b h3::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--tenue); }
+  .col-activa h3::before { background: var(--acento); }
+  .col-bloqueada h3::before { background: var(--peligro); }
+  .col-hecha h3::before { background: var(--acento-suave); box-shadow: inset 0 0 0 2px var(--acento); }
+  .col-b h3 .n { margin-left: auto; font-variant-numeric: tabular-nums; }
+  .tarjetas { display: grid; gap: 6px; max-height: 62vh; overflow-y: auto; }
+  .tarj { background: var(--carta); border-radius: var(--r-s); padding: 10px; box-shadow: var(--sombra); cursor: pointer;
+          border-left: 3px solid transparent; overflow-wrap: anywhere; }
+  .tarj:hover { outline: 1px solid var(--linea); }
+  .tarj:focus-visible { outline: 2px solid var(--acento); }
+  .tarj.historia { border-left-color: var(--serie-7); }
+  .col-bloqueada .tarj { border-left-color: var(--peligro); }
+  .col-hecha .tarj .tit { color: var(--suave); text-decoration: line-through; }
+  .tarj.arrastrando { opacity: .4; }
+  .tarj .kicker { display: flex; gap: 6px; font-size: 12px; font-weight: 600; color: var(--suave); margin-bottom: 4px; }
+  .tarj.historia .kicker span:first-child { color: var(--serie-7); }
+  .tarj .tit { font-size: var(--t-texto); line-height: 1.35; }
+  .tarj .prog { height: 4px; border-radius: 2px; background: var(--carta-2); margin-top: 8px; overflow: hidden; }
+  .tarj .prog i { display: block; height: 100%; background: var(--acento); }
+  .meta-b { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; align-items: center; }
+  .meta-b .tag { font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--carta-2); color: var(--suave); }
+  .meta-b .cuando { font-size: 12px; font-weight: 600; color: var(--suave); }
+  .meta-b .cuando.mal { color: var(--peligro); }
+  .meta-b .cuando.hoy { color: var(--acento); }
+  .vacio-b { margin: 4px; font-size: var(--t-pequeno); color: var(--tenue); }
+  [data-vista="board"] #c-tareas { display: none; }
+  [data-vista="lista"] #tablero, [data-vista="lista"] #b-filtros { display: none; }
+
+  form.nueva .n-extra { grid-column: 1 / -1; display: grid; gap: 8px; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr); }
+  @media (max-width: 560px) { form.nueva .n-extra { grid-template-columns: 1fr 1fr; } form.nueva .n-extra .c-seg { grid-column: 1 / -1; } }
+
+  /* la ficha de una tarjeta y el historial */
+  dialog.ficha { border: 0; padding: 16px; width: min(520px, calc(100vw - 32px)); max-height: 86vh; overflow: auto; color: var(--texto); }
+  dialog.ficha::backdrop { background: rgba(0, 0, 0, .4); }
+  dialog.ficha form { display: grid; gap: 12px; }
+  .f-kicker { margin: 0; font-size: var(--t-pequeno); font-weight: 600; color: var(--suave); }
+  .f-tit { font-size: var(--t-destacado); font-weight: 600; }
+  .f-eti { display: grid; gap: 4px; font-size: var(--t-pequeno); color: var(--suave); }
+  .f-cuando { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .f-hijas { display: grid; gap: 4px; }
+  .f-hijas h3 { margin: 4px 0 2px; font-size: var(--t-pequeno); color: var(--suave); }
+  .f-hija { display: flex; gap: 8px; align-items: center; text-align: left; border: 0; background: var(--carta-2); color: var(--texto);
+            border-radius: var(--r-s); padding: 8px 10px; }
+  .f-hija small { margin-left: auto; color: var(--suave); white-space: nowrap; }
+  .f-hija.hecha span { text-decoration: line-through; color: var(--suave); }
+  .f-sub { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  .f-nota { margin: 0; font-size: var(--t-pequeno); color: var(--suave); }
+  .f-pie { display: flex; gap: 8px; }
+  .f-pie span { flex: 1; }
+  .h-cab2 { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .h-cab2 h2 { margin: 0; font-size: var(--t-seccion); }
+  .h-ciclo h3 { margin: 14px 2px 6px; font-size: var(--t-pequeno); color: var(--suave); }
+  .h-fila { display: flex; gap: 10px; align-items: baseline; padding: 6px 2px; border-bottom: 1px solid var(--linea); }
+  .h-fila span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .h-fila small { flex: none; color: var(--suave); font-size: var(--t-pequeno); }
 </style>
 <body>
 
@@ -108,23 +186,41 @@
   <header class="top">
     <h1>Pendientes</h1>
     <span id="estado">Cargando…</span>
-    <nav><a class="c-btn mini" href="/">Hoy</a><a class="c-btn mini" href="/habitos.html">Hábitos</a><a class="c-btn mini" href="/entreno.html">Entreno</a><a class="c-btn mini" href="/salud.html">Salud</a><a class="c-btn mini" href="/comida.html">Comida</a><a class="c-btn mini" href="/gastos.html">Gastos</a></nav>
+    <nav><a class="c-btn mini" href="/">Hoy</a><a class="c-btn mini" href="/habitos.html">Hábitos</a><a class="c-btn mini" href="/entreno.html">Entreno</a><a class="c-btn mini" href="/salud.html">Salud</a><a class="c-btn mini" href="/gastos.html">Gastos</a></nav>
   </header>
+
+  <section class="carta c-carta board" id="c-board" aria-labelledby="t-board">
+    <div class="b-cab">
+      <h2 id="t-board">Board</h2>
+      <span class="c-chip" id="b-ciclo"></span>
+      <div class="b-acc">
+        <div class="c-seg" id="b-vista" role="group" aria-label="Vista"><button type="button" data-v="board">Board</button><button type="button" data-v="lista">Lista</button></div>
+        <button class="c-btn mini" type="button" id="b-historial">Historial</button>
+      </div>
+    </div>
+    <div class="b-filtros" id="b-filtros" role="group" aria-label="Proyecto"></div>
+    <div class="tablero" id="tablero"></div>
+  </section>
 
   <div class="col">
     <section class="carta c-carta" aria-labelledby="t-nueva">
       <h2 id="t-nueva">Apuntar</h2>
       <form class="nueva" id="f-nueva">
         <input class="c-campo" name="t" maxlength="200" required placeholder="Llamar al dentista" aria-label="Qué tienes que hacer">
+        <div class="n-extra">
+          <div class="c-seg" id="n-tipo" role="group" aria-label="Tipo"><button type="button" data-t="" aria-current="true">Tarea</button><button type="button" data-t="historia" aria-current="false">Historia</button></div>
+          <input class="c-campo" name="tags" list="l-tags" autocomplete="off" maxlength="120" placeholder="Proyecto" aria-label="Proyectos, separados por comas">
+          <select class="c-campo" name="padre" aria-label="Dentro de una historia"></select>
+        </div>
         <button class="cuando-btn" type="button" id="b-cuando" aria-haspopup="dialog">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span id="b-cuando-txt">Hoy</span>
         </button>
         <button class="c-btn pri" type="submit">Añadir</button>
-        <p class="pista">Toca una tarea para cambiarla. Con hora, te aviso por Telegram. También vale decírselo al bot: «recuérdame llamar al dentista el jueves a las 10».</p>
+        <p class="pista">Toca una tarjeta para cambiarla o moverla de columna (en el ordenador, también arrastrándola). Con hora, te aviso por Telegram. También vale decírselo al bot: «recuérdame llamar al dentista el jueves a las 10».</p>
       </form>
     </section>
 
-    <section class="carta c-carta" aria-labelledby="t-tareas">
+    <section class="carta c-carta" aria-labelledby="t-tareas" id="c-tareas">
       <h2 id="t-tareas">Tareas <span class="c-chip" id="n-tareas"></span></h2>
       <div id="tareas"></div>
       <div id="tareas-mas"></div>
@@ -148,6 +244,33 @@
     </section>
   </div>
 </div>
+
+<datalist id="l-tags"></datalist>
+
+<dialog class="ficha c-carta" id="ficha" aria-labelledby="f-kicker">
+  <form method="dialog" id="f-ficha">
+    <p class="f-kicker" id="f-kicker"></p>
+    <input class="c-campo f-tit" name="t" maxlength="200" aria-label="Título" required>
+    <div class="c-seg" id="f-estado" role="group" aria-label="Estado"></div>
+    <label class="f-eti">Proyectos <input class="c-campo" name="tags" list="l-tags" autocomplete="off" placeholder="separados por comas"></label>
+    <div class="f-cuando">
+      <label class="f-eti">Día <input class="c-campo" type="date" name="due"></label>
+      <label class="f-eti">Hora <input class="c-campo" type="time" name="hora" step="300"></label>
+    </div>
+    <div class="f-hijas" id="f-hijas"></div>
+    <p class="f-nota" id="f-nota"></p>
+    <div class="f-pie">
+      <button type="button" class="c-btn" id="f-borrar">Borrar</button><span></span>
+      <button type="button" class="c-btn" id="f-cerrar">Cerrar</button><button type="submit" class="c-btn pri" id="f-guardar">Guardar</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog class="ficha c-carta" id="historial" aria-labelledby="h-tit">
+  <div class="h-cab2"><h2 id="h-tit">Historial</h2><button type="button" class="c-btn mini" id="h-cerrar">Cerrar</button></div>
+  <p class="f-nota">Lo que acabaste en ciclos anteriores. Cada 3 semanas la columna «Hecha» se vacía y lo suyo pasa aquí.</p>
+  <div id="h-lista"></div>
+</dialog>
 
 <script>
 const $ = s => document.querySelector(s);
@@ -246,7 +369,263 @@ function fila(t, conNota = true) {
   return f;
 }
 
+
+// ---------- el board ----------
+// Columnas por estado (nueva, activa, bloqueada, hecha), filtro por proyecto y la ficha de cada tarjeta. En el
+// ordenador se arrastra de una columna a otra; en el móvil, la ficha tiene el estado arriba.
+const ESTADOS = [["nueva", "Por hacer"], ["activa", "Activa"], ["bloqueada", "Bloqueada"], ["hecha", "Hecha"]];
+const nombreEstado = e => (ESTADOS.find(x => x[0] === e) || ["", e])[1];
+const bonito = x => x.replace(/[-_]/g, " ");
+const partes = s => s.split(",").map(x => x.trim()).filter(Boolean);
+const lee = k => { try { return localStorage.getItem(k); } catch { return null; } };
+const apunta = (k, v) => { try { localStorage.setItem(k, v); } catch { /* sin almacenamiento: se olvida al salir */ } };
+let filtro = lee("board-filtro") || "", arrastrada = null;
+const todasB = () => [...B.tareas, ...(B.hechas || [])];
+const porId = id => todasB().find(t => t.id === id);
+const deFiltro = t => !filtro || (filtro === "-" ? !t.tags.length : t.tags.includes(filtro));
+
+function ponVista(v) {
+  document.body.dataset.vista = v;
+  apunta("board-vista", v);
+  document.querySelectorAll("#b-vista button").forEach(b => b.setAttribute("aria-current", String(b.dataset.v === v)));
+}
+document.querySelectorAll("#b-vista button").forEach(b => { b.onclick = () => ponVista(b.dataset.v); });
+ponVista(lee("board-vista") || "board");
+
+function pintaBoard() {
+  const T = todasB().filter(t => t.t);
+  if (B.ciclo) {
+    const q = entre(HOY, B.ciclo.hasta) + 1;
+    $("#b-ciclo").textContent = `Ciclo ${corta(B.ciclo.desde)} – ${corta(B.ciclo.hasta)} · ${q <= 1 ? "último día" : `quedan ${q} días`}`;
+  }
+  // los proyectos con algo abierto, de más a menos
+  const cuenta = {}, abiertas = T.filter(t => t.estado !== "hecha");
+  abiertas.forEach(t => t.tags.forEach(x => { cuenta[x] = (cuenta[x] || 0) + 1; }));
+  const tags = Object.keys(cuenta).sort((a, b) => cuenta[b] - cuenta[a] || a.localeCompare(b));
+  if (filtro && filtro !== "-" && !tags.includes(filtro)) filtro = "";
+  const chip = (v, txt, n) => {
+    const b = el("button", "b-chip", txt);
+    b.type = "button";
+    b.setAttribute("aria-pressed", String(filtro === v));
+    b.append(el("small", null, ` ${n}`));
+    b.onclick = () => { filtro = v; apunta("board-filtro", v); pintaBoard(); };
+    return b;
+  };
+  const sin = abiertas.filter(t => !t.tags.length).length;
+  $("#b-filtros").replaceChildren(chip("", "Todo", abiertas.length), ...tags.map(x => chip(x, bonito(x), cuenta[x])),
+                                  ...(sin ? [chip("-", "Sin proyecto", sin)] : []));
+  $("#l-tags").replaceChildren(...tags.map(x => Object.assign(document.createElement("option"), {value: bonito(x)})));
+
+  $("#tablero").replaceChildren(...ESTADOS.map(([e, txt]) => {
+    const xs = T.filter(t => t.estado === e && deFiltro(t));
+    const col = el("section", `col-b col-${e}`), cab = el("h3", null, txt), lista = el("div", "tarjetas");
+    col.setAttribute("aria-label", `${txt}, ${xs.length}`);
+    cab.append(el("span", "n", String(xs.length)));
+    lista.append(...(xs.length ? xs.map(tarjeta) : [el("p", "vacio-b", {nueva: "Nada por hacer", activa: "Arrastra aquí lo que estés haciendo",
+      bloqueada: "Nada bloqueado", hecha: "Lo que acabes este ciclo"}[e])]));
+    col.ondragover = ev => { if (arrastrada) { ev.preventDefault(); col.classList.add("encima"); } };
+    col.ondragleave = ev => { if (!col.contains(ev.relatedTarget)) col.classList.remove("encima"); };
+    col.ondrop = ev => {
+      ev.preventDefault();
+      col.classList.remove("encima");
+      const t = arrastrada;
+      arrastrada = null;
+      if (t && t.estado !== e) mover(t, e);
+    };
+    col.append(cab, lista);
+    return col;
+  }));
+}
+
+function tarjeta(t) {
+  const c = el("article", `tarj${t.historia ? " historia" : ""}`);
+  c.dataset.id = t.id;
+  c.tabIndex = 0;
+  c.draggable = true;
+  c.setAttribute("role", "button");
+  c.setAttribute("aria-label", `${t.historia ? "Historia" : "Tarea"}: ${t.t}. ${nombreEstado(t.estado)}`);
+  c.ondragstart = ev => { arrastrada = t; ev.dataTransfer.effectAllowed = "move"; ev.dataTransfer.setData("text/plain", t.id); c.classList.add("arrastrando"); };
+  c.ondragend = () => { c.classList.remove("arrastrando"); };
+  const [hechas, total] = t.progreso || [0, 0];
+  if (t.historia) {
+    const k = el("div", "kicker");
+    k.append(el("span", null, "Historia"));
+    if (total) k.append(el("span", null, `${hechas}/${total}`));
+    c.append(k);
+  } else if (t.padre && porId(t.padre)) {
+    c.append(el("div", "kicker", `↳ ${porId(t.padre).t}`));
+  }
+  c.append(el("div", "tit", t.t));
+  if (t.historia && total) {
+    const p = el("div", "prog"), i = el("i");
+    i.style.width = `${Math.round(100 * hechas / total)}%`;
+    p.append(i);
+    c.append(p);
+  }
+  const meta = el("div", "meta-b");
+  t.tags.filter(x => x !== filtro).forEach(x => meta.append(el("span", "tag", bonito(x))));
+  if (t.grupo === "Curro") meta.append(el("span", "tag", "curro"));
+  if (t.estado === "hecha" && t.hecha_el) meta.append(el("span", "cuando", hace(t.hecha_el)));
+  else if (t.due) {
+    const n = entre(HOY, t.due);
+    meta.append(el("span", `cuando ${n < 0 ? "mal" : n === 0 ? "hoy" : ""}`, cuando(t.due) + (t.hora ? ` ${t.hora}` : "")));
+  }
+  if (meta.childNodes.length) c.append(meta);
+  c.onclick = () => ficha(t);
+  c.onkeydown = ev => (ev.key === "Enter" || ev.key === " ") && (ev.preventDefault(), ficha(t));
+  return c;
+}
+
+async function mover(t, estado) {
+  if (t.fija && ["activa", "bloqueada"].includes(estado)) return toast("Lo del curro solo se puede tachar");
+  const antes = t.estado;
+  t.estado = estado;   // se ve movida al momento; si falla, cargar() la devuelve
+  pintaBoard();
+  try {
+    const n = await api("/api/tarea/estado", {id: t.id, estado});
+    toast(`${nombreEstado(estado)}: ${n.t}`, async () => { await api("/api/tarea/estado", {id: n.id, estado: antes}); cargar(); });
+  } catch (e) {
+    if (e.message !== "401") toast(`No se ha movido: ${e.message}`);
+  }
+  cargar();
+}
+
+let F = null;   // la tarea de la ficha abierta
+function ficha(t) {
+  F = t;
+  const f = $("#f-ficha"), p = t.padre && porId(t.padre);
+  $("#f-kicker").textContent = t.historia ? "Historia" : p ? `Tarea de «${p.t}»` : "Tarea";
+  f.t.value = t.t;
+  f.tags.value = t.tags.map(bonito).join(", ");
+  f.tags.dataset.antes = f.tags.value;
+  f.due.value = t.due || "";
+  f.hora.value = t.hora || "";
+  for (const x of [f.t, f.tags, f.due, f.hora]) x.disabled = !!t.fija;
+  $("#f-guardar").style.display = $("#f-borrar").style.display = t.fija ? "none" : "";
+  $("#f-estado").replaceChildren(...ESTADOS.map(([e, txt]) => {
+    const b = el("button", null, txt);
+    b.type = "button";
+    b.setAttribute("aria-current", String(t.estado === e));
+    b.disabled = !!t.fija && ["activa", "bloqueada"].includes(e);
+    b.onclick = () => { $("#ficha").close(); if (t.estado !== e) mover(t, e); };
+    return b;
+  }));
+  const hijas = todasB().filter(x => x.padre === t.id);
+  const sub = [];
+  if (t.historia || hijas.length) {
+    sub.push(el("h3", null, `Tareas · ${hijas.filter(x => x.estado === "hecha").length}/${hijas.length}${(t.progreso || [0, 0])[1] > hijas.length ? " (más en el historial)" : ""}`));
+    for (const h of hijas) {
+      const b = el("button", `f-hija ${h.estado === "hecha" ? "hecha" : ""}`);
+      b.type = "button";
+      b.append(el("span", null, h.t), el("small", null, nombreEstado(h.estado)));
+      b.onclick = () => ficha(h);
+      sub.push(b);
+    }
+    if (!t.fija && t.estado !== "hecha") {
+      const fila = el("div", "f-sub"), inp = el("input", "c-campo"), add = el("button", "c-btn", "Añadir");
+      inp.placeholder = "Nueva tarea de esta historia";
+      inp.maxLength = 200;
+      inp.setAttribute("aria-label", "Nueva tarea de esta historia");
+      add.type = "button";
+      const crea = async () => {
+        if (!inp.value.trim()) return;
+        add.disabled = true;
+        try {
+          const n = await api("/api/tarea", {t: inp.value, padre: t.id});
+          recien = n.id;
+          toast(`Añadida a «${t.t}»: ${n.t}`);
+          $("#ficha").close();
+          cargar();
+        } catch (e) {
+          add.disabled = false;
+          if (e.message !== "401") toast(`No se ha añadido: ${e.message}`);
+        }
+      };
+      add.onclick = crea;
+      inp.onkeydown = ev => ev.key === "Enter" && (ev.preventDefault(), crea());
+      fila.append(inp, add);
+      sub.push(fila);
+    }
+  }
+  $("#f-hijas").replaceChildren(...sub);
+  const nota = $("#f-nota"), a = el("a", null, t.nota);
+  a.href = t.abrir || "#";
+  nota.replaceChildren(t.fija ? "Del curro: aquí solo se tacha. En " : "En ", a);
+  if (!$("#ficha").open) $("#ficha").showModal();
+}
+$("#f-cerrar").onclick = () => $("#ficha").close();
+$("#f-ficha").onsubmit = async e => {
+  e.preventDefault();
+  const f = e.target, t = F;
+  if (!f.t.value.trim()) return;
+  const x = {id: t.id, t: f.t.value, due: f.due.value, hora: f.due.value ? f.hora.value : ""};
+  if (f.tags.value !== f.tags.dataset.antes) x.tags = partes(f.tags.value);   // si no los toca, se quedan como estaban
+  try {
+    const n = await api("/api/tarea/edita", x);
+    recien = n.id;
+    $("#ficha").close();
+    toast(`Cambiada: ${n.t}`);
+    cargar();
+  } catch (err) {
+    if (err.message !== "401") toast(`No se ha cambiado: ${err.message}`);
+  }
+};
+$("#f-borrar").onclick = async () => {
+  const t = F, b = $("#f-borrar");
+  if (!b.dataset.seguro) { b.dataset.seguro = "1"; b.textContent = "¿Seguro?"; setTimeout(() => { delete b.dataset.seguro; b.textContent = "Borrar"; }, 3000); return; }
+  delete b.dataset.seguro;
+  b.textContent = "Borrar";
+  try {
+    const r = await api("/api/tarea/borra", {id: t.id});
+    $("#ficha").close();
+    toast(`Borrada: ${t.t}`, async () => { await api("/api/tarea/restaura", r); cargar(); });
+    cargar();
+  } catch (err) {
+    if (err.message !== "401") toast(`No se ha borrado: ${err.message}`);
+  }
+};
+
+$("#b-historial").onclick = async () => {
+  $("#h-lista").replaceChildren(el("p", "vacio", "Cargando…"));
+  $("#historial").showModal();
+  try {
+    const {ciclos} = await api("/api/tablero/historial");
+    $("#h-lista").replaceChildren(...(ciclos.length ? ciclos.map(c => {
+      const s = el("section", "h-ciclo");
+      s.append(el("h3", null, `${corta(c.desde)} – ${corta(c.hasta)} · ${c.tareas.length} hechas`));
+      for (const t of c.tareas) {
+        const r = el("div", "h-fila");
+        r.append(el("span", null, t.t), el("small", null, [...t.tags.map(bonito), corta(t.hecha_el)].join(" · ")));
+        s.append(r);
+      }
+      return s;
+    }) : [el("p", "vacio", "Todavía no ha acabado ningún ciclo.")]));
+  } catch (e) {
+    if (e.message !== "401") $("#h-lista").replaceChildren(el("p", "vacio", `No se ha podido cargar: ${e.message}`));
+  }
+};
+$("#h-cerrar").onclick = () => $("#historial").close();
+
+// apuntar: tarea o historia, con proyectos y (si es tarea) dentro de una historia
+let tipoNuevo = "";
+document.querySelectorAll("#n-tipo button").forEach(b => {
+  b.onclick = () => {
+    tipoNuevo = b.dataset.t;
+    document.querySelectorAll("#n-tipo button").forEach(x => x.setAttribute("aria-current", String(x === b)));
+    $("#f-nueva").padre.style.display = tipoNuevo === "historia" ? "none" : "";
+  };
+});
+function pintaHistorias() {
+  const sel = $("#f-nueva").padre, antes = sel.value;
+  const hs = B.tareas.filter(t => t.historia && !t.fija);
+  sel.replaceChildren(Object.assign(document.createElement("option"), {value: "", textContent: "Sin historia"}),
+    ...hs.map(t => Object.assign(document.createElement("option"), {value: t.id, textContent: `↳ ${t.t}`})));
+  sel.value = hs.some(t => t.id === antes) ? antes : "";
+}
+
 function pinta() {
+  pintaBoard();
+  pintaHistorias();
   // con fecha (de donde sean) y sueltas sin fecha arriba; lo de proyectos y curro, plegado
   const T = B.tareas, sem = mas(HOY, 7);
   const sueltas = t => !["Proyectos", "Curro"].includes(t.grupo);
@@ -365,8 +744,10 @@ $("#f-nueva").onsubmit = async e => {
   const f = e.target, btn = f.querySelector("button[type=submit]");
   btn.disabled = true;
   try {
-    const t = await api("/api/tarea", {t: f.t.value, due: NUEVA.due, hora: NUEVA.due ? NUEVA.hora : ""});
+    const t = await api("/api/tarea", {t: f.t.value, due: NUEVA.due, hora: NUEVA.due ? NUEVA.hora : "", tags: partes(f.tags.value),
+                                       historia: tipoNuevo === "historia", padre: tipoNuevo === "historia" ? "" : f.padre.value});
     f.reset();
+    document.querySelector('#n-tipo button[data-t=""]').click();
     Object.assign(NUEVA, {due: HOY, hora: ""});
     pintaCuando();
     recien = t.id;

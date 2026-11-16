@@ -216,7 +216,7 @@ const calma = (() => {
     } catch { /* sin red no hay confeti, y no pasa nada */ }
   }
 
-  /* El menú de todo (en todas sus páginas, también en comida.html y gastos.html) se rehace como la
+  /* El menú de todo (en todas sus páginas, también en gastos.html) se rehace como la
      barra de abajo: todas las secciones, siempre en el mismo sitio, y la actual es una gota que sale
      de la barra. Al tocar otra, la gota se desliza hasta ella y luego se navega.
      Solo toca el nav que enlaza a pendientes, entreno o carrera. */
@@ -227,7 +227,6 @@ const calma = (() => {
     ["/pendientes.html", "Pendientes", I('<path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/>')],
     ["/entreno.html", "Entreno", I('<path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/>')],
     ["/salud.html", "Salud", I('<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>')],
-    ["/comida.html", "Comida", I('<path d="M3 11h18a9 9 0 0 1-18 0zM8 7c0-1.5 1-2 1-3.5M12 7c0-1.5 1-2 1-3.5M16 7c0-1.5 1-2 1-3.5"/>')],
     ["/gastos.html", "Gastos", I('<rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18M16 15h2"/>')],
     ["/documentos.html", "Docs", I('<path d="M7 3h7l4 4v14H7zM14 3v4h4M10 12h5M10 16h5"/>')],
   ];

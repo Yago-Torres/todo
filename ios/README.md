@@ -405,9 +405,8 @@ Repaso función a función de cada página web contra su pantalla de Tom (13/11)
 | Gastos | Cuánto cobras y día de cobro | Hecho (`AjustesGastos.swift`) |
 | Gastos | Editar y borrar ingresos | Hecho (`IngresosGastos.swift`) |
 | Gastos | Día y moneda al apuntar, deshacer lo apuntado, reparto en el editor | Hecho |
-| Hoy | Tarjeta «Comida» (menú de hoy y compra) y «Tu año» (mapa del año) | Hecho (`BloquesHoyWeb.swift`, bloques `comida` y `anio`) |
+| Hoy | Tarjeta «Tu año» (mapa del año) | Hecho (`BloquesHoyWeb.swift`, bloque `anio`) |
 | Hábitos | Calendario del mes (mapa de calor, marcar y planificar cualquier día) | Hecho (`Habitos/CalendarioHabitos.swift`) |
-| Comida | Lista de la compra del menú (tachar, dónde sale más barato) y Cuentas (por cadena, apagar cadenas, ahorro) | Hecho (`Comida/CompraMenu.swift`), refrescar precios incluido |
 
 Ya estaban a la par: Pendientes, Documentos, Ajustes (la apariencia y las pantallas están en Configurar), Entreno
 (el aviso push de la web no aplica: Tom avisa en local), Carrera y Salud (solo lectura en la web).
@@ -416,13 +415,12 @@ Segunda tanda (también hecho):
 
 | Web | Ahora en Tom |
 |---|---|
-| Comida → Ingredientes | `Comida/IngredientesComida.swift` (desde el Menú): buscar, crear, macros por 100 g, unidad, g/ud, fuente, «Rellenar» con Open Food Facts y variantes (predeterminada, borrar). POST `/ingrediente` y `/variante`; sin red, a la cola |
-| Comida → fijar producto (pin) | Mantener pulsado un ingrediente en la lista de la compra → «Elegir el producto en …» (`/candidatos`; fijar es la operación `comida.pin`) |
-| Comida → variante en la receta | En la ficha de una receta del menú, el selector junto a cada ingrediente con variantes (operación `comida.variante`) |
 | Hábitos → tira de 28 días | Tarjeta «Rachas» bajo los hábitos (`Habitos/TiraRachas.swift`): 28 días (o 4 semanas si es semanal), racha y constancia a 30 días |
 
-Tachar la compra, fijar un producto y cambiar la variante son operaciones de la cola sobre `/api/comida/estado`
-(`Compartido/OperacionesComida.swift`, `comida.tacha/pin/variante`): se ven al momento y salen solas al volver la red.
+**16/11 — Board en Pendientes** (`Pendientes/BoardPendientes.swift`, como el de la web): una píldora por estado (por
+hacer, activa, bloqueada, hecha), filtro por proyecto, deslizar para pasar a la siguiente columna, ficha (estado,
+proyectos, fecha, subtareas de una historia) e historial de los ciclos de 3 semanas. Mover es `POST /api/tarea/estado`,
+que va a la cola sin red como las demás tareas. **Comida se retiró** (la pantalla, su bloque de Hoy y sus operaciones).
 
 Lo que queda:
 

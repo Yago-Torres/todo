@@ -107,7 +107,7 @@ enum Sincro {
 
     /// Las rutas que se guardan con un PUT del estado entero: al salir de la cola se juntan con lo del servidor.
     static func esEstadoCompleto(_ ruta: String) -> Bool {
-        ["/api/state", "/api/gastos/estado", "/api/gastos-aitana/estado", "/api/comida/estado"].contains(ruta)
+        ["/api/state", "/api/gastos/estado", "/api/gastos-aitana/estado"].contains(ruta)
     }
 
     /// Al abrir la app o pasar a primer plano.
@@ -387,7 +387,7 @@ enum Sincro {
         let manana = Fecha.dia(Date().addingTimeInterval(24 * 3600))
         return ["/api/state", "/api/hoy", "/api/sueno", "/api/carrera", "/api/bandeja", "/api/documentos",
                 "/api/fantasma", "/api/ajustes", "/api/escalada", "/api/pantalla",
-                "/api/gastos/estado", "/api/gastos/resumen?dia=\(hoy)", "/api/comida/estado", "/api/comida/lista", "/api/comida/cesta", "/api/comida/alimentos",
+                "/api/gastos/estado", "/api/gastos/resumen?dia=\(hoy)",
                 "/api/toca?dia=\(hoy)", "/api/toca?dia=\(manana)", "/api/presupuesto"]
     }
 

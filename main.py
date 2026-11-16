@@ -352,7 +352,7 @@ def logout(response: Response):
 # ---------- ajustes de cada usuario (ajustes.json, junto a su data.json) ----------
 # Fuera de data.json a propósito: las páginas guardan el estado entero y aquí no tienen nada que pisar.
 AJUSTES = DB.with_name("ajustes.json")
-MODULOS = ("habitos", "pendientes", "entreno", "salud", "comida", "gastos", "documentos")
+MODULOS = ("habitos", "pendientes", "entreno", "salud", "gastos", "documentos")
 # minutos al día por app (Ajustes los cambia): al abrirla dice cuánto queda y al pasarse avisa por Telegram
 LIMITES = {"Instagram": 30, "YouTube": 45, "TikTok": 30, "Reddit": 20, "BrawlStars": 30}
 MASCOTA = {"semilla": (1, 9999, 14), "grumos": (0, .5, .2), "pera": (0, 1, .35), "cola": (-24, 24, -12), "flecos": (2, 6, 4),
@@ -361,7 +361,7 @@ MASCOTA = {"semilla": (1, 9999, 14), "grumos": (0, .5, .2), "pera": (0, 1, .35),
 
 
 def conectada(m):
-    """Comida y gastos son otras apps: sin su clave en el .env, esta instancia no puede llegar a ellas."""
+    """Gastos es otra app: sin su clave en el .env, esta instancia no puede llegar a ella."""
     return m not in OTRAS or bool(os.getenv(OTRAS[m][2]))
 
 
@@ -386,7 +386,7 @@ def limpia_ajustes(v):
 
 # ---------- apariencia (Ajustes → Apariencia) y orden de las secciones de cada pantalla ----------
 # El catálogo (paletas, acentos, fuentes…) es ~/estilo/apariencia.json, copiado a static/ por aplica.sh; lo leen
-# calma.js y Tom. Aquí solo se guarda qué eligió y se comprueba que exista. Comida, gastos y limpieza lo leen de
+# calma.js y Tom. Aquí solo se guarda qué eligió y se comprueba que exista. Gastos y limpieza lo leen de
 # GET /api/apariencia de cada una (que mira este mismo ajustes.json), así todo se ve igual.
 CATALOGO = HERE / "static" / "apariencia.json"
 ID = re.compile(r"[a-z0-9-]{1,40}")
@@ -1758,17 +1758,6 @@ def hoy_entreno(s, hoy):
     return out
 
 
-def hoy_comida(hoy):
-    e, lista = de_otra("comida", "estado"), de_otra("comida", "lista")
-    recetas = {r["id"]: r for r in e["recetas"]}
-    menu = e["menu"].get(hoy) or {}
-    falta = [f for f in lista["filas"] if not f["tachado"]]
-    return {"menu": [{"franja": f, "n": recetas[menu[f]]["n"], "kcal": recetas[menu[f]]["kcal"]}
-                     for f in ("desayuno", "comida", "cena") if menu.get(f) in recetas],
-            "falta": len(falta), "total": len(lista["filas"]),
-            "coste": round(sum(f["opciones"][f["barato"]]["coste"] for f in falta if f.get("barato")), 2)}
-
-
 def hoy_gastos():
     r = de_otra("gastos", "resumen")
     quedan = r["dias"] - r["hechos"] + 1 if r["actual"] else 0
@@ -1794,7 +1783,6 @@ def portada(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
         # lo que vence hoy o ya venció; lo sin fecha se queda en pendientes.html
         "tareas": trozo(lambda: [t for t in vault.tareas() if t["due"] and t["due"] <= hoy]),
         "leer": trozo(lambda: len(vault.lecturas())),
-        "comida": trozo(lambda: hoy_comida(hoy)),
         "gastos": trozo(hoy_gastos),
     }
 
@@ -2057,8 +2045,27 @@ def bandeja(solo: str = "", todo_sesion: str = Cookie(None), authorization: str 
     exige(todo_sesion, authorization)
     if solo == "tareas":
         return {"tareas": vault.tareas()}
-    return {"tareas": vault.tareas(), "leer": vault.lecturas(), "notas": vault.recientes(),
-            "revisar": vault.revisar(), "hoy": date.today().isoformat()}
+    desde, hasta = vault.ciclo()
+    # el board: las abiertas (nueva, activa, bloqueada) y las hechas de este ciclo de 3 semanas
+    return {"tareas": vault.tareas(), "hechas": vault.hechas(desde), "ciclo": {"desde": desde.isoformat(), "hasta": hasta.isoformat()},
+            "leer": vault.lecturas(), "notas": vault.recientes(), "revisar": vault.revisar(), "hoy": date.today().isoformat()}
+
+
+@app.get("/api/tablero/historial")
+def tablero_historial(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """Lo hecho en los ciclos de 3 semanas anteriores (lo que ya salió del board), el más reciente primero."""
+    exige(todo_sesion, authorization)
+    return {"ciclos": vault.historial()}
+
+
+@app.post("/api/tarea/estado")
+def estado_tarea(t: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """{id, estado: nueva|activa|bloqueada|hecha}: la mueve de columna. Devuelve la tarea con su id nuevo."""
+    exige(todo_sesion, authorization)
+    nueva = _valida(vault.cambia_estado, str(t.get("id") or ""), str(t.get("estado") or ""))
+    if not nueva:
+        raise HTTPException(404, "Esa tarea ya no está (¿la has cambiado en Obsidian?)")
+    return nueva
 
 
 def _valida(fn, *args):
@@ -2072,7 +2079,9 @@ def _valida(fn, *args):
 def nueva_tarea(t: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
     exige(todo_sesion, authorization)
     hora = str(t.get("hora") or "")[:5]
-    return _valida(vault.nueva_tarea, t.get("t"), day(t.get("due")), hora if len(hora) == 5 and hora[2] == ":" else "")
+    tags = t.get("tags") if isinstance(t.get("tags"), list) else []
+    return _valida(vault.nueva_tarea, t.get("t"), day(t.get("due")), hora if len(hora) == 5 and hora[2] == ":" else "",
+                   tags, t.get("historia") is True, str(t.get("padre") or ""))
 
 
 @app.post("/api/tarea/edita")
@@ -2080,7 +2089,8 @@ def edita_tarea(t: dict, todo_sesion: str = Cookie(None), authorization: str = H
     exige(todo_sesion, authorization)
     hora = str(t.get("hora") or "")[:5]
     nueva = _valida(vault.edita, str(t.get("id") or ""), t.get("t"), day(t.get("due")),
-                    hora if len(hora) == 5 and hora[2] == ":" else "")
+                    hora if len(hora) == 5 and hora[2] == ":" else "",
+                    t.get("tags") if isinstance(t.get("tags"), list) else None)   # sin tags, se quedan los que tenía
     if not nueva:
         raise HTTPException(404, "Esa tarea ya no está (¿la has cambiado en Obsidian?)")
     return nueva
@@ -2217,15 +2227,14 @@ def baja_push(sub: dict, todo_sesion: str = Cookie(None), authorization: str = H
     return {"ok": True}
 
 
-# ---------- comida y gastos dentro de todo ----------
-# Sus frontales se sirven también aquí, el mismo index.html leído de su carpeta, con "/api/"
+# ---------- gastos dentro de todo ----------
+# Su frontal se sirve también aquí, el mismo index.html leído de su carpeta, con "/api/"
 # cambiado a "/api/<app>/": un solo login (el de todo) y una sola PWA. Las llamadas se reenvían
 # por 127.0.0.1 con el bearer de cada app. Sus webs propias siguen igual.
 # Los gastos de Aitana son otra instancia de gastos (~/gastos-aitana, :8086): datos aparte, mismo frontal.
 GASTOS = Path("/home/pi/gastos/static/index.html")
 # La copia de todo de Aitana (~/todo-aitana) apunta GASTOS_URL a :8086 con su propia clave: no tiene la de Yago.
-OTRAS = {"comida": ("http://127.0.0.1:8084", Path("/home/pi/comida/static/index.html"), "COMIDA_PASS", ""),
-         "gastos": (os.getenv("GASTOS_URL", "http://127.0.0.1:8085"), GASTOS, "GASTOS_PASS", ""),
+OTRAS = {"gastos": (os.getenv("GASTOS_URL", "http://127.0.0.1:8085"), GASTOS, "GASTOS_PASS", ""),
          "gastos-aitana": ("http://127.0.0.1:8086", GASTOS, "GASTOS_AITANA_PASS", "Aitana")}
 
 
@@ -2237,7 +2246,7 @@ def boton(href, texto, actual=False):
 # el mismo menú de arriba a la derecha que en las páginas de todo (en la app del iPhone no hay botón
 # de atrás). Si la cabecera ya tiene algo empujado a la derecha (.ciclo de gastos), va pegado a eso.
 MENU = [("/", "Hoy"), ("/habitos.html", "Hábitos"), ("/pendientes.html", "Pendientes"), ("/entreno.html", "Entreno"),
-        ("/salud.html", "Salud"), ("/comida.html", "Comida"), ("/gastos.html", "Gastos")]
+        ("/salud.html", "Salud"), ("/gastos.html", "Gastos")]
 ESTILO_MENU = ("<style>.menu-todo{margin-left:auto;display:flex;gap:6px;max-width:100%;overflow-x:auto;"
                "scrollbar-width:none}.menu-todo a{text-decoration:none}"
                "@media(min-width:920px){.ciclo~.menu-todo{margin-left:0}}</style>")   # en móvil va en su línea
@@ -2257,8 +2266,7 @@ def frontal(nombre):
     aqui = "/" + nombre.split("-")[0] + ".html"
     menu = ESTILO_MENU + '<nav class="menu-todo">' + "".join(
         f'<a class="c-btn mini" href="{h}">{t}</a>' for h, t in MENU if h != aqui) + "</nav>"
-    # comida cierra la cabecera con sus pestañas, que en móvil ocupan una línea entera: el menú, antes
-    ancla = '<nav class="pestanas' if '<nav class="pestanas' in html else "</header>"
+    ancla = "</header>"
     # como las páginas de todo: barra de estado translúcida en la app instalada (los avisos salen de la isla)
     html = html.replace("</title>", '</title>\n<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">'
                         '\n<link rel="manifest" href="/manifest.json" crossorigin="use-credentials">'
@@ -2268,18 +2276,7 @@ def frontal(nombre):
                         '\n<style>@view-transition{navigation:auto}'
                         '@media(prefers-reduced-motion:reduce){@view-transition{navigation:none}}</style>', 1)
     html = html.replace('<html lang="es">', '<html lang="es" data-vt>', 1)
-    if nombre == "comida":
-        # dentro de todo (y de Tom) solo la comida: recetas con sus ingredientes, kcal y macros. La lista de la
-        # compra y las cuentas siguen en comida.yagotg.dev para quien haga la compra (Yago, 12/11)
-        html = html.replace('id="app" data-vista="lista"', 'id="app" data-vista="menu"', 1).replace("<h2>Menú <em", "<h2>Esta semana <em", 1)
-        html = html.replace("</title>", "</title>\n<style>#p-lista,#p-resumen,.pestanas,#m-coste{display:none!important}"
-                            "#p-menu{display:grid!important;grid-column:1/-1}</style>", 1)
     return HTMLResponse(html.replace(ancla, menu + ancla, 1))
-
-
-@app.get("/comida.html")
-def frontal_comida():
-    return frontal("comida")
 
 
 @app.get("/gastos.html")
@@ -2296,14 +2293,12 @@ def reenvia(url, metodo, cuerpo, clave):
     req = urllib.request.Request(url, data=cuerpo if metodo != "GET" else None, method=metodo,
                                  headers={"Authorization": f"Bearer {clave}", "Content-Type": "application/json"})
     try:
-        # /api/menu de comida llama a Claude y tarda minutos
         with urllib.request.urlopen(req, timeout=900) as r:
             return r.status, r.read()
     except urllib.error.HTTPError as e:
         return e.code, e.read()
 
 
-@app.api_route("/api/comida/{ruta:path}", methods=["GET", "POST", "PUT"])
 @app.api_route("/api/gastos/{ruta:path}", methods=["GET", "POST", "PUT"])
 @app.api_route("/api/gastos-aitana/{ruta:path}", methods=["GET", "POST", "PUT"])
 async def otra_app(ruta: str, request: Request, todo_sesion: str = Cookie(None), authorization: str = Header(None)):

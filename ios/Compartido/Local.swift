@@ -55,8 +55,6 @@ enum Local {
                 return "Cambios en hábitos y entreno"
             case ("PUT", "/api/gastos/estado"), ("PUT", "/api/gastos-aitana/estado"):
                 return "Cambios en gastos"
-            case ("PUT", "/api/comida/estado"):
-                return "Cambios en comida"
             case ("POST", "/api/marca"):
                 let hecho = (json["hecho"] as? Bool) ?? true
                 let id = (json["id"] as? String) ?? "hábito"

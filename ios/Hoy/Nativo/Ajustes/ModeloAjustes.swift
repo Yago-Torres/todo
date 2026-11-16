@@ -81,7 +81,7 @@ struct AjustesTom: Codable, Equatable {
     /// Los módulos del servidor, en el orden de la web.
     static let modulosConocidos: [(id: String, nombre: String)] = [
         ("habitos", "Hábitos"), ("pendientes", "Pendientes"), ("entreno", "Entreno"), ("salud", "Salud"),
-        ("comida", "Comida"), ("gastos", "Gastos"), ("documentos", "Documentos"),
+        ("gastos", "Gastos"), ("documentos", "Documentos"),
     ]
 
     var nombre = ""

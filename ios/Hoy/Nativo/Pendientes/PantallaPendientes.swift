@@ -5,10 +5,15 @@ import UIKit
 /// toca revisar y las notas recientes. Apuntar arriba, completar con un toque (o deslizando), posponer, cambiar y
 /// borrar con «Deshacer». Sin red, los cambios van a la cola y se mandan al volver.
 struct PantallaPendientes: View {
-    enum Seccion: Hashable { case tareas, leer, vault }
+    enum Seccion: Hashable { case board, tareas, leer, vault }
 
     @State private var datos = DatosPendientes.shared
-    @State private var seccion = Seccion.tareas
+    @State private var seccion = Seccion.board
+    @State private var columna = EstadoBoard.nueva
+    @State private var proyecto = ""
+    @State private var nuevaHistoria = false
+    @State private var ficha: TareaVault?
+    @State private var viendoHistorial = false
     @State private var busca = ""
     @State private var nueva = ""
     @State private var nuevaDia: String? = Fecha.hoy()
@@ -25,12 +30,14 @@ struct PantallaPendientes: View {
         VStack(spacing: Tema.Espacio.m) {
             cabecera
             apuntar
-            CampoBusqueda(texto: $busca, pista: "Buscar en \(seccion == .tareas ? "tareas" : seccion == .leer ? "Leer luego" : "el vault")")
+            CampoBusqueda(texto: $busca, pista: "Buscar en \(seccion == .board || seccion == .tareas ? "tareas" : seccion == .leer ? "Leer luego" : "el vault")")
                 .padding(.horizontal, Tema.Espacio.l)
-            SelectorPildoras(opciones: [(Seccion.tareas, "Tareas · \(datos.cuentaTareas)"),
+            SelectorPildoras(opciones: [(Seccion.board, "Board"),
+                                        (Seccion.tareas, "Por fecha · \(datos.cuentaTareas)"),
                                         (Seccion.leer, "Leer luego · \(datos.bandeja?.leer.count ?? 0)"),
                                         (Seccion.vault, "Vault")],
                              seleccion: $seccion)
+            if seccion == .board { controlesBoard }
             lista
         }
         .padding(.top, Tema.Espacio.s)
@@ -52,6 +59,8 @@ struct PantallaPendientes: View {
                       alGuardar: { texto, dia, hora in await datos.edita(t, texto: texto, due: dia, hora: hora) },
                       alBorrar: { await datos.borra(t) })
         }
+        .sheet(item: $ficha) { t in FichaBoard(tarea: t, datos: datos) }
+        .sheet(isPresented: $viendoHistorial) { HistorialBoard() }
         .sheet(isPresented: $eligiendoCuando) {
             HojaTarea(titulo: "Cuándo", dia: nuevaDia, hora: nuevaHora, conTexto: false,
                       alGuardar: { _, dia, hora in
@@ -75,6 +84,15 @@ struct PantallaPendientes: View {
                 Spacer()
                 if datos.cargando && datos.bandeja == nil {
                     ProgressView().tint(Tema.suave)
+                }
+                if seccion == .board {
+                    Button { viendoHistorial = true } label: {
+                        Label("Historial", systemImage: "clock.arrow.circlepath")
+                            .font(Tema.fuente(.pequeno, peso: .medium)).foregroundStyle(Tema.texto)
+                            .padding(.horizontal, 12).padding(.vertical, 7)
+                            .background(Tema.carta2, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             if let copia = datos.copia {
@@ -108,6 +126,20 @@ struct PantallaPendientes: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Cuándo: \(Self.etiqueta(nuevaDia, nuevaHora))")
+                if seccion == .board {
+                    Button {
+                        Haptica.shared.toca(.marcar)
+                        nuevaHistoria.toggle()
+                    } label: {
+                        Label("Historia", systemImage: nuevaHistoria ? "checkmark.circle.fill" : "circle")
+                            .font(Tema.fuente(.pequeno, peso: .medium))
+                            .foregroundStyle(nuevaHistoria ? Tema.acentoTexto : Tema.texto)
+                            .padding(.horizontal, 12).padding(.vertical, 7)
+                            .background(nuevaHistoria ? Tema.acento : Tema.carta2, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(nuevaHistoria ? .isSelected : [])
+                }
                 Spacer()
                 Button(action: envia) {
                     Image(systemName: "arrow.up")
@@ -129,11 +161,16 @@ struct PantallaPendientes: View {
         guard !enviando, !nueva.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         enviando = true
         Haptica.shared.toca(.marcar)
+        // en el board, con el proyecto filtrado (si hay) y en «Por hacer», que es donde aparece
+        let enBoard = seccion == .board
         Task {
-            if await datos.apunta(nueva, due: nuevaDia, hora: nuevaHora) {
+            if await datos.apunta(nueva, due: nuevaDia, hora: nuevaHora, tags: enBoard && !proyecto.isEmpty ? [proyecto] : [],
+                                  historia: enBoard && nuevaHistoria) {
                 nueva = ""
                 nuevaDia = Fecha.hoy()
                 nuevaHora = nil
+                nuevaHistoria = false
+                if enBoard { columna = .nueva }
             }
             enviando = false
         }
@@ -152,6 +189,7 @@ struct PantallaPendientes: View {
     private var lista: some View {
         List {
             switch seccion {
+            case .board: seccionBoard
             case .tareas: seccionTareas
             case .leer: seccionLeer
             case .vault: seccionVault
@@ -185,6 +223,7 @@ struct PantallaPendientes: View {
 
     private var hayContenido: Bool {
         switch seccion {
+        case .board: return !tarjetas.isEmpty
         case .tareas: return !datos.grupos(buscando: busca).isEmpty || !datos.deProyectos(buscando: busca).isEmpty
         case .leer: return !lecturas.isEmpty
         case .vault: return !revisar.isEmpty || !notas.isEmpty
@@ -193,10 +232,95 @@ struct PantallaPendientes: View {
 
     private var textoVacio: String {
         switch seccion {
+        case .board: return columna == .hecha ? "Lo que acabes este ciclo sale aquí." : "Nada en «\(columna.nombre)»."
         case .tareas: return "Nada pendiente. Apunta algo arriba o díselo a Tom."
         case .leer: return "Comparte un enlace desde Safari con «Leer luego» y aparece aquí, resumido."
         case .vault: return "Nada que revisar ni nada nuevo en las dos últimas semanas."
         }
+    }
+
+    // MARK: board
+
+    @ViewBuilder private var controlesBoard: some View {
+        SelectorPildoras(opciones: EstadoBoard.allCases.map { e in
+                             (valor: e, titulo: "\(e.nombre) · \(datos.columna(e, proyecto: proyecto).count)") },
+                         seleccion: $columna)
+        if !datos.proyectos.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    chipProyecto("", "Todos")
+                    ForEach(datos.proyectos, id: \.self) { x in chipProyecto(x, BoardTexto.bonito(x)) }
+                }
+                .padding(.horizontal, Tema.Espacio.l)
+            }
+        }
+        if let c = datos.bandeja?.ciclo {
+            let quedan = FechasES.entre(Fecha.hoy(), c.hasta) + 1
+            Text("Ciclo \(FechasES.corta(c.desde)) – \(FechasES.corta(c.hasta)) · \(quedan <= 1 ? "último día" : "quedan \(quedan) días")")
+                .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, Tema.Espacio.l)
+        }
+    }
+
+    private func chipProyecto(_ valor: String, _ titulo: String) -> some View {
+        let activo = proyecto == valor
+        return Button {
+            UISelectionFeedbackGenerator().selectionChanged()
+            withAnimation(Tema.Muelle.pantalla) { proyecto = valor }
+        } label: {
+            Text(titulo)
+                .font(Tema.fuente(.pequeno, peso: .medium))
+                .foregroundStyle(activo ? Tema.acentoTexto : Tema.texto)
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .background(activo ? Tema.acento : Tema.carta, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(activo ? .isSelected : [])
+    }
+
+    private var tarjetas: [TareaVault] {
+        datos.columna(columna, proyecto: proyecto).filter { $0.t.contieneBusqueda(busca) || ($0.nota ?? "").contieneBusqueda(busca) }
+    }
+
+    @ViewBuilder private var seccionBoard: some View {
+        let ts = tarjetas
+        if !ts.isEmpty {
+            Section {
+                ForEach(ts) { t in filaBoard(t) }
+            } header: {
+                Text("\(columna.nombre) · \(ts.count)").estiloEtiqueta()
+                    .foregroundStyle(columna == .bloqueada ? Tema.peligro : Tema.suave)
+            }
+        }
+    }
+
+    private func filaBoard(_ t: TareaVault) -> some View {
+        let fija = t.fija == true
+        let padre = t.padre.flatMap { p in datos.todasBoard.first { $0.id == p }?.t }
+        return FilaBoard(tarea: t, padre: padre, filtro: proyecto)
+            .contentShape(Rectangle())
+            .onTapGesture { ficha = t }
+            .listRowBackground(Tema.carta)
+            .listRowSeparatorTint(Tema.linea)
+            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                if let s = t.estadoBoard.siguiente(fija: fija) {
+                    Button { Task { await datos.mueve(t, a: s) } } label: { Label(s.nombre, systemImage: s.icono) }
+                        .tint(Tema.acento)
+                }
+            }
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                if !fija && t.estadoBoard != .bloqueada {
+                    Button { Task { await datos.mueve(t, a: .bloqueada) } } label: { Label("Bloquear", systemImage: "hand.raised") }
+                        .tint(Tema.peligro)
+                }
+            }
+            .contextMenu {
+                ForEach(EstadoBoard.allCases.filter { $0 != t.estadoBoard && !(fija && ($0 == .activa || $0 == .bloqueada)) }, id: \.self) { e in
+                    Button { Task { await datos.mueve(t, a: e) } } label: { Label("Mover a \(e.nombre)", systemImage: e.icono) }
+                }
+                Button { ficha = t } label: { Label("Abrir", systemImage: "square.and.pencil") }
+            }
     }
 
     // MARK: tareas

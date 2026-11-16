@@ -192,6 +192,43 @@ def test_vault():
     d = [t for _, t in vault.de_la_daily(daily)]
     assert [(t["t"], t["due"], t["hora"]) for t in d] == [("Llamar a Nacho", "2026-11-05", "10:00"),
                                                        ("Mirar docu Galileo Teams", "", "")], d
+    # el board: estados con etiqueta, proyecto de la nota, historias con subtareas y ciclos de 3 semanas
+    (vault.VAULT / "Proyectos" / "todo.yagotg.dev.md").write_text(
+        "## Pendiente\n- [ ] Board #historia #ui\n\t- [x] columnas ✅ 2026-11-17\n- [x] vieja ✅ 2026-11-10\n"
+        "un párrafo\n  - [ ] suelta ⏫ 📅 2026-11-20\n", "utf-8")
+    ts = {t["t"]: t for t in vault.todas()}
+    b, c, s = ts["Board"], ts["columnas"], ts["suelta"]
+    assert (b["historia"], b["tags"], b["progreso"], b["estado"]) == (True, ["todo", "ui"], [1, 1], "nueva"), b
+    assert (c["padre"], c["tags"], c["estado"], c["hecha_el"]) == (b["id"], ["todo", "ui"], "hecha", "2026-11-17"), c
+    assert s["padre"] == "" and not s["historia"] and s["tags"] == ["todo"]   # el párrafo corta la historia
+    assert vault.ciclo(date(2026, 11, 16)) == vault.ciclo(date(2026, 12, 6)) == (date(2026, 11, 16), date(2026, 12, 6))
+    assert vault.ciclo(date(2026, 12, 7))[0] == date(2026, 12, 7) and vault.ciclo(date(2026, 11, 15))[0] == date(2026, 10, 26)
+    hoy = date(2026, 11, 20)
+    assert [t["t"] for t in vault.hechas(vault.ciclo(hoy)[0]) if t["nota"] == "todo.yagotg.dev"] == ["columnas"]
+    assert [(g["desde"], [t["t"] for t in g["tareas"]]) for g in vault.historial(hoy)][:1] == [("2026-10-26", ["vieja"])]
+    a = vault.cambia_estado(s["id"], "bloqueada")
+    linea = "  - [ ] suelta #bloqueada ⏫ 📅 2026-11-20"   # antes de los campos de Tasks, que siguen
+    assert a["estado"] == "bloqueada" and linea in (vault.VAULT / "Proyectos" / "todo.yagotg.dev.md").read_text("utf-8")
+    a = vault.cambia_estado(a["id"], "activa")
+    a = vault.cambia_estado(a["id"], "hecha")
+    assert (a["estado"], a["t"]) == ("hecha", "suelta") and "- [x] suelta ⏫ 📅 2026-11-20 ✅" in (
+        vault.VAULT / "Proyectos" / "todo.yagotg.dev.md").read_text("utf-8")
+    assert vault.cambia_estado(a["id"], "nueva")["estado"] == "nueva"
+    e = vault.edita(b["id"], "Board de pendientes", tags=["ui", "Diseño web", "todo", "activa"])
+    assert (e["tags"], e["historia"]) == (["todo", "ui", "Diseño-web"], True), e
+    h = vault.nueva_tarea("filtros", tags=["ui"], padre=e["id"])
+    assert (h["padre"], vault.una(e["id"])["progreso"]) == (e["id"], [1, 2]), h
+    assert "\t- [x] columnas ✅ 2026-11-17\n\t- [ ] filtros #ui\n- [x] vieja" in (
+        vault.VAULT / "Proyectos" / "todo.yagotg.dev.md").read_text("utf-8")
+    n = vault.nueva_tarea("Mudanza", tags=["#casa"], historia=True)
+    assert (n["historia"], n["tags"], n["grupo"]) == (True, ["casa"], "Pendientes"), n
+    for malo in [lambda: vault.cambia_estado(ts["columnas"]["id"], "rara"), lambda: vault.nueva_tarea("x", padre="noexiste"),
+                 lambda: vault.cambia_estado(next(t["id"] for t in vault.todas() if t["fija"]), "activa")]:
+        try:
+            malo()
+            raise AssertionError("dejó pasar algo raro")
+        except ValueError:
+            pass
     l = vault.nueva_lectura({"url": "https://ejemplo.com/a#b", "titulo": "Qué/es: RAG?", "resumen": 'dice "hola"',
                              "tags": ["IA generativa"], "minutos": 6, "enlaces": ["Raspberry Pi"]})
     assert l["ruta"] == "Recursos/Leer luego/Qué es RAG.md", l
@@ -273,31 +310,28 @@ def test_frontal():
     os.environ["GASTOS_AITANA_PASS"] = "x"
     import tempfile
     from pathlib import Path
-    f = Path(tempfile.mkdtemp()) / "index.html"
-    f.write_text('<header class="top"><h1>Comida</h1><nav class="pestanas c-seg"></nav></header>'
+    g = Path(tempfile.mkdtemp()) / "gastos.html"
+    g.write_text('<html lang="es"><title>Gastos</title><header class="top"><h1>Gastos</h1><div class="ciclo"></div></header>'
                  '<script>api("/api/estado"); api("/api/login"); fetch("/api/logout")</script>')
-    g = f.with_name("gastos.html")
-    g.write_text('<header class="top"><h1>Gastos</h1><div class="ciclo"></div></header><script>api("/api/estado")</script>')
-    main.OTRAS = {"comida": ("http://x", f, "COMIDA_PASS", ""), "gastos": ("http://x", g, "GASTOS_PASS", ""),
-                  "gastos-aitana": ("http://y", g, "GASTOS_AITANA_PASS", "Aitana")}
-    html = main.frontal("comida").body.decode()
+    main.OTRAS = {"gastos": ("http://x", g, "GASTOS_PASS", ""), "gastos-aitana": ("http://y", g, "GASTOS_AITANA_PASS", "Aitana")}
+    os.environ.pop("GASTOS_AITANA_PASS")
+    html = main.frontal("gastos").body.decode()
+    os.environ["GASTOS_AITANA_PASS"] = "x"
     # la API va al reenvío; entrar y salir, al login de todo
-    assert '"/api/comida/estado"' in html and '"/api/login"' in html and '"/api/logout"' in html, html
-    # el menú de todo a la derecha, sin la página en la que estás, y antes de las pestañas de comida
-    menu = html[html.index('<nav class="menu-todo">'):html.index('<nav class="pestanas')]
+    assert '"/api/gastos/estado"' in html and '"/api/login"' in html and '"/api/logout"' in html, html
+    # el menú de todo a la derecha, sin la página en la que estás
+    menu = html[html.index('<nav class="menu-todo">'):html.index("</header>")]
     assert [h for h in ("/", "/pendientes.html", "/entreno.html", "/gastos.html") if f'href="{h}"' in menu] == \
-        ["/", "/pendientes.html", "/entreno.html", "/gastos.html"] and "/comida.html" not in menu, menu
+        ["/", "/pendientes.html", "/entreno.html"] and "/comida.html" not in menu, menu
     assert "Aitana" not in html, html
-    # transición entre páginas también en comida y gastos: la regla va en el <head>, antes de pintar nada
-    f.write_text('<html lang="es"><title>Comida</title><header class="top"><h1>Comida</h1><nav class="pestanas c-seg"></nav></header>')
-    html = main.frontal("comida").body.decode()
+    # transición entre páginas también en gastos: la regla va en el <head>, antes de pintar nada
     assert html.startswith('<html lang="es" data-vt>') and html.index("@view-transition") < html.index("<header"), html
     # los gastos de Aitana: su nombre, su reenvío y el selector Yago / Aitana marcando dónde estás
     html = main.frontal("gastos-aitana").body.decode()
-    assert html.startswith('<header class="top"><h1>Gastos · Aitana</h1>') and '"/api/gastos-aitana/estado"' in html, html
+    assert '<h1>Gastos · Aitana</h1>' in html and '"/api/gastos-aitana/estado"' in html, html
     assert 'href="/gastos-aitana.html" style="text-decoration:none;margin-left:8px" aria-current="true"' in html, html
     assert html.index('<div class="ciclo">') < html.index('<nav class="menu-todo">') < html.index("</header>"), html
-    assert 'href="/gastos.html">Gastos' not in html and 'href="/comida.html"' in html, html
+    assert 'href="/gastos.html">Gastos' not in html and 'href="/salud.html"' in html, html
     assert '"/api/gastos/' not in main.frontal("gastos-aitana").body.decode()
 
 
@@ -351,10 +385,10 @@ def test_portada():
     assert o == {"ayer": [{"id": "b", "n": "B"}], "sin_venir": 1}, o
     assert main.olvidos(clean({}), "2026-10-26") == {"ayer": [], "sin_venir": 0}
     # ajustes: lo que falta, por defecto; lo imposible, fuera; sin la clave de una app, esa sección no se puede activar
-    a = main.limpia_ajustes({"nombre": "  Ana   Prueba ", "modulos": {"entreno": {"activo": False}, "salud": {"barra": False}, "comida": {"activo": True}},
+    a = main.limpia_ajustes({"nombre": "  Ana   Prueba ", "modulos": {"entreno": {"activo": False}, "salud": {"barra": False}, "gastos": {"activo": True}},
                              "mascota": {"ancho": 999, "alto": 60, "color": "red\"><script>", "extra": "x", "rubor": True}, "otra": 1})
     assert a["nombre"] == "Ana Prueba" and a["modulos"]["entreno"] == {"activo": False, "barra": True}, a
-    assert a["modulos"]["salud"] == {"activo": True, "barra": False} and a["modulos"]["comida"]["activo"] is bool(os.getenv("COMIDA_PASS")), a
+    assert a["modulos"]["salud"] == {"activo": True, "barra": False} and a["modulos"]["gastos"]["activo"] is bool(os.getenv("GASTOS_PASS")) and "comida" not in a["modulos"], a
     assert (a["mascota"]["ancho"], a["mascota"]["alto"], a["mascota"]["color"], a["mascota"]["extra"], a["mascota"]["rubor"]) == (26, 60, "#CDE77F", "", True), a
     assert "otra" not in a and main.limpia_ajustes(a) == a
     assert a["mascota"]["tipo"] == "fantasma" and main.limpia_ajustes({"mascota": {"tipo": "flor"}})["mascota"]["tipo"] == "flor"

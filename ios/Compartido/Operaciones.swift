@@ -30,13 +30,11 @@ enum Operaciones {
     static let bandeja = "/api/bandeja"
     static let documentos = "/api/documentos"
     static let basesGastos = ["/api/gastos", "/api/gastos-aitana"]
-    /// El estado de Comida: lo tachado, los productos fijados y la variante de cada receta van como operaciones (OpsComida).
-    static let comida = "/api/comida/estado"
     /// Cuántos hábitos admite el servidor (clean() corta en 20).
     static let maximoHabitos = 20
 
     /// Las copias que pueden llevar cambios pendientes encima.
-    static let afectables: Set<String> = Set([state, hoy, bandeja, documentos, comida] + basesGastos.map { $0 + "/estado" })
+    static let afectables: Set<String> = Set([state, hoy, bandeja, documentos] + basesGastos.map { $0 + "/estado" })
 
     /// Un cambio de la cola, ya leído.
     struct Pendiente {
@@ -56,7 +54,6 @@ enum Operaciones {
         switch p.metodo {
         case "OP":
             if p.ruta == state { return [state, hoy] }
-            if p.ruta.hasPrefix("/api/comida/") { return p.op.hasPrefix("comida.") ? [p.ruta] : [] }
             return [p.ruta]
         case "POST":
             if p.ruta == "/api/marca" { return [state, hoy] }
@@ -313,9 +310,12 @@ enum Operaciones {
         switch p.ruta {
         case "/api/tarea":
             guard let tmp = p.cabeceras["x-tom-tmp"], indice(tmp) == nil, let t = a["t"] as? String else { return }
-            var nueva: [String: Any] = ["id": alias(tmp), "t": t, "grupo": "Pendientes", "fija": false]
+            var nueva: [String: Any] = ["id": alias(tmp), "t": t, "grupo": "Pendientes", "fija": false, "estado": "nueva"]
             if let due = a["due"] as? String { nueva["due"] = due }
             if let hora = a["hora"] as? String { nueva["hora"] = hora }
+            if let tags = a["tags"] as? [String] { nueva["tags"] = tags }
+            if (a["historia"] as? Bool) == true { nueva["historia"] = true }
+            if let padre = a["padre"] as? String, !padre.isEmpty { nueva["padre"] = alias(padre) }
             tareas.append(nueva)
         case "/api/tarea/edita":
             guard let id = a["id"] as? String, let i = indice(id) else { return }
@@ -323,6 +323,7 @@ enum Operaciones {
             let due = (a["due"] as? String) ?? ""
             tareas[i]["due"] = due
             tareas[i]["hora"] = due.isEmpty ? "" : ((a["hora"] as? String) ?? "")
+            if let tags = a["tags"] as? [String] { tareas[i]["tags"] = tags }
             tareas[i]["id"] = alias(id)
         case "/api/tarea/hecha":
             guard let id = a["id"] as? String, (a["hecha"] as? Bool) != false, let i = indice(id) else { return }
@@ -330,6 +331,22 @@ enum Operaciones {
         case "/api/tarea/borra":
             guard let id = a["id"] as? String, let i = indice(id) else { return }
             tareas.remove(at: i)
+        case "/api/tarea/estado":
+            // el board: entre las abiertas y las hechas del ciclo (b["hechas"])
+            guard let id = a["id"] as? String, let estado = a["estado"] as? String else { return }
+            var hechas = lista(b["hechas"])
+            var x: [String: Any]
+            if let i = indice(id) {
+                x = tareas.remove(at: i)
+            } else if let j = hechas.firstIndex(where: { idDe($0) == id || idDe($0) == alias(id) }) {
+                x = hechas.remove(at: j)
+            } else {
+                return
+            }
+            x["estado"] = estado
+            x["id"] = alias(id)
+            if estado == "hecha" { hechas.insert(x, at: 0) } else { tareas.append(x) }
+            b["hechas"] = hechas
         case "/api/leido":
             guard let ruta = a["ruta"] as? String else { return }
             b["leer"] = lista(b["leer"]).filter { ($0["ruta"] as? String) != ruta }

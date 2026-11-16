@@ -30,6 +30,18 @@ HECHA = re.compile("\\s*✅\ufe0f?\\s*\\d{4}-\\d{2}-\\d{2}")
 OTROS = re.compile("\\s*(?:[🔺⏫🔼🔽⏬]\ufe0f?|[🛫⏳➕]\ufe0f?\\s*\\d{4}-\\d{2}-\\d{2})")
 # plugin Reminder, el que usa en el curro: (@2026-10-30 10:00)
 AVISO = re.compile(r"\s*\(@(\d{4}-\d{2}-\d{2})(?: (\d{1,2}:\d{2}))?\)")
+HECHA_EL = re.compile("✅\ufe0f?\\s*(\\d{4}-\\d{2}-\\d{2})")
+CAMPOS = (FECHA, HORA, HECHA, OTROS, AVISO)
+
+# ---------- el board ----------
+# Las etiquetas de Obsidian (#algo, con alguna letra) son los proyectos; las de Proyectos/X.md llevan X sin
+# escribirla. Tres son del board: #activa y #bloqueada (el estado; «hecha» es la casilla de siempre) y #historia.
+# Una historia es una tarea con subtareas sangradas debajo (o con #historia, aunque aún no tenga).
+MARCA = re.compile(r"\s*(?:^|(?<=\s))#([\w/-]*[^\W\d][\w/-]*)")
+ESTADOS = ("nueva", "activa", "bloqueada", "hecha")
+RESERVADAS = {"activa", "bloqueada", "historia"}
+# Cada 3 semanas, contando desde este lunes, la columna «Hecha» se vacía: lo de antes queda en historial()
+CICLO0, CICLO = date(2026, 11, 16), 21
 
 
 def escribe(p, texto):
@@ -98,8 +110,14 @@ def parsea(linea):
     hora = (HORA.search(resto) or [None, ""])[1]
     if not due and (r := AVISO.search(resto)) and valida(r[1]):
         due, hora = r[1], r[2] or ""
-    t = AVISO.sub("", OTROS.sub("", HECHA.sub("", HORA.sub("", FECHA.sub("", resto))))).strip()
-    return {"t": t, "due": due, "hora": hora.zfill(5) if hora else "", "hecha": m[2] != " "}
+    marcas = [x[1] for x in MARCA.finditer(resto)]
+    bajas = {x.lower() for x in marcas}
+    t = " ".join(MARCA.sub("", AVISO.sub("", OTROS.sub("", HECHA.sub("", HORA.sub("", FECHA.sub("", resto)))))).split())
+    hecha = m[2] != " "
+    return {"t": t, "due": due, "hora": hora.zfill(5) if hora else "", "hecha": hecha,
+            "estado": "hecha" if hecha else "bloqueada" if "bloqueada" in bajas else "activa" if "activa" in bajas else "nueva",
+            "tags": list(dict.fromkeys(x for x in marcas if x.lower() not in RESERVADAS)),
+            "historia": "historia" in bajas, "hecha_el": (HECHA_EL.search(resto) or [None, ""])[1]}
 
 
 def valida(dia):
@@ -115,26 +133,154 @@ def grupo(rel):
     return rel.split("/")[0] if "/" in rel else "Notas"
 
 
-def tareas():
-    """Las abiertas de todo el vault (sin Archivo/), con un id estable por contenido."""
+def etiqueta(x):
+    """Lo que se puede escribir tras # en Obsidian (sin espacios ni puntos), o "" si no vale."""
+    x = re.sub(r"[^\w/-]+", "-", str(x).strip().lstrip("#").removesuffix(".yagotg.dev")).strip("-")[:30]
+    return x if re.search(r"[^\W\d]", x) else ""
+
+
+def proyecto(rel):
+    """Las de Proyectos/X.md son del proyecto X (todo.yagotg.dev → todo)."""
+    return etiqueta(Path(rel).stem) if rel.startswith("Proyectos/") else ""
+
+
+def sangria(linea):
+    return len(linea.expandtabs(4)) - len(linea.expandtabs(4).lstrip())
+
+
+def todas():
+    """Todas las tareas del vault (sin Archivo/), abiertas y hechas, con un id estable por contenido, sus proyectos
+    y su historia (`padre`: la tarea con menos sangría justo encima, de la que hereda los proyectos)."""
     ps = [p for p in notas() if p.name not in SIN_TAREAS]
     diarias = {}
     for p in ps:
         if p.parent.name == DIARIAS:
             diarias[p.parent] = max(diarias.get(p.parent, p), p, key=lambda x: x.name)
-    out, vistas = [], set()
+    out = []
     for p in ps:
         if p.parent.name == DIARIAS and diarias[p.parent] != p:
             continue
         rel, texto = ruta(p), lee(p)
-        encontradas = (de_la_daily(texto) if p.parent.name == DIARIAS and TITULO.search(texto)
-                       else [(linea, t) for linea in texto.splitlines() if (t := parsea(linea))])
-        for linea, t in encontradas:
-            if not t["hecha"] and t["t"] and (grupo(rel), t["t"]) not in vistas:
-                vistas.add((grupo(rel), t["t"]))
-                out.append({**t, "id": tid(rel, linea), "ruta": rel, "nota": p.stem, "grupo": grupo(rel),
-                            "fija": rel.startswith(SOLO_LECTURA), "abrir": enlace(rel)})
+        base = {"ruta": rel, "nota": p.stem, "grupo": grupo(rel), "fija": rel.startswith(SOLO_LECTURA), "abrir": enlace(rel)}
+        if p.parent.name == DIARIAS and TITULO.search(texto):
+            out += [{"estado": "nueva", "tags": [], "historia": False, "hecha_el": "", **t, **base,
+                     "id": tid(rel, linea), "padre": ""} for linea, t in de_la_daily(texto)]
+            continue
+        pila, pro = [], proyecto(rel)
+        for linea in texto.splitlines():
+            t = parsea(linea)
+            if not t:
+                if linea.strip() and not linea[:1].isspace():
+                    pila = []   # un título o un párrafo: lo de debajo ya no cuelga de la de arriba
+                continue
+            s = sangria(linea)
+            while pila and pila[-1][0] >= s:
+                pila.pop()
+            padre = pila[-1][1] if pila else None
+            x = {**t, **base, "id": tid(rel, linea), "padre": padre["id"] if padre else ""}
+            x["tags"] = list(dict.fromkeys(([pro] if pro else []) + (padre["tags"] if padre else []) + t["tags"]))
+            if padre:
+                padre["historia"] = True
+            pila.append((s, x))
+            out.append(x)
+    hijas = {}
+    for x in out:
+        if x["padre"]:
+            h = hijas.setdefault(x["padre"], [0, 0])
+            h[0] += x["hecha"]
+            h[1] += 1
+    for x in out:
+        if x["historia"]:
+            x["progreso"] = hijas.get(x["id"], [0, 0])   # [hechas, total] de sus subtareas, también las de otros ciclos
+    return out
+
+
+def una(id_):
+    return next((t for t in todas() if t["id"] == id_), None)
+
+
+def tareas():
+    """Las abiertas de todo el vault (las nuevas, activas y bloqueadas del board): la web, el bot y los widgets."""
+    out, vistas = [], set()
+    for t in todas():
+        if not t["hecha"] and t["t"] and (t["grupo"], t["t"]) not in vistas:
+            vistas.add((t["grupo"], t["t"]))
+            out.append(t)
     return sorted(out, key=lambda t: (t["due"] or "9999", t["hora"] or "99", t["grupo"], t["t"]))
+
+
+def ciclo(hoy=None):
+    """El ciclo de 3 semanas en que cae hoy: (primer día, último día)."""
+    hoy = hoy or date.today()
+    desde = CICLO0 + timedelta(days=(hoy - CICLO0).days // CICLO * CICLO)
+    return desde, desde + timedelta(days=CICLO - 1)
+
+
+def hechas(desde=None, hasta=None):
+    """Las hechas con su ✅ entre esos días (incluidos), de la última a la primera."""
+    d, h = desde.isoformat() if desde else "0000", hasta.isoformat() if hasta else "9999"
+    return sorted((t for t in todas() if t["hecha"] and t["t"] and valida(t["hecha_el"]) and d <= t["hecha_el"] <= h),
+                  key=lambda t: t["hecha_el"], reverse=True)
+
+
+def historial(hoy=None):
+    """Lo que ya salió de la columna «Hecha», por ciclos, el más reciente primero."""
+    desde, _ = ciclo(hoy)
+    grupos = {}
+    for t in hechas(None, desde - timedelta(days=1)):
+        a, b = ciclo(date.fromisoformat(t["hecha_el"]))
+        grupos.setdefault(a, {"desde": a.isoformat(), "hasta": b.isoformat(), "tareas": []})["tareas"].append(t)
+    return list(grupos.values())
+
+
+def limpia_tags(tags, rel=""):
+    """Las etiquetas que manda la web o Tom: válidas, sin las del board ni el proyecto que ya da la nota."""
+    fuera = RESERVADAS | {proyecto(rel).lower()}
+    return list(dict.fromkeys(e for x in list(tags or [])[:8] if (e := etiqueta(x)) and e.lower() not in fuera))
+
+
+def pon_marcas(resto, quita, pon):
+    """Quita las etiquetas `quita` (en minúsculas) y pone `pon` justo tras el texto, antes de los campos de Tasks
+    (que los lee desde el final de la línea)."""
+    resto = MARCA.sub(lambda m: "" if m[1].lower() in quita else m[0], resto)
+    corte = min([r.start() for c in CAMPOS if (r := c.search(resto))] + [len(resto)])
+    campos = resto[corte:].strip()
+    return resto[:corte].rstrip() + "".join(f" #{x}" for x in pon) + (f" {campos}" if campos else "")
+
+
+def cambia_estado(id_, estado):
+    """Mueve la tarea en el board: «hecha» es la casilla (marca()); «activa» y «bloqueada», una etiqueta. Lo del
+    curro solo se tacha. Devuelve la tarea como la da todas(), con su id nuevo."""
+    if estado not in ESTADOS:
+        raise ValueError("el estado es nueva, activa, bloqueada o hecha")
+    t = una(id_)
+    if not t:
+        return None
+    if t["fija"] and estado in ("activa", "bloqueada"):
+        raise ValueError("lo del curro solo se puede tachar")
+    if t["hecha"] != (estado == "hecha"):
+        id_ = marca(id_, estado == "hecha")
+    if not t["fija"]:
+        pon = [estado] if estado in ("activa", "bloqueada") else []
+        id_ = reescribe(id_, lambda resto: pon_marcas(resto, {"activa", "bloqueada"}, pon))
+    return una(id_)
+
+
+def reescribe(id_, fn):
+    """Cambia lo que va tras la casilla de una tarea (fuera de Curro). Devuelve el id nuevo, o None."""
+    for p in notas():
+        rel = ruta(p)
+        if rel.startswith(SOLO_LECTURA):
+            continue
+        lineas = p.read_text("utf-8").splitlines(keepends=True)
+        for i, linea in enumerate(lineas):
+            if (m := TAREA.match(linea.rstrip("\n"))) and tid(rel, linea) == id_:
+                nueva = f"{m[1]}{m[2]}{m[3]}{fn(m[4])}"
+                if nueva != linea.rstrip("\n"):
+                    lineas[i] = nueva + ("\n" if linea.endswith("\n") else "")
+                    escribe(p, "".join(lineas))
+                return tid(rel, nueva)
+    return None
 
 
 # ---------- la daily del curro ----------
@@ -222,18 +368,37 @@ def restaura(rel, i, linea):
     return {"id": tid(ruta(p), str(linea))}
 
 
-def nueva_tarea(texto, due="", hora=""):
+def nueva_tarea(texto, due="", hora="", tags=(), historia=False, padre=""):
+    """En Pendientes.md, o debajo de su historia (`padre`, en la nota de esta) si es una subtarea."""
     texto = " ".join(str(texto).split())[:200]
     if not texto:
         raise ValueError("tarea vacía")
+    h = una(padre) if padre else None
+    if padre and (not h or h["fija"] or h["hecha"]):
+        raise ValueError("esa historia ya no está abierta (¿la has cambiado en Obsidian?)")
+    marcas = limpia_tags(tags, h["ruta"] if h else "") + (["historia"] if historia else [])
     # Tasks lee sus campos desde el final: la hora (nuestra) va antes de la fecha o no la reconoce
-    linea = f"- [ ] {texto}" + (f" ⏰ {hora}" if due and hora else "") + (f" 📅 {due}" if due else "")
+    cuerpo = f"[ ] {texto}" + "".join(f" #{x}" for x in marcas) + (f" ⏰ {hora}" if due and hora else "") + (f" 📅 {due}" if due else "")
+    if h:
+        p = VAULT / h["ruta"]
+        lineas = p.read_text("utf-8").splitlines(keepends=True)
+        i = next(i for i, x in enumerate(lineas) if TAREA.match(x.rstrip("\n")) and tid(h["ruta"], x) == padre)
+        j, s = i + 1, sangria(lineas[i])
+        while j < len(lineas) and lineas[j].strip() and sangria(lineas[j]) > s:
+            j += 1   # al final de las subtareas que ya tiene
+        linea = lineas[i][:len(lineas[i]) - len(lineas[i].lstrip())] + "\t- " + cuerpo
+        if not lineas[j - 1].endswith("\n"):
+            lineas[j - 1] += "\n"
+        lineas.insert(j, linea + "\n")
+        escribe(p, "".join(lineas))
+        return una(tid(h["ruta"], linea))
+    linea = f"- {cuerpo}"
     p = VAULT / PENDIENTES
     previo = p.read_text("utf-8") if p.exists() else (
         f"---\ntype: area\ntags: [tareas]\ncreated: {date.today()}\nsource: claude\n---\n"
         "# Pendientes\n\nTareas sueltas que llegan por el bot de Telegram y la web de todo.\n\n")
     escribe(p, previo.rstrip("\n") + "\n" + linea + "\n")
-    return {**parsea(linea), "id": tid(PENDIENTES, linea), "ruta": PENDIENTES, "nota": p.stem}
+    return una(tid(PENDIENTES, linea))
 
 
 def marca(id_, hecha=True):
@@ -257,9 +422,9 @@ def marca(id_, hecha=True):
     return None
 
 
-def edita(id_, texto, due="", hora=""):
-    """Cambia el texto, el día y la hora de una tarea abierta, en su nota y en su sitio. Conserva lo
-    demás del plugin Tasks (prioridad, fechas de inicio…). Devuelve la tarea como la da tareas()."""
+def edita(id_, texto, due="", hora="", tags=None):
+    """Cambia el texto, el día, la hora y (si llegan) los proyectos de una tarea, en su nota y en su sitio. Conserva
+    el estado del board y lo demás del plugin Tasks (prioridad, fechas de inicio…). Devuelve la tarea como todas()."""
     texto = " ".join(str(texto).split())[:200]
     if not texto:
         raise ValueError("tarea vacía")
@@ -272,11 +437,16 @@ def edita(id_, texto, due="", hora=""):
             m = TAREA.match(linea.rstrip("\n"))
             if m and tid(rel, linea) == id_:
                 otros = "".join(OTROS.findall(m[4]))
+                marcas = [x[1] for x in MARCA.finditer(m[4])]
+                marcas = ([x for x in marcas if x.lower() in RESERVADAS] + limpia_tags(tags, rel) if tags is not None
+                          else marcas)
+                el = HECHA_EL.search(m[4])
                 # como en nueva_tarea: Tasks lee desde el final, la hora antes de la fecha
-                nueva = f"{m[1]}{m[2]}{m[3]}{texto}{otros}" + (f" ⏰ {hora}" if due and hora else "") + (f" 📅 {due}" if due else "")
+                nueva = (f"{m[1]}{m[2]}{m[3]}{texto}" + "".join(f" #{x}" for x in marcas) + otros
+                         + (f" ⏰ {hora}" if due and hora else "") + (f" 📅 {due}" if due else "") + (f" ✅ {el[1]}" if el else ""))
                 lineas[i] = nueva + ("\n" if linea.endswith("\n") else "")
                 escribe(p, "".join(lineas))
-                return {**parsea(nueva), "id": tid(rel, nueva), "ruta": rel, "nota": p.stem}
+                return una(tid(rel, nueva))
     return None
 
 

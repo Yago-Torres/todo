@@ -14,12 +14,12 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Ajustes">
 <link rel="preload" href="/fuentes/instrument-sans-normal-latin.woff2?v=1" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/calma.css?v=a43b06bd">
-<script src="/calma.js?v=a43b06bd"></script>
+<link rel="stylesheet" href="/calma.css?v=f18e764d">
+<script src="/calma.js?v=f18e764d"></script>
 <script src="/tom.js?v=1"></script>
 <script src="/mascota.js?v=6"></script>
 <script src="/anime-4.5.0.min.js"></script>
-<script src="/anima.js?v=a43b06bd"></script>
+<script src="/anima.js?v=f18e764d"></script>
 <style>
   /* de una página a otra, la cabecera vuela y la barra de abajo se queda quieta (calma.css, calma.js) */
   @view-transition { navigation: auto; }
@@ -194,7 +194,7 @@
 <script>
 const $ = s => document.querySelector(s);
 const el = (t, cls, txt) => { const e = document.createElement(t); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
-const NOMBRES = {habitos: "Hábitos", pendientes: "Pendientes", entreno: "Entreno", salud: "Salud", comida: "Comida", gastos: "Gastos", documentos: "Documentos"};
+const NOMBRES = {habitos: "Hábitos", pendientes: "Pendientes", entreno: "Entreno", salud: "Salud", gastos: "Gastos", documentos: "Documentos"};
 const CONTROLES = [["ancho", "Ancho", 20, 36, 1], ["alto", "Alto", 50, 90, 1], ["pera", "Forma de pera", 0, 1, .05], ["cola", "Cola de lado", -24, 24, 1],
   ["flecos", "Flecos", 2, 6, 1], ["fleco", "Largo de flecos", 2, 14, 1], ["grumos", "Grumos", 0, .5, .01], ["ojoI", "Ojo izquierdo", 2, 8, .5],
   ["ojoD", "Ojo derecho", 2, 8, .5], ["sep", "Separación de ojos", 8, 26, 1], ["ojosY", "Altura de ojos", .15, .6, .01]];

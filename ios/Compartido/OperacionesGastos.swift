@@ -228,8 +228,7 @@ enum OpsGastos {
             if !l.contains(where: { texto($0, "id") == texto(x, "id") }) { l.append(x) }
             e["ingresos"] = l
         default:
-            // los de Comida (/api/comida/estado) llegan por el mismo camino: Compartido/OperacionesComida.swift
-            return try OpsComida.aplica(op, &e, estricto: estricto)
+            return false
         }
         return true
     }
