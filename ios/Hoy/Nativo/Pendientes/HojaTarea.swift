@@ -8,6 +8,9 @@ struct HojaTarea: View {
     var conTexto = true
     var alGuardar: (_ texto: String, _ dia: String?, _ hora: String?) async -> Void
     var alBorrar: (() async -> Void)?
+    /// Con estado, la hoja empieza por él (por hacer, activa, bloqueada, hecha): elegir uno la mueve y cierra.
+    var estado: EstadoBoard?
+    var alMover: ((EstadoBoard) async -> Void)?
 
     @Environment(\.dismiss) private var cierra
     @State private var texto: String
@@ -21,7 +24,9 @@ struct HojaTarea: View {
 
     init(titulo: String, texto: String = "", dia: String?, hora: String?, conTexto: Bool = true,
          alGuardar: @escaping (_ texto: String, _ dia: String?, _ hora: String?) async -> Void,
-         alBorrar: (() async -> Void)? = nil) {
+         alBorrar: (() async -> Void)? = nil, estado: EstadoBoard? = nil, alMover: ((EstadoBoard) async -> Void)? = nil) {
+        self.estado = estado
+        self.alMover = alMover
         self.titulo = titulo
         self.conTexto = conTexto
         self.alGuardar = alGuardar
@@ -42,6 +47,21 @@ struct HojaTarea: View {
     var body: some View {
         NavigationStack {
             Form {
+                if let estado, let alMover {
+                    Section {
+                        Picker("Estado", selection: Binding(get: { estado }, set: { e in
+                            Haptica.shared.toca(.marcar)
+                            cierra()
+                            Task { await alMover(e) }
+                        })) {
+                            ForEach(EstadoBoard.allCases, id: \.self) { e in Text(e.nombre).tag(e) }
+                        }
+                        .pickerStyle(.segmented)
+                    } header: {
+                        Text("Estado").estiloEtiqueta()
+                    }
+                    .listRowBackground(Tema.carta)
+                }
                 if conTexto {
                     Section {
                         TextField("Llamar al dentista", text: $texto, axis: .vertical)

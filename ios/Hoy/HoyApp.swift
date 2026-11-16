@@ -145,6 +145,13 @@ struct Raiz: View {
 }
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
+    /// El Info.plist deja girar, pero la app va en vertical: solo el board pide horizontal (`Giro.pon`).
+    static var giro: UIInterfaceOrientationMask = .portrait
+
+    func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        Self.giro
+    }
+
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         // lo que tiene que estar antes de acabar el arranque (tareas de fondo, Salud en segundo plano); lo demás,

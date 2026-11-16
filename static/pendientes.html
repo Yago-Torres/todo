@@ -66,6 +66,9 @@
   .tarea .t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
   .tarea .t small { display: block; font-size: var(--t-pequeno); color: var(--suave); }
   .tarea .t small a { text-decoration: none; }
+  .tarea .est { display: inline-block; margin-left: 6px; font-size: 12px; font-weight: 600; padding: 0 7px; border-radius: 999px;
+                background: var(--acento-suave); color: var(--acento); vertical-align: 1px; }
+  .tarea .est.bloqueada { background: color-mix(in srgb, var(--peligro) 14%, transparent); color: var(--peligro); }
   .tarea .cuando { flex: none; font-size: var(--t-pequeno); font-weight: 600; color: var(--suave); white-space: nowrap; padding-top: 2px; font-variant-numeric: tabular-nums; }
   .tarea .cuando.mal { color: var(--peligro); }
   .tarea .cuando.hoy { color: var(--acento); }
@@ -107,6 +110,16 @@
     .tablero { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 84%; overflow-x: auto; scroll-snap-type: x mandatory;
                scrollbar-width: none; margin: 0 -16px; padding: 0 16px; scroll-padding: 0 16px; }
     .col-b { scroll-snap-align: start; }
+  }
+  .girar { display: none; margin: 4px 0 10px; font-size: var(--t-pequeno); color: var(--suave); }
+  @media (max-width: 919px) and (orientation: portrait) { [data-vista="board"] .girar { display: block; } }
+  @media (orientation: landscape) and (max-height: 520px) {
+    [data-vista="board"] #c-board { position: fixed; inset: 0; z-index: 60; margin: 0; border-radius: 0; overflow-y: auto;
+                                    padding: max(10px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+                                             10px max(16px, env(safe-area-inset-left)); }
+    [data-vista="board"] .tablero { grid-auto-flow: row; grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: visible;
+                                    margin: 0; padding: 0; scroll-snap-type: none; }
+    [data-vista="board"] .tarjetas { max-height: none; }
   }
   .col-b { background: var(--carta-2); border-radius: var(--r); padding: 8px; min-height: 120px; transition: box-shadow .15s; }
   .col-b.encima { box-shadow: inset 0 0 0 2px var(--acento); }
@@ -199,6 +212,7 @@
       </div>
     </div>
     <div class="b-filtros" id="b-filtros" role="group" aria-label="Proyecto"></div>
+    <p class="girar">Gira el móvil para ver el board entero.</p>
     <div class="tablero" id="tablero"></div>
   </section>
 
@@ -347,14 +361,14 @@ function fila(t, conNota = true) {
     cargar();   // también si ha fallado: repintar devuelve la fila a su sitio
   };
   const txt = el("div", "t", t.t);
-  if (!t.fija) {   // tocar la tarea la abre para cambiar texto, día u hora
-    txt.setAttribute("role", "button");
-    txt.tabIndex = 0;
-    txt.setAttribute("aria-label", `Cambiar: ${t.t}`);
-    const abre = e => { if (!e.target.closest("a")) editar(t); };
-    txt.onclick = abre;
-    txt.onkeydown = e => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), abre(e));
-  }
+  // tocar la tarea abre su ficha: estado, texto, proyectos, día y hora (las del curro, solo el estado)
+  txt.setAttribute("role", "button");
+  txt.tabIndex = 0;
+  txt.setAttribute("aria-label", `Abrir: ${t.t}`);
+  const abre = e => { if (!e.target.closest("a")) ficha(t); };
+  txt.onclick = abre;
+  txt.onkeydown = e => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), abre(e));
+  if (t.estado === "activa" || t.estado === "bloqueada") txt.firstChild.after(el("span", `est ${t.estado}`, nombreEstado(t.estado)));
   if (conNota && t.grupo !== "Pendientes") {
     const s = el("small"), a = el("a", null, t.nota);
     a.href = t.abrir;
@@ -390,7 +404,7 @@ function ponVista(v) {
   document.querySelectorAll("#b-vista button").forEach(b => b.setAttribute("aria-current", String(b.dataset.v === v)));
 }
 document.querySelectorAll("#b-vista button").forEach(b => { b.onclick = () => ponVista(b.dataset.v); });
-ponVista(lee("board-vista") || "board");
+ponVista(matchMedia("(max-width: 919px)").matches ? "lista" : lee("board-vista") || "board");
 
 function pintaBoard() {
   const T = todasB().filter(t => t.t);
@@ -705,31 +719,6 @@ function pinta() {
   }) : [el("p", "vacio", "Nada nuevo en las dos últimas semanas.")]));
 
   if (recien) { anima.nueva($(`.tarea[data-id="${recien}"]`)); recien = null; }
-}
-
-// editar una tarea ya apuntada
-function editar(t) {
-  hoja.abre({titulo: "Cambiar tarea", texto: t.t, due: t.due, hora: t.hora, alGuardar: async x => {
-    if (!x.t.trim()) { toast("La tarea no puede quedar vacía"); return false; }
-    try {
-      const n = await api("/api/tarea/edita", {id: t.id, t: x.t, due: x.due, hora: x.hora});
-      recien = n.id;
-      toast(`Cambiada: ${n.t}${n.due ? ` · ${hoja.etiqueta(n.due, n.hora)}` : ""}`);
-      cargar();
-    } catch (e) {
-      if (e.message !== "401") toast(`No se ha cambiado: ${e.message}`);
-      return false;
-    }
-  }, alBorrar: async () => {
-    try {
-      const b = await api("/api/tarea/borra", {id: t.id});
-      toast(`Borrada: ${t.t}`, async () => { await api("/api/tarea/restaura", b); cargar(); });
-      cargar();
-    } catch (e) {
-      if (e.message !== "401") toast(`No se ha borrado: ${e.message}`);
-      return false;
-    }
-  }});
 }
 
 // apuntar: por defecto hoy, sin hora

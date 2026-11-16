@@ -420,7 +420,8 @@ Segunda tanda (también hecho):
 **16/11 — Board en Pendientes** (`Pendientes/BoardPendientes.swift`, como el de la web): una píldora por estado (por
 hacer, activa, bloqueada, hecha), filtro por proyecto, deslizar para pasar a la siguiente columna, ficha (estado,
 proyectos, fecha, subtareas de una historia) e historial de los ciclos de 3 semanas. Mover es `POST /api/tarea/estado`,
-que va a la cola sin red como las demás tareas. **Comida se retiró** (la pantalla, su bloque de Hoy y sus operaciones).
+que va a la cola sin red como las demás tareas. Desde el 16/11 Pendientes abre en la lista de siempre (el estado se cambia en la hoja de cada tarea
+o con «Mover a») y el board es `BoardHorizontal`: pantalla completa en horizontal, arrastrar entre columnas. **Comida se retiró** (la pantalla, su bloque de Hoy y sus operaciones).
 
 Lo que queda:
 
