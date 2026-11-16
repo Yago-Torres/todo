@@ -345,7 +345,7 @@ struct DatoVista: View {
         contenido
             .widgetURL(rutaURL(ruta))
             .containerBackground(for: .widget) {
-                if familia == .systemSmall { Paleta.fondo } else { Color.clear }
+                if familia == .systemSmall { FondoWidget() } else { Color.clear }
             }
     }
 

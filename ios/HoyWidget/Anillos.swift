@@ -91,12 +91,48 @@ struct Resumen {
     }
 }
 
+/// El fondo de los widgets: el de Tom, o con juno1980 un panel de plástico con cuatro tornillos.
+struct FondoWidget: View {
+    var body: some View {
+        if AparatoGuardado.juno {
+            ZStack {
+                Paleta.fondo
+                LinearGradient(colors: [Color.white.opacity(0.08), .clear, Color.black.opacity(0.10)],
+                               startPoint: .top, endPoint: .bottom)
+                VStack {
+                    HStack { Tornillo(lado: 7); Spacer(); Tornillo(lado: 7) }
+                    Spacer()
+                    HStack { Tornillo(lado: 7); Spacer(); Tornillo(lado: 7) }
+                }
+                .padding(9)
+            }
+        } else {
+            Paleta.fondo
+        }
+    }
+}
+
+/// Los anillos del día; con juno1980 (y sitio de sobra), vúmetros de aguja apilados.
 struct Anillos: View {
     let valores: [(Double, Color)]
     let grosor: CGFloat
     var separacion: CGFloat = 3
 
     var body: some View {
+        if AparatoGuardado.juno && grosor > 5 {
+            let nombres = valores.count == 3 ? ["HAB", "PAS", "SUE"] : ["€"]
+            VStack(spacing: 3) {
+                ForEach(0..<valores.count, id: \.self) { i in
+                    Vumetro(valor: valores[i].0, etiqueta: i < nombres.count ? nombres[i] : "VU", animar: false)
+                }
+            }
+            .aspectRatio(1, contentMode: .fit)
+        } else {
+            anillos
+        }
+    }
+
+    private var anillos: some View {
         GeometryReader { geo in
             let lado = min(geo.size.width, geo.size.height)
             ZStack {

@@ -25,7 +25,7 @@ struct HoyWidgetVista: View {
         contenido
             .widgetURL(rutaURL(rutaPara(familia)))
             .containerBackground(for: .widget) {
-                if esAccesorio { AccessoryWidgetBackground() } else { Paleta.fondo }
+                if esAccesorio { AccessoryWidgetBackground() } else { FondoWidget() }
             }
     }
 

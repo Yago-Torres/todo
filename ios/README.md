@@ -298,7 +298,13 @@ Todo lo de Tom funciona sin conexión y se sincroniza solo al volver (`Compartid
 **Temas al estilo monkeytype + colores libres.** Catálogo v2 (`GET /apariencia.json`, copia en `Hoy/apariencia.json`):
 `temas` (base, acento, letra, títulos, esquinas, fondo, modo, con su «vibra») y `sugerencias` de base y acento.
 Lo elegido (`GET/POST /api/apariencia`): `{tema (id o "propio"), modo, base, acento (hex), fuente, titulos, esquinas,
-fondo}`. Elegir un tema copia sus valores; tocar cualquiera después lo deja en «propio».
+fondo, aparato}`. Elegir un tema copia sus valores; tocar cualquiera después lo deja en «propio».
+- **Aparato** (`aparato`: `calma` o `hardware`, que en Ajustes se llama «juno1980»): la carcasa, aparte de los colores.
+  `Compartido/Juno.swift` tiene las piezas (panel atornillado, vúmetro de aguja ámbar, cifra en LCD, materiales fijos
+  de `~/estilo/hardware.css`). Con `Tema.juno`, `.carta()` es un panel con tornillos, `EstiloHundir` baja la tecla en vez
+  de encoger, las cifras van en Share Tech Mono y los anillos de Hoy son vúmetros. El widget lo lee de
+  `AparatoGuardado` (app group): fondo atornillado y vúmetros en vez de anillos (los accesorios siguen con anillos).
+  Letras LCD (`ShareTechMono-Regular.ttf`, `VT323-Regular.ttf`, OFL) solo en la app; el widget usa la mono del sistema.
 - `Compartido/Oklch.swift`: la fórmula de calma.js `genera()` cifra a cifra (OKLCH de Ottosson): base + acento →
   todos los tokens de claro y oscuro, la gota y el ascii. #F2F2F2 + #4E7A62 → oscuro fondo #131313, acento #87B098.
 - `Hoy/Aspecto.swift` construye `Tema.actual` (@Observable: se repinta todo con un fundido), lo guarda en el app group,

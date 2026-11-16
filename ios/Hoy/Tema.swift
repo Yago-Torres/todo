@@ -64,11 +64,15 @@ struct Tema {
     var radios = Radios()
     /// La intensidad del fondo de caracteres (0 = apagado, 0,5 sutil, 1 normal, 1,6 más presente).
     var fondo: Double = 0.5
+    /// La carcasa: "calma" o "hardware" (juno1980, Juno.swift).
+    var aparato = "calma"
 
     /// El tema en uso: lo construye Aspecto con el catálogo y lo elegido (Configurar → Apariencia, o la web), con el
     /// filtro del modo noche encima cuando toca.
     /// Leerlo dentro de un body hace que la vista se repinte cuando cambia.
     static var actual: Tema { Aspecto.shared.tema }
+    /// Con el aparato juno1980: paneles atornillados, teclas que se hunden, cifras en LCD y vúmetros.
+    static var juno: Bool { actual.aparato == "hardware" }
 
     // MARK: colores (atajos)
     static var fondo: Color { actual.paleta.fondo.color }
@@ -136,6 +140,9 @@ struct Tema {
             }
         }()
         let base: Font
+        if juno, estilo == .gigante || estilo == .cifra, Letras.lista("Share Tech Mono") {
+            return Font.custom("Share Tech Mono", size: tam, relativeTo: relativo)
+        }
         if let familia, Letras.lista(familia) {
             base = Font.custom(familia, size: tam, relativeTo: relativo)
         } else {
@@ -158,7 +165,20 @@ extension UIColor {
 /// Una carta de Calma: fondo de carta, radio 18 y el borde casi invisible.
 struct EstiloCarta: ViewModifier {
     var relleno: CGFloat = Tema.Espacio.l
-    func body(content: Content) -> some View {
+    @ViewBuilder func body(content: Content) -> some View {
+        if Tema.juno {
+            // juno1980: un panel de plástico atornillado (deja sitio arriba para los tornillos)
+            content
+                .padding(relleno)
+                .padding(.top, relleno < Tema.Espacio.m ? 4 : 0)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(PanelJuno(color: Tema.carta, radio: min(Tema.Radio.carta, 8), tornillos: relleno >= Tema.Espacio.m))
+        } else {
+            calma(content)
+        }
+    }
+
+    private func calma(_ content: Content) -> some View {
         content
             .padding(relleno)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -180,8 +200,11 @@ extension View {
 /// Botón que se hunde un poco al tocarlo, con muelle (para tarjetas y filas).
 struct EstiloHundir: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
+        // juno1980: la tecla baja 2 pt y se oscurece, en vez de encoger
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .scaleEffect(configuration.isPressed && !Tema.juno ? 0.97 : 1)
+            .offset(y: configuration.isPressed && Tema.juno ? 2 : 0)
+            .brightness(configuration.isPressed && Tema.juno ? -0.05 : 0)
             .animation(Tema.Muelle.toque, value: configuration.isPressed)
     }
 }

@@ -297,6 +297,8 @@ final class Aspecto {
             t.radios = Radios(carta: e.carta, boton: e.boton, celda: e.celda)
         }
         if let f = catalogo?.fondos.first(where: { $0.id == eleccion.fondo }) { t.fondo = f.intensidad }
+        t.aparato = eleccion.aparato
+        if t.aparato == "hardware" { Letras.lista("Share Tech Mono"); Letras.lista("VT323") }
         return t
     }
 
@@ -311,6 +313,7 @@ final class Aspecto {
     private func guardaParaWidget() {
         let g = Oklch.genera(base: eleccion.base, acento: eleccion.acento)
         ColoresGuardados.guarda(claro: g.claro.tokens, oscuro: g.oscuro.tokens)
+        AparatoGuardado.guarda(eleccion.aparato)
         WidgetCenter.shared.reloadAllTimelines()
     }
 }
@@ -350,6 +353,7 @@ struct TemaGuardado: Codable, Equatable {
         t.fuentes = Fuentes(texto: texto, titulo: titulo, cifras: cifras)
         if radios.count == 3 { t.radios = Radios(carta: radios[0], boton: radios[1], celda: radios[2]) }
         t.fondo = fondo
+        t.aparato = eleccion.aparato
         return t
     }
 
@@ -357,7 +361,7 @@ struct TemaGuardado: Codable, Equatable {
     func mismoAspecto(_ otro: TemaGuardado?) -> Bool {
         guard let otro else { return false }
         return colores == otro.colores && texto == otro.texto && titulo == otro.titulo && cifras == otro.cifras
-            && radios == otro.radios && fondo == otro.fondo
+            && radios == otro.radios && fondo == otro.fondo && eleccion.aparato == otro.eleccion.aparato
     }
 }
 

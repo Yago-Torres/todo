@@ -129,6 +129,12 @@ struct SeccionPersonalizar: View {
                 LabeledContent("Títulos", value: cat?.fuente(e.titulos)?.nombre ?? e.titulos)
             }
             if let cat {
+                if let aparatos = cat.aparatos, aparatos.count > 1 {
+                    // la carcasa entera: Calma (cartas y cristal) o juno1980 (teclas, LCD y vúmetros)
+                    Picker("Aparato", selection: enlace(\.aparato)) {
+                        ForEach(aparatos) { Text($0.nombre).tag($0.id) }
+                    }
+                }
                 Picker("Esquinas", selection: enlace(\.esquinas)) {
                     ForEach(cat.esquinas) { Text($0.nombre).tag($0.id) }
                 }

@@ -19,6 +19,13 @@ struct Catalogo: Codable {
     var esquinas: [EsquinasCat]
     var fondos: [FondoCat]
     var fijos: Fijos
+    /// Las carcasas: calma o hardware (juno1980). Un catálogo viejo no las trae.
+    var aparatos: [AparatoCat]?
+
+    struct AparatoCat: Codable, Identifiable, Hashable {
+        var id: String
+        var nombre: String
+    }
 
     struct TemaCat: Codable, Identifiable, Hashable {
         var id: String
@@ -34,6 +41,7 @@ struct Catalogo: Codable {
         /// Solo Tom: el fondo animado (FondoTema) y el juego de sonidos (Sonidos) del tema.
         var decoracion: String?
         var sonido: String?
+        var aparato: String?
     }
 
     struct Sugerencias: Codable, Hashable {
@@ -126,6 +134,8 @@ struct Eleccion: Codable, Equatable {
     var titulos: String = "instrument"
     var esquinas: String = "suaves"
     var fondo: String = "sutil"
+    /// La carcasa: "calma" (cartas y cristal) o "hardware" (juno1980: teclas, LCD, vúmetros).
+    var aparato: String = "calma"
 
     init() {}
 
@@ -143,9 +153,10 @@ struct Eleccion: Codable, Equatable {
         titulos = (try? c.decodeIfPresent(String.self, forKey: .titulos)) ?? nil ?? fuente
         esquinas = (try? c.decodeIfPresent(String.self, forKey: .esquinas)) ?? nil ?? d.esquinas
         fondo = (try? c.decodeIfPresent(String.self, forKey: .fondo)) ?? nil ?? d.fondo
+        aparato = (try? c.decodeIfPresent(String.self, forKey: .aparato)) ?? nil ?? d.aparato
     }
 
-    /// Los siete valores de un tema.
+    /// Los valores de un tema (con su carcasa).
     init(tema t: Catalogo.TemaCat, modo: String? = nil) {
         tema = t.id
         self.modo = modo ?? t.modo ?? "sistema"
@@ -155,6 +166,7 @@ struct Eleccion: Codable, Equatable {
         titulos = t.titulos ?? t.fuente
         esquinas = t.esquinas
         fondo = t.fondo
+        aparato = t.aparato ?? "calma"
     }
 }
 

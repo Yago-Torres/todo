@@ -37,7 +37,7 @@ struct MarcoWidget: ViewModifier {
         content
             .widgetURL(rutaURL(ruta))
             .containerBackground(for: .widget) {
-                if esAccesorio(familia) { AccessoryWidgetBackground() } else { Paleta.fondo }
+                if esAccesorio(familia) { AccessoryWidgetBackground() } else { FondoWidget() }
             }
     }
 }

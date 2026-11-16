@@ -131,7 +131,8 @@ struct PantallaHoy: View {
         let pasos = hoy?.salud?.pasos?.ultimo
         let sueno = hoy?.salud?.sueno?.ultimo
         let hs = datos.habitosDeHoy
-        return HStack(spacing: Tema.Espacio.l) {
+        if Tema.juno { return AnyView(vumetros(pasos: pasos, sueno: sueno, hs: hs)) }
+        return AnyView(HStack(spacing: Tema.Espacio.l) {
             ZStack {
                 Anillo(valor: progreso, color: Tema.acento, grosor: 11)
                     .frame(width: 112, height: 112)
@@ -147,7 +148,32 @@ struct PantallaHoy: View {
             }
         }
         .carta()
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .combine))
+    }
+
+    /// juno1980: los tres anillos son vúmetros de aguja con su cifra en la pantalla LCD (como hoy.html).
+    private func vumetros(pasos: Int?, sueno: Int?, hs: [Habito]) -> some View {
+        let lcd = Letras.lista("Share Tech Mono"), ambar = Letras.lista("VT323")
+        let hechos = hs.filter(\.hecho).count
+        let medidores: [(Double, String, String, String)] = [
+            (progreso, "HAB", "\(hechos)/\(hs.count)", "Hábitos"),
+            (Double(pasos ?? 0) / 10_000, "PAS", pasos.map(Self.miles) ?? "—", "Pasos ayer"),
+            (Double(sueno ?? 0) / 480, "SUE", sueno.map(Self.hm) ?? "—", "Dormido"),
+        ]
+        return HStack(alignment: .top, spacing: Tema.Espacio.s) {
+            ForEach(0..<medidores.count, id: \.self) { i in
+                let m = medidores[i]
+                VStack(spacing: Tema.Espacio.xs) {
+                    Vumetro(valor: m.0, etiqueta: m.1, registrada: ambar)
+                    CifraLCD(valor: m.2, que: m.3, registrada: lcd)
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(.top, Tema.Espacio.xs)
+        .carta(relleno: Tema.Espacio.m)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(medidores.map { "\($0.3): \($0.2)" }.joined(separator: ", "))
     }
 
     private func filaAnillo(_ color: Color, _ nombre: String, _ valor: String) -> some View {

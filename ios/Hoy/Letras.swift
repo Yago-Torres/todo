@@ -19,6 +19,9 @@ enum Letras {
         "Fraunces": ["Fraunces"],
         "Shippori Mincho": ["ShipporiMincho-Regular", "ShipporiMincho-Bold"],
         "Zen Kaku Gothic New": ["ZenKakuGothicNew-Regular", "ZenKakuGothicNew-Bold"],
+        // las pantallas del aparato juno1980 (Juno.swift): LCD y ámbar
+        "Share Tech Mono": ["ShareTechMono-Regular"],
+        "VT323": ["VT323-Regular"],
     ]
 
     private static let cerrojo = NSLock()
