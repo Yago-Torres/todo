@@ -173,6 +173,13 @@ struct EstiloCarta: ViewModifier {
                 .padding(.top, relleno < Tema.Espacio.m ? 4 : 0)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(PanelJuno(color: Tema.carta, radio: min(Tema.Radio.carta, 8), tornillos: relleno >= Tema.Espacio.m))
+        } else if Tema.solar || Tema.plano || Tema.conserje {
+            content
+                .padding(relleno)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background {
+                    if Tema.plano { PanelPlano() } else if Tema.conserje { MarcoConserje() } else { CartaSolar() }
+                }
         } else {
             calma(content)
         }

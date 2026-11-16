@@ -30,6 +30,7 @@ struct PantallaHoy: View {
         PantallaEditable(pantalla: "app-hoy", titulo: "Hoy", bloques: Self.bloques, recarga: { await datos.recarga() }) { editar in
             VStack(alignment: .leading, spacing: Tema.Espacio.l) {
                 cabecera(editar: editar)
+                    .modifier(PortadaSolar())
                 if let copia = datos.copia { avisoCopia(copia) }
             }
         } bloque: { id in
@@ -132,6 +133,32 @@ struct PantallaHoy: View {
         let sueno = hoy?.salud?.sueno?.ultimo
         let hs = datos.habitosDeHoy
         if Tema.juno { return AnyView(vumetros(pasos: pasos, sueno: sueno, hs: hs)) }
+        if Tema.solar || Tema.plano || Tema.conserje {
+            // Solarpunk: arcos de sol; Plano: cotas; Conserje: medallones (como en la web)
+            let hechos = hs.filter(\.hecho).count
+            let ms: [(Double, String, String, Color)] = [
+                (progreso, "\(hechos)/\(hs.count)", "hábitos", Tema.acento),
+                (Double(pasos ?? 0) / 10_000, pasos.map(Self.miles) ?? "—", "pasos ayer", Color(hex: "#E8A93A")),
+                (Double(sueno ?? 0) / 480, sueno.map(Self.hm) ?? "—", "dormido", Color(hex: "#5C8DD6")),
+            ]
+            return AnyView(Group {
+                if Tema.plano {
+                    VStack(spacing: Tema.Espacio.l) {
+                        ForEach(0..<ms.count, id: \.self) { i in CotaPlano(valor: ms[i].0, cifra: ms[i].1, que: ms[i].2) }
+                    }
+                } else {
+                    HStack(alignment: .top, spacing: Tema.Espacio.s) {
+                        ForEach(0..<ms.count, id: \.self) { i in
+                            if Tema.conserje { MedallaConserje(valor: ms[i].0, cifra: ms[i].1, que: ms[i].2) }
+                            else { ArcoSol(valor: ms[i].0, cifra: ms[i].1, que: ms[i].2, color: ms[i].3) }
+                        }
+                    }
+                }
+            }
+            .carta()
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(ms.map { "\($0.2): \($0.1)" }.joined(separator: ", ")))
+        }
         return AnyView(HStack(spacing: Tema.Espacio.l) {
             ZStack {
                 Anillo(valor: progreso, color: Tema.acento, grosor: 11)

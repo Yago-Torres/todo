@@ -305,6 +305,12 @@ fondo, aparato}`. Elegir un tema copia sus valores; tocar cualquiera después lo
   de encoger, las cifras van en Share Tech Mono y los anillos de Hoy son vúmetros. El widget lo lee de
   `AparatoGuardado` (app group): fondo atornillado y vúmetros en vez de anillos (los accesorios siguen con anillos).
   Letras LCD (`ShareTechMono-Regular.ttf`, `VT323-Regular.ttf`, OFL) solo en la app; el widget usa la mono del sistema.
+- **Solarpunk, Plano y Conserje** (`solar`, `plano`, `conserje`; `Hoy/Aparatos.swift`): `Tema.solar/plano/conserje`.
+  `.carta()` pasa a carta blanca redonda, pieza de plano con marcas de registro o marco doble granate y oro; los anillos
+  de Hoy, a arcos de sol (`ArcoSol`), cotas (`CotaPlano`) o medallones (`MedallaConserje`). Plano y Conserje imponen
+  sus colores (`PaletaAparato.aplica` en `Aspecto.construye`), como el `!important` de la web. Solarpunk pone la
+  cabecera de Hoy sobre una foto (`PortadaSolar`, `Hoy/nube.webp` y `estanque.webp`, de Wikimedia, con su crédito).
+  Iconos: `Icono-solar`, `Icono-plano`, `Icono-conserje`. El widget sigue igual con estos tres.
 - `Compartido/Oklch.swift`: la fórmula de calma.js `genera()` cifra a cifra (OKLCH de Ottosson): base + acento →
   todos los tokens de claro y oscuro, la gota y el ascii. #F2F2F2 + #4E7A62 → oscuro fondo #131313, acento #87B098.
 - `Hoy/Aspecto.swift` construye `Tema.actual` (@Observable: se repinta todo con un fundido), lo guarda en el app group,

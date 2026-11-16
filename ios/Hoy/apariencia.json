@@ -284,6 +284,51 @@
    "aparato": "calma"
   },
   {
+   "id": "solar",
+   "nombre": "Solarpunk",
+   "vibra": "Ciudades con jardines: fotos de arquitectura verde, cartas blancas y serif amable.",
+   "base": "#F3F1E8",
+   "acento": "#2D7A46",
+   "fuente": "instrument",
+   "titulos": "fraunces",
+   "esquinas": "redondas",
+   "fondo": "apagado",
+   "modo": "sistema",
+   "decoracion": "petalos",
+   "sonido": "madera",
+   "aparato": "solar"
+  },
+  {
+   "id": "plano",
+   "nombre": "Plano",
+   "vibra": "Un plano de ingeniería: tinta azul sobre papel milimetrado; de noche, cianotipo.",
+   "base": "#F6F9FD",
+   "acento": "#1B4F9C",
+   "fuente": "space-grotesk",
+   "titulos": "jetbrains",
+   "esquinas": "rectas",
+   "fondo": "apagado",
+   "modo": "sistema",
+   "decoracion": "rejilla-fina",
+   "sonido": "clic",
+   "aparato": "plano"
+  },
+  {
+   "id": "conserje",
+   "nombre": "Conserje",
+   "vibra": "Un gran hotel de los años 30: rayas rosa, granate, oro y todo centrado.",
+   "base": "#F3DCDA",
+   "acento": "#7E2440",
+   "fuente": "dm-sans",
+   "titulos": "fraunces",
+   "esquinas": "rectas",
+   "fondo": "apagado",
+   "modo": "sistema",
+   "decoracion": "formas",
+   "sonido": "campanas",
+   "aparato": "conserje"
+  },
+  {
    "id": "hardware",
    "nombre": "juno1980",
    "vibra": "Plástico beige, pantallas LCD y teclas que se hunden. Una calculadora de los 70.",
@@ -2803,6 +2848,18 @@
   {
    "id": "hardware",
    "nombre": "juno1980"
+  },
+  {
+   "id": "solar",
+   "nombre": "Solarpunk"
+  },
+  {
+   "id": "plano",
+   "nombre": "Plano"
+  },
+  {
+   "id": "conserje",
+   "nombre": "Conserje"
   }
  ]
 }

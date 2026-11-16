@@ -298,6 +298,7 @@ final class Aspecto {
         }
         if let f = catalogo?.fondos.first(where: { $0.id == eleccion.fondo }) { t.fondo = f.intensidad }
         t.aparato = eleccion.aparato
+        PaletaAparato.aplica(&t.paleta, aparato: t.aparato)
         if t.aparato == "hardware" { Letras.lista("Share Tech Mono"); Letras.lista("VT323") }
         return t
     }
