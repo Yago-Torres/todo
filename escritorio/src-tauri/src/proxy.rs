@@ -45,6 +45,7 @@ pub struct Respuesta {
 
 pub fn agente() -> ureq::Agent {
     ureq::AgentBuilder::new()
+        .try_proxy_from_env(true) // HTTPS_PROXY, si la red obliga a pasar por un proxy
         .redirects(0) // un 302 de Access tiene que llegar aquí, no seguirse hasta la página de login
         .timeout_connect(Duration::from_secs(6))
         .timeout(Duration::from_secs(120))
@@ -288,6 +289,9 @@ fn guarda_claves(req: Request, e: &Estado, cuerpo: &[u8]) {
     }
     // se prueban antes de guardarlas: mejor un error aquí que una ventana en blanco después
     let error = match pide(&e.agente, &c, "GET", "/api/notas", None, &[]) {
+        Err(x) if x.contains("UnknownIssuer") || x.contains("certificate") => Some(format!(
+            "La conexión pasa por algo que cambia el certificado de {} (en un PC de empresa, su proxy). \
+             Si es la red de la empresa, esa empresa puede ver lo que mandas: {x}", c.base)),
         Err(x) => Some(format!("No llego a {}: {x}", c.base)),
         Ok(r) if es_access(&r) => Some("Cloudflare Access no acepta el Client ID o el Client Secret".into()),
         Ok(r) if r.estado == 401 => Some("La contraseña de todo no es esa".into()),

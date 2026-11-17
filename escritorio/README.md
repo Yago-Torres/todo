@@ -78,6 +78,7 @@ Funciona si el PC te deja ejecutar programas: el instalador no pide administrado
   bandeja y el atajo.
 - **Las claves dan acceso a todo** (hábitos, salud, gastos, el vault). En un PC que administra otro, lo que guardas se
   puede leer. En el menú de la bandeja, «Cambiar las claves…» las sustituye.
-- **Proxy con inspección TLS**: si la empresa abre el tráfico HTTPS, la app puede no conectar («No llego a…» al
-  guardar las claves). El navegador sí funciona porque confía en el certificado de la empresa.
+- **Proxy con inspección TLS**: la app usa los certificados del sistema, como el navegador, así que conecta aunque la
+  empresa abra el tráfico HTTPS (antes daba `UnknownIssuer`). Pero entonces **la empresa ve lo que pasa**, claves
+  incluidas: el secreto de Access y la contraseña de todo viajan en cada petición. `HTTPS_PROXY` también se respeta.
 - WebView2 viene con Windows 10 y 11. Si faltara, el instalador lo baja.

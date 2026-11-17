@@ -17,7 +17,8 @@
   input:focus { outline: none; border-color: var(--acento); }
   button { font: inherit; font-weight: 600; border: 0; border-radius: 10px; padding: 11px; background: var(--acento); color: #fff; cursor: pointer; }
   button:disabled { opacity: .5; cursor: default; }
-  code { font-size: 12px; background: var(--fondo); border: 1px solid var(--linea); border-radius: 6px; padding: 6px 8px; display: block; overflow-x: auto; white-space: nowrap; user-select: all; }
+  code { font-size: 12px; background: var(--fondo); border: 1px solid var(--linea); border-radius: 6px; padding: 1px 5px; user-select: all; }
+  code.bloque { display: block; padding: 6px 8px; margin-top: 4px; overflow-x: auto; white-space: nowrap; }
   #msg { min-height: 1.4em; font-size: 14px; }
   #msg.mal { color: var(--peligro); }
   details summary { cursor: pointer; color: var(--suave); font-size: 13px; }
@@ -26,7 +27,7 @@
 <form id="f">
   <h1>Claves de todo</h1>
   <p>Son las mismas tres que pide Tom en el iPhone. Se guardan en el llavero del sistema y la ventana ya no vuelve a pedir contraseña.</p>
-  <p>Sácalas desde la Pi: <code>sudo cat /etc/cloudflare-access/todo-bot.json</code> y la <code>TODO_PASS</code> del <code>.env</code> de todo.</p>
+  <p>Sácalas desde la Pi: <code class="bloque">sudo cat /etc/cloudflare-access/todo-bot.json</code> y la <code>TODO_PASS</code> del <code>.env</code> de todo.</p>
   <label>CF-Access-Client-Id <input name="id" required autocomplete="off" spellcheck="false"></label>
   <label>CF-Access-Client-Secret <input name="secreto" type="password" required autocomplete="off"></label>
   <label>Contraseña de todo <input name="pass" type="password" required autocomplete="off"></label>
