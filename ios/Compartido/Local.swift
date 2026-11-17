@@ -70,6 +70,14 @@ enum Local {
                 return "Borrar tarea"
             case ("POST", "/api/leido"):
                 return "Marcar como leído"
+            case ("POST", "/api/evento"):
+                return "Evento: \((json["t"] as? String) ?? "")"
+            case ("POST", "/api/evento/edita"):
+                return "Cambiar evento: \((json["t"] as? String) ?? "")"
+            case ("POST", "/api/evento/borra"):
+                return "Borrar evento"
+            case ("POST", "/api/evento/restaura"):
+                return "Recuperar evento"
             case ("POST", "/api/nota"):
                 return "Nota: \((json["t"] as? String) ?? "")"
             case ("POST", "/api/nota/edita"):

@@ -15,6 +15,7 @@ struct Dock: View {
         Entrada(clave: "hoy", href: "/", nombre: "Hoy", icono: "sun.max"),
         Entrada(clave: "habitos", href: "/habitos.html", nombre: "Hábitos", icono: "checkmark.circle"),
         Entrada(clave: "pendientes", href: "/pendientes.html", nombre: "Pendientes", icono: "list.bullet"),
+        Entrada(clave: "calendario", href: "/calendario.html", nombre: "Calendario", icono: "calendar"),
         Entrada(clave: "entreno", href: "/entreno.html", nombre: "Entreno", icono: "dumbbell"),
         Entrada(clave: "salud", href: "/salud.html", nombre: "Salud", icono: "heart"),
         Entrada(clave: "gastos", href: "/gastos.html", nombre: "Gastos", icono: "creditcard"),
