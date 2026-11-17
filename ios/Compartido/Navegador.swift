@@ -29,6 +29,8 @@ final class Navegador: ObservableObject {
     @Published var apuntar: TipoCaptura?
     /// «/notas.html» (o el botón de Pendientes): la hoja de Notas rápidas sobre Pendientes.
     @Published var verNotas = false
+    /// «/inversiones.html?review=fecha» (el aviso del domingo): Inversiones abre esa review.
+    @Published var reviewInversiones: String?
 
     /// Lo rellena la app al arrancar con RegistroNativo.rutas (Compartido también compila en el widget, que no las tiene).
     static var nativas: Set<String> = ["/"]
@@ -64,6 +66,9 @@ final class Navegador: ObservableObject {
         let datos = URLComponents(string: r)?.queryItems ?? []
         if let id = datos.first(where: { $0.name == "hecho" })?.value, !id.isEmpty {
             marcaPendiente = id
+        }
+        if destino == "/inversiones.html", let fecha = datos.first(where: { $0.name == "review" })?.value, !fecha.isEmpty {
+            reviewInversiones = fecha
         }
         if destino == "/pendientes.html", datos.contains(where: { $0.name == "nueva" && $0.value == "1" }) {
             apuntarTarea = true

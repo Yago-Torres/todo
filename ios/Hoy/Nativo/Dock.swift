@@ -20,6 +20,7 @@ struct Dock: View {
         Entrada(clave: "salud", href: "/salud.html", nombre: "Salud", icono: "heart"),
         Entrada(clave: "gastos", href: "/gastos.html", nombre: "Gastos", icono: "creditcard"),
         Entrada(clave: "documentos", href: "/documentos.html", nombre: "Docs", icono: "doc.text"),
+        Entrada(clave: "inversiones", href: "/inversiones.html", nombre: "Inversión", icono: "chart.line.uptrend.xyaxis"),
     ]
 
     let actual: String

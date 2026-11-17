@@ -400,6 +400,24 @@ Las **notas rápidas** son ideas sueltas que no son tareas (viven en `Notas ráp
   estaba. «Apunta una nota en Tom» no tiene frase propia de Siri porque ya hay 10 `AppShortcut` (el máximo de iOS): para
   dársela habría que quitar otra en `Hoy/Atajos.swift`.
 
+## Inversiones (`Hoy/Nativo/Inversiones/`)
+
+Una sección de la barra (`/inversiones.html`) con lo de la web: la cartera apuntada a mano, los precios de Yahoo y la
+review del domingo. **Las cuentas las hace el servidor** (`inversiones.py`: FIFO, la serie frente a la referencia, la
+proyección): Tom solo pinta `GET /api/inversiones`, así que la web y el iPhone nunca dan cifras distintas.
+
+- `DatosInversiones`: el informe (con su copia de Local, sin red), y lo que escribe. Apuntar o borrar una operación va
+  por la cola; buscar un activo, guardarlo, pedir precios o guardar el perfil necesitan red (bajan datos de Yahoo).
+  `DineroES` formatea el dinero como la web; `ColoresInv.serie` son los `--serie-N` de calma.css.
+- `CarteraInversiones`: cifras, evolución (valor, lo metido y «todo en la referencia», con selección al tocar), las
+  posiciones (su ficha, `HojaPosicionInv`, con el precio de tres años, el coste medio y tus operaciones) y el reparto.
+- `OperacionesInversiones`: historial (tocar cambia, mantener pulsado borra con «Deshacer») y activos;
+  `HojaOperacionInv` y `HojaActivoInv` (busca en Yahoo al dejar de escribir; primero lo que cotiza en euros).
+- `ReviewInversiones`: el Markdown de la review partido en bloques (`LectorMD`): encabezados, párrafos, listas,
+  tablas que se desplazan de lado y los bloques ```grafica (tarta, barras o líneas) con Swift Charts.
+- `PerfilInversiones`: el contexto que lee la review.
+- `/inversiones.html?review=fecha` (el enlace del aviso del domingo) abre esa review (`Navegador.reviewInversiones`).
+
 ## Calendario (`Hoy/Nativo/Calendario/`)
 
 Una sección de la barra (`/calendario.html`, `hoy://calendario`) con lo de la web: eventos propios del calendario de todo,
