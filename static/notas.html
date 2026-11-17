@@ -24,7 +24,7 @@
   .top { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 4px 2px 0; }
   h1 { margin: 0; font-size: var(--t-titulo); font-weight: 700; letter-spacing: -.02em; }
   .top nav { margin-left: auto; display: flex; gap: 6px; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
-  .top nav a { text-decoration: none; }
+  .top nav a, .volver { text-decoration: none; }
   #estado { font-size: var(--t-pequeno); color: var(--suave); }
   .carta { padding: 16px; min-width: 0; }
   #f-nueva { display: flex; gap: 8px; }
@@ -54,6 +54,7 @@
 
 <div class="app">
   <header class="top">
+    <a class="c-btn mini volver" href="/pendientes.html" aria-label="Volver a Pendientes">← Pendientes</a>
     <h1>Notas rápidas</h1>
     <span id="estado">Cargando…</span>
     <nav><a class="c-btn mini" href="/">Hoy</a><a class="c-btn mini" href="/habitos.html">Hábitos</a><a class="c-btn mini" href="/pendientes.html">Pendientes</a><a class="c-btn mini" href="/entreno.html">Entreno</a><a class="c-btn mini" href="/salud.html">Salud</a><a class="c-btn mini" href="/gastos.html">Gastos</a></nav>
@@ -191,6 +192,8 @@ $("#f-clave").onsubmit = async e => {
   else puerta(true, r && r.status === 401 ? "Contraseña incorrecta" : "No se pudo conectar");
 };
 addEventListener("visibilitychange", () => document.visibilityState === "visible" && cargar());
+// Esc vuelve a Pendientes (en la app de escritorio no hay botón de atrás), salvo si estás escribiendo
+addEventListener("keydown", e => { if (e.key === "Escape" && !e.target.closest("input")) location.href = "/pendientes.html"; });
 // la app de escritorio abre /notas.html?nueva=1 desde la bandeja: directo a escribir
 if (new URLSearchParams(location.search).has("nueva")) $("#f-nueva input").focus();
 cargar();

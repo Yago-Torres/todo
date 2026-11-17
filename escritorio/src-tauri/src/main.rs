@@ -4,7 +4,7 @@
 //! copia para cuando no hay red y el módulo de Waybar (`--waybar`).
 //!
 //! Argumentos: `--oculta` (arranca en la bandeja), `--apuntar` (abre la caja de apuntar; si la app ya
-//! está abierta se lo dice a esa), `--notas`, `--waybar`.
+//! está abierta se lo dice a esa), `--notas`, `--mini` (el mini widget siempre encima), `--waybar`.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod claves;
@@ -53,6 +53,8 @@ fn principal(app: &AppHandle, ruta: Option<&str>, mostrar: bool) {
         .inner_size(1280.0, 820.0)
         .min_inner_size(420.0, 560.0)
         .visible(mostrar)
+        // el de Tauri para soltar ficheros se queda el arrastre de WebView2 y el board no se podía arrastrar
+        .disable_drag_drop_handler()
         .build();
 }
 
@@ -74,7 +76,42 @@ fn apuntar(app: &AppHandle) {
         .skip_taskbar(true)
         .center()
         .focused(true)
+        .disable_drag_drop_handler()
         .build();
+}
+
+/// El mini widget: una ventanita siempre encima para ir apuntando notas y tareas sin que se cierre. Si estaba
+/// abierto al salir, vuelve a abrirse al arrancar (la marca `mini-abierto`).
+fn marca_mini() -> std::path::PathBuf {
+    claves::carpeta("config").join("mini-abierto")
+}
+
+fn mini(app: &AppHandle, abrir: bool) {
+    let marca = marca_mini();
+    if let Some(w) = app.get_webview_window("mini") {
+        let visible = w.is_visible().unwrap_or(false);
+        if abrir && !visible {
+            let _ = w.show();
+            let _ = w.set_focus();
+        } else if !abrir || visible {
+            let _ = w.hide();
+            let _ = std::fs::remove_file(&marca);
+            return;
+        }
+    } else {
+        let e = estado(app);
+        // el título lo busca la regla de Hyprland (flotante y en todos los escritorios)
+        let _ = WebviewWindowBuilder::new(app, "mini", WebviewUrl::External(url(&e, "/_escritorio/mini")))
+            .title("todo · mini")
+            .inner_size(320.0, 380.0)
+            .min_inner_size(260.0, 200.0)
+            .always_on_top(true)
+            .skip_taskbar(true)
+            .disable_drag_drop_handler()
+            .build();
+    }
+    let _ = std::fs::create_dir_all(marca.parent().unwrap());
+    let _ = std::fs::write(&marca, "");
 }
 
 fn bandeja(app: &AppHandle) -> tauri::Result<()> {
@@ -89,6 +126,7 @@ fn bandeja(app: &AppHandle) -> tauri::Result<()> {
             &MenuItem::with_id(app, "abrir", "Abrir todo", true, None::<&str>)?,
             &MenuItem::with_id(app, "apuntar", "Apuntar…", true, None::<&str>)?,
             &MenuItem::with_id(app, "notas", "Notas rápidas", true, None::<&str>)?,
+            &MenuItem::with_id(app, "mini", "Mini widget (siempre encima)", true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
             &CheckMenuItem::with_id(app, "arranque", "Abrir al encender", true, arranque, None::<&str>)?,
             &MenuItem::with_id(app, "claves", "Cambiar las claves…", true, None::<&str>)?,
@@ -107,6 +145,7 @@ fn bandeja(app: &AppHandle) -> tauri::Result<()> {
             "apuntar" => apuntar(app),
             "notas" => principal(app, Some("/notas.html"), true),
             "claves" => principal(app, Some("/_escritorio/configurar"), true),
+            "mini" => mini(app, true),
             "arranque" => {
                 let a = app.autolaunch();
                 let _ = if a.is_enabled().unwrap_or(false) { a.disable() } else { a.enable() };
@@ -188,7 +227,7 @@ fn main() {
         std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
     }
     let oculta = tiene("--oculta");
-    let (abre_apuntar, abre_notas) = (tiene("--apuntar"), tiene("--notas"));
+    let (abre_apuntar, abre_notas, tiene_mini) = (tiene("--apuntar"), tiene("--notas"), tiene("--mini"));
     let e = proxy::arranca(PUERTO).expect("no se pudo abrir el proxy local");
 
     let app = tauri::Builder::default()
@@ -196,6 +235,8 @@ fn main() {
         .plugin(tauri_plugin_single_instance::init(|app, argv, _| {
             if argv.iter().any(|a| a == "--apuntar") {
                 apuntar(app)
+            } else if argv.iter().any(|a| a == "--mini") {
+                mini(app, true)
             } else if argv.iter().any(|a| a == "--notas") {
                 principal(app, Some("/notas.html?nueva=1"), true)
             } else {
@@ -237,6 +278,9 @@ fn main() {
             if abre_apuntar {
                 apuntar(&h);
             }
+            if tiene_mini || marca_mini().exists() {
+                mini(&h, true);
+            }
             avisos(h);
             Ok(())
         })
@@ -245,6 +289,9 @@ fn main() {
             if let WindowEvent::CloseRequested { api, .. } = ev {
                 api.prevent_close();
                 let _ = w.hide();
+                if w.label() == "mini" {
+                    let _ = std::fs::remove_file(marca_mini());
+                }
             }
         })
         .build(tauri::generate_context!())

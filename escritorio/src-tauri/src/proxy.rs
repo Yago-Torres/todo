@@ -21,6 +21,7 @@ use tiny_http::{Header, Request, Response, Server};
 
 const CONFIGURAR: &str = include_str!("../paginas/configurar.html");
 const APUNTAR: &str = include_str!("../paginas/apuntar.html");
+const MINI: &str = include_str!("../paginas/mini.html");
 const SIN_RED: &str = "<!doctype html><meta charset=utf-8><meta name=color-scheme content='light dark'><title>Sin red</title>\
 <body style='font:16px system-ui;display:grid;place-items:center;height:90vh;margin:0'><div style='text-align:center'>\
 <h2>Sin conexión</h2><p>Esta página aún no estaba guardada. Vuelve a probar cuando haya red.</p>\
@@ -221,6 +222,18 @@ fn atiende(mut req: Request, e: &Estado) {
     // ---------- las páginas de la app ----------
     match (metodo.as_str(), ruta.as_str()) {
         ("GET", "/_escritorio/configurar") => return responde(req, 200, "text/html; charset=utf-8", CONFIGURAR.into(), &[]),
+        ("GET", "/_escritorio/mini") => return responde(req, 200, "text/html; charset=utf-8", MINI.into(), &[]),
+        // desde el mini: abre la ventana grande en una página de todo (solo rutas propias, nada de fuera)
+        ("POST", "/_escritorio/abrir") => {
+            let ruta = serde_json::from_slice::<serde_json::Value>(&cuerpo).ok().and_then(|v| v["ruta"].as_str().map(str::to_string));
+            if let (Some(r), Some(w)) = (ruta.filter(|r| r.starts_with('/') && !r.starts_with("//")), e.app.get().and_then(|a| a.get_webview_window("principal"))) {
+                let _ = w.eval(&format!("location.href = {}", serde_json::to_string(&r).unwrap()));
+                let _ = w.show();
+                let _ = w.unminimize();
+                let _ = w.set_focus();
+            }
+            return json(req, 200, serde_json::json!({"ok": true}));
+        }
         ("GET", "/_escritorio/apuntar") => return responde(req, 200, "text/html; charset=utf-8", APUNTAR.into(), &[]),
         ("GET", "/_escritorio/claves") => {
             let c = e.claves();

@@ -5,6 +5,7 @@ aquí solo se cambian líneas sueltas y se escribe de forma atómica (tmp + repl
 Las tareas van en el formato del plugin Tasks: `- [ ] texto ⏰ 10:00 📅 2026-10-30`.
 """
 import hashlib
+import json
 import os
 import re
 import unicodedata
@@ -15,6 +16,9 @@ from pathlib import Path
 VAULT = Path(os.getenv("VAULT", "/srv/obsidian/Yago_obsidian_vault"))
 PENDIENTES = "Pendientes.md"          # donde caen las tareas sueltas (bot y web)
 LEER = "Recursos/Leer luego"
+# El orden a mano de Pendientes y del board (lo que Yago arrastra). Fuera del vault y de data.json: no es de Obsidian
+# y clean() lo borraría. Va por nota + título, que no cambian al mover la tarea de columna (el id sí).
+ORDEN = Path(os.getenv("TODO_ORDEN", Path(__file__).with_name("orden.json")))
 RAPIDAS = "Notas rápidas.md"          # ideas sueltas: no son tareas (sin casilla), pueden llegar a serlo o no
 FUERA = {"Archivo", "_plantillas", "templates", "_adjuntos", ".obsidian", ".trash", "Inbox"}
 SOLO_LECTURA = ("Curro/",)            # lo escribe el portátil del trabajo: se tacha, pero no se edita ni se borra
@@ -207,7 +211,42 @@ def tareas():
         if not t["hecha"] and t["t"] and (t["grupo"], t["t"]) not in vistas:
             vistas.add((t["grupo"], t["t"]))
             out.append(t)
-    return sorted(out, key=lambda t: (t["due"] or "9999", t["hora"] or "99", t["grupo"], t["t"]))
+    o = orden()
+    # lo ordenado a mano primero y en su orden; lo demás (lo nuevo), detrás y por fecha
+    return sorted(out, key=lambda t: (clave(t) not in o, o.get(clave(t), 0), t["due"] or "9999", t["hora"] or "99", t["grupo"], t["t"]))
+
+
+def clave(t):
+    return f"{t['ruta']}\n{t['t']}"
+
+
+def orden():
+    try:
+        return {k: float(v) for k, v in json.loads(ORDEN.read_text("utf-8")).items()}
+    except (OSError, ValueError, AttributeError):
+        return {}
+
+
+def _pon_orden(o):
+    tmp = ORDEN.with_name(f".{ORDEN.name}.tmp")
+    tmp.write_text(json.dumps(o, ensure_ascii=False, indent=0), "utf-8")
+    tmp.replace(ORDEN)
+
+
+def reordena(ids):
+    """`ids` en el orden nuevo (una columna del board o un grupo de la lista). Se reparten entre ellas los puestos que
+    ya tenían, así lo que no se ha arrastrado no se mueve respecto a lo demás; las que no tenían puesto, al final."""
+    ts = [t for t in (una(str(i)) for i in ids[:500]) if t]
+    if not ts:
+        raise ValueError("esas tareas ya no están (¿las has cambiado en Obsidian?)")
+    o = orden()
+    claves = list(dict.fromkeys(clave(t) for t in ts))
+    tope = max(o.values(), default=0)
+    puestos = sorted([o[k] for k in claves if k in o] + [tope + 1 + i for i in range(sum(k not in o for k in claves))])
+    o.update(zip(claves, puestos))
+    vivas = {clave(t) for t in todas()}
+    _pon_orden({k: v for k, v in o.items() if k in vivas})
+    return {"n": len(claves)}
 
 
 def ciclo(hoy=None):
@@ -531,9 +570,15 @@ def edita(id_, texto, due="", hora="", tags=None):
                 # como en nueva_tarea: Tasks lee desde el final, la hora antes de la fecha
                 nueva = (f"{m[1]}{m[2]}{m[3]}{texto}" + "".join(f" #{x}" for x in marcas) + otros
                          + (f" ⏰ {hora}" if due and hora else "") + (f" 📅 {due}" if due else "") + (f" ✅ {el[1]}" if el else ""))
+                viejo = una(id_)
                 lineas[i] = nueva + ("\n" if linea.endswith("\n") else "")
                 escribe(p, "".join(lineas))
-                return una(tid(rel, nueva))
+                t = una(tid(rel, nueva))
+                o = orden()
+                if viejo and t and clave(viejo) in o:   # al cambiarle el título no pierde su sitio
+                    o[clave(t)] = o.pop(clave(viejo))
+                    _pon_orden(o)
+                return t
     return None
 
 

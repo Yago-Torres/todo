@@ -5,6 +5,8 @@ La web de todo.yagotg.dev dentro de una ventana propia, con lo que el navegador 
 - **Bandeja** con lo que queda hoy («2 hábitos y 1 tarea por hoy»). Cerrar la ventana la deja ahí; para salir, «Salir».
 - **Apuntar desde cualquier sitio**: Ctrl+Alt+N en Windows, Super+Alt+N en Omarchy. Una caja flotante para una
   **nota rápida**, una **tarea** (va a Pendientes) o un **gasto** («12,50 comida»). Intro guarda, Esc cierra.
+- **Mini widget** siempre encima (bandeja › «Mini widget», o `--mini`; en Omarchy, Super+Alt+M): una ventanita
+  que no se cierra al guardar, para ir apuntando notas y tareas, con lo último debajo. Si lo dejas abierto, vuelve al arrancar.
 - **Avisos del sistema** a la hora de las tareas de hoy que llevan ⏰.
 - **Arranque al encender** (en Windows se activa la primera vez y se quita en la bandeja; en Omarchy va por `exec-once`).
 - **Sin red**: enseña lo último que llegó y los hábitos marcados se mandan al volver (eso ya lo hace la web, con `sinred.js`).
@@ -36,7 +38,10 @@ siempre al día, sin pantalla de contraseña, y no hay que tocar nada en Cloudfl
 | `src-tauri/src/proxy.rs` | el proxy local, la copia para cuando no hay red y las páginas `/_escritorio/*` |
 | `src-tauri/src/claves.rs` | dónde se guardan las claves |
 | `src-tauri/src/resumen.rs` | lo que queda hoy (bandeja, avisos y Waybar) |
-| `src-tauri/paginas/` | configurar las claves y la caja de apuntar (las sirve el proxy) |
+| `src-tauri/paginas/` | configurar las claves, la caja de apuntar y el mini widget (las sirve el proxy) |
+
+Todas las ventanas llevan `disable_drag_drop_handler()`: el gestor de Tauri para soltar ficheros se queda el
+arrastre de WebView2 en Windows, y sin eso no se podían arrastrar las tarjetas del board.
 | `omarchy/instalar.sh` | instala o actualiza en Omarchy |
 | `icono.png` | de `static/icon.svg`; los iconos de cada tamaño los saca `tauri icon` en Actions |
 

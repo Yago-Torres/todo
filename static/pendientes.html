@@ -137,7 +137,11 @@
   .tarj.historia { border-left-color: var(--serie-7); }
   .col-bloqueada .tarj { border-left-color: var(--peligro); }
   .col-hecha .tarj .tit { color: var(--suave); text-decoration: line-through; }
-  .tarj.arrastrando { opacity: .4; }
+  .tarj.arrastrando, .tarea.arrastrando { opacity: .4; }
+  /* dónde cae lo que arrastras (orden a mano) */
+  .hueco-antes { box-shadow: 0 -3px 0 var(--acento); }
+  .hueco-despues { box-shadow: 0 3px 0 var(--acento); }
+  .tarea[draggable="true"] { cursor: grab; }
   .tarj .kicker { display: flex; gap: 6px; font-size: 12px; font-weight: 600; color: var(--suave); margin-bottom: 4px; }
   .tarj.historia .kicker span:first-child { color: var(--serie-7); }
   .tarj .tit { font-size: var(--t-texto); line-height: 1.35; }
@@ -262,7 +266,7 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span id="b-cuando-txt">Hoy</span>
         </button>
         <button class="c-btn pri" type="submit">Añadir</button>
-        <p class="pista">Toca una tarjeta para cambiarla o moverla de columna (en el ordenador, también arrastrándola). Con hora, te aviso por Telegram. También vale decírselo al bot: «recuérdame llamar al dentista el jueves a las 10».</p>
+        <p class="pista">Toca una tarjeta para cambiarla o moverla de columna (en el ordenador, también arrastrándola; arrastrando también cambias el orden, y se queda). Con hora, te aviso por Telegram. También vale decírselo al bot: «recuérdame llamar al dentista el jueves a las 10».</p>
       </form>
     </section>
 
@@ -469,18 +473,81 @@ function pintaBoard() {
     cab.append(el("span", "n", String(xs.length)));
     lista.append(...(xs.length ? xs.map(tarjeta) : [el("p", "vacio-b", {nueva: "Nada por hacer", activa: "Arrastra aquí lo que estés haciendo",
       bloqueada: "Nada bloqueado", hecha: "Lo que acabes este ciclo"}[e])]));
-    col.ondragover = ev => { if (arrastrada) { ev.preventDefault(); col.classList.add("encima"); } };
-    col.ondragleave = ev => { if (!col.contains(ev.relatedTarget)) col.classList.remove("encima"); };
-    col.ondrop = ev => {
+    // «Hecha» va por fecha de hecha; en las otras, donde la sueltas es su sitio (orden a mano, se guarda)
+    col.ondragover = ev => {
+      if (!arrastrada) return;
+      ev.preventDefault();
+      col.classList.add("encima");
+      if (e !== "hecha") ponHueco(lista, ".tarj", ev, arrastrada.id);
+    };
+    col.ondragleave = ev => { if (!col.contains(ev.relatedTarget)) { col.classList.remove("encima"); quitaHueco(); } };
+    col.ondrop = async ev => {
       ev.preventDefault();
       col.classList.remove("encima");
       const t = arrastrada;
       arrastrada = null;
-      if (t && t.estado !== e) mover(t, e);
+      if (!t) return quitaHueco();
+      let cambio = false;
+      if (e !== "hecha") {
+        const {i, ids} = ponHueco(lista, ".tarj", ev, t.id);
+        ids.splice(i, 0, t.id);
+        cambio = ids.join() !== xs.map(x => x.id).join();
+        if (cambio) await ordena(ids);   // antes de mover: mover le cambia el id, el orden va por nota y título
+      }
+      quitaHueco();
+      if (t.estado !== e) mover(t, e);
+      else if (cambio) cargar();
     };
     col.append(cab, lista);
     return col;
   }));
+}
+
+// ---------- orden a mano ----------
+// Arrastrar dentro de una columna del board o de un grupo de la lista. El servidor lo guarda (orden.json) y
+// /api/bandeja ya llega en ese orden; lo que no has ordenado nunca va detrás, por fecha.
+const ARRASTRAR = matchMedia("(pointer: fine)").matches;
+let arrastradaL = null;   // la fila de la lista que se arrastra: {id, grupo}
+function quitaHueco() {
+  document.querySelectorAll(".hueco-antes, .hueco-despues").forEach(x => x.classList.remove("hueco-antes", "hueco-despues"));
+}
+// dónde caería (índice entre las demás) y la raya que lo enseña
+function ponHueco(caja, sel, ev, fuera) {
+  const xs = [...caja.querySelectorAll(sel)].filter(x => x.dataset.id !== fuera);
+  let i = xs.findIndex(x => { const r = x.getBoundingClientRect(); return ev.clientY < r.top + r.height / 2; });
+  if (i < 0) i = xs.length;
+  quitaHueco();
+  if (xs[i]) xs[i].classList.add("hueco-antes");
+  else if (xs.length) xs[xs.length - 1].classList.add("hueco-despues");
+  return {i, ids: xs.map(x => x.dataset.id)};
+}
+async function ordena(ids) {
+  try { await api("/api/tarea/orden", {ids}); }
+  catch (e) { if (e.message !== "401") toast(`No se ha guardado el orden: ${e.message}`); }
+}
+{
+  const caja = $("#tareas");
+  const sel = () => `.tarea[data-grupo="${CSS.escape(arrastradaL.grupo)}"]`;
+  caja.ondragover = ev => { if (!arrastradaL) return; ev.preventDefault(); ponHueco(caja, sel(), ev, arrastradaL.id); };
+  caja.ondragleave = ev => { if (!caja.contains(ev.relatedTarget)) quitaHueco(); };
+  caja.ondrop = async ev => {
+    if (!arrastradaL) return;
+    ev.preventDefault();
+    const a = arrastradaL, antes = [...caja.querySelectorAll(sel())].map(x => x.dataset.id);
+    const {i, ids} = ponHueco(caja, sel(), ev, a.id);
+    arrastradaL = null;
+    quitaHueco();
+    ids.splice(i, 0, a.id);
+    if (ids.join() !== antes.join()) { await ordena(ids); cargar(); }
+  };
+}
+function arrastrable(f, t, grupo) {
+  if (!ARRASTRAR) return f;
+  f.draggable = true;
+  f.dataset.grupo = grupo;
+  f.ondragstart = ev => { arrastradaL = {id: t.id, grupo}; ev.dataTransfer.effectAllowed = "move"; ev.dataTransfer.setData("text/plain", t.id); f.classList.add("arrastrando"); };
+  f.ondragend = () => { f.classList.remove("arrastrando"); quitaHueco(); arrastradaL = null; };
+  return f;
 }
 
 function tarjeta(t) {
@@ -491,7 +558,7 @@ function tarjeta(t) {
   c.setAttribute("role", "button");
   c.setAttribute("aria-label", `${t.historia ? "Historia" : "Tarea"}: ${t.t}. ${nombreEstado(t.estado)}`);
   c.ondragstart = ev => { arrastrada = t; ev.dataTransfer.effectAllowed = "move"; ev.dataTransfer.setData("text/plain", t.id); c.classList.add("arrastrando"); };
-  c.ondragend = () => { c.classList.remove("arrastrando"); };
+  c.ondragend = () => { c.classList.remove("arrastrando"); quitaHueco(); };
   const [hechas, total] = t.progreso || [0, 0];
   if (t.historia) {
     const k = el("div", "kicker");
@@ -683,7 +750,7 @@ function pinta() {
     ["Sin fecha", T.filter(t => !t.due && sueltas(t))],
   ].filter(g => g[1].length);
   $("#n-tareas").textContent = T.filter(t => t.due || sueltas(t)).length;
-  $("#tareas").replaceChildren(...(grupos.length ? grupos.flatMap(([n, ts, c]) => [el("div", `grupo ${c || ""}`, `${n} · ${ts.length}`), ...ts.map(fila)])
+  $("#tareas").replaceChildren(...(grupos.length ? grupos.flatMap(([n, ts, c]) => [el("div", `grupo ${c || ""}`, `${n} · ${ts.length}`), ...ts.map(t => arrastrable(fila(t), t, n))])
     : [el("p", "vacio", "Nada pendiente con fecha. Apunta algo arriba o díselo al bot.")]));
 
   const plegados = ["Proyectos", "Curro"].map(g => {

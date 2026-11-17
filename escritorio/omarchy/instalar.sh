@@ -48,6 +48,12 @@ bind = SUPER ALT, N, exec, $BIN --apuntar
 windowrule = float, title:^(todo · apuntar)\$
 windowrule = center, title:^(todo · apuntar)\$
 windowrule = pin, title:^(todo · apuntar)\$
+# el mini widget: flotante, en todos los escritorios, arriba a la derecha (se puede mover)
+windowrule = float, title:^(todo · mini)\$
+windowrule = pin, title:^(todo · mini)\$
+windowrule = size 320 380, title:^(todo · mini)\$
+windowrule = move 100%-340 60, title:^(todo · mini)\$
+bind = SUPER ALT, M, exec, $BIN --mini
 CONF
 grep -qxF "source = ~/.config/hypr/todo.conf" "$HYPR/hyprland.conf" 2>/dev/null \
   || printf '\nsource = ~/.config/hypr/todo.conf\n' >> "$HYPR/hyprland.conf"

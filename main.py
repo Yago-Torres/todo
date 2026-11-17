@@ -2128,6 +2128,13 @@ def nota_a_tarea(n: dict, todo_sesion: str = Cookie(None), authorization: str = 
                    hora if len(hora) == 5 and hora[2] == ":" else "", tags)
 
 
+@app.post("/api/tarea/orden")
+def ordena_tareas(o: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    ids = o.get("ids") if isinstance(o.get("ids"), list) else []
+    return _valida(vault.reordena, ids)
+
+
 @app.post("/api/tarea/edita")
 def edita_tarea(t: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
     exige(todo_sesion, authorization)

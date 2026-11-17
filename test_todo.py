@@ -261,6 +261,24 @@ def test_vault():
     vault.leido("Recursos/Leer luego/https a.b.md")
     assert vault.plano("![[a.jpg]] Hola **[[Raspberry Pi|la Pi]]** y [web](https://x.y) `code`\n- [ ] tarea") \
         == "Hola la Pi y web code tarea"
+    # orden a mano: se queda al cambiar de columna y al editar el título; lo nuevo, detrás
+    vault.ORDEN = vault.VAULT.parent / "orden.json"
+    a, b = vault.nueva_tarea("orden uno", "2026-12-01"), vault.nueva_tarea("orden dos", "2026-12-02")
+    nombres = lambda: [t["t"] for t in vault.tareas() if t["t"].startswith("orden")]
+    assert nombres() == ["orden uno", "orden dos"]
+    vault.reordena([b["id"], a["id"]])
+    assert nombres() == ["orden dos", "orden uno"]
+    b2 = vault.cambia_estado(b["id"], "activa")
+    vault.nueva_tarea("orden tres", "2026-01-01")
+    assert nombres() == ["orden dos", "orden uno", "orden tres"], nombres()
+    vault.edita(b2["id"], "orden dos bis", "2026-12-02")
+    assert nombres() == ["orden dos bis", "orden uno", "orden tres"], nombres()
+    tres = next(t for t in vault.tareas() if t["t"] == "orden tres")
+    vault.reordena([tres["id"], a["id"]])   # solo esas dos: la de arriba no se mueve
+    assert nombres() == ["orden dos bis", "orden tres", "orden uno"], nombres()
+    for t in vault.tareas():
+        if t["t"].startswith("orden"):
+            vault.borra(t["id"])
     # notas rápidas: no son tareas, se editan, se borran con deshacer y se pasan a Pendientes
     from datetime import datetime
     (vault.VAULT / vault.RAPIDAS).write_text("# Notas\n- a mano sin hora\n- [ ] esto sí es tarea\n", "utf-8")
