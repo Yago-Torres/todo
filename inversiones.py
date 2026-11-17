@@ -216,7 +216,7 @@ def _precio_en(serie, dia):
 def posiciones(ops, activos, precios, hoy=None):
     """FIFO por activo, como Hacienda: las primeras que compraste son las primeras que vendes."""
     hoy = (hoy or date.today()).isoformat()
-    por = {a["id"]: {"lotes": [], "realizado": 0.0, "dividendos": 0.0, "comisiones": 0.0, "aportado": 0.0, "retirado": 0.0}
+    por = {a["id"]: {"lotes": [], "realizado": 0.0, "dividendos": 0.0, "comisiones": 0.0, "aportado": 0.0, "retirado": 0.0, "hoy_n": 0.0, "hoy_eur": 0.0}
            for a in activos}
     for o in ops:
         x = por.get(o["activo"])
@@ -226,6 +226,9 @@ def posiciones(ops, activos, precios, hoy=None):
         if o["tipo"] == "compra":
             coste = o["cantidad"] * o["precio"] + o["comision"]
             x["lotes"].append([o["cantidad"], coste / o["cantidad"]])
+            if o["fecha"] == hoy:   # lo comprado hoy cuenta para «hoy» desde el precio de compra, no desde el cierre de ayer
+                x["hoy_n"] += o["cantidad"]
+                x["hoy_eur"] += o["cantidad"] * o["precio"]
             x["aportado"] += coste
         elif o["tipo"] == "venta":
             falta, coste = o["cantidad"], 0.0
@@ -252,11 +255,17 @@ def posiciones(ops, activos, precios, hoy=None):
         if serie.get("dias") and dias[-1] < hoy:   # el último cierre no es de hoy: «ayer» es ese cierre
             ayer = serie["dias"][dias[-1]]
         valor = cant * precio if precio is not None else None
+        n_hoy = min(x["hoy_n"], cant)
+        base = (cant - n_hoy) * ayer + (x["hoy_eur"] * n_hoy / x["hoy_n"] if n_hoy else 0) if ayer or n_hoy else None
+        if not ayer and n_hoy < cant:
+            base = None
+        dia_eur = valor - base if valor is not None and base else None
         salida.append({**a, "cantidad": round(cant, 8), "coste": round(coste, 2), "coste_medio": round(coste / cant, 4) if cant else None,
                        "precio": precio, "valor": round(valor, 2) if valor is not None else None,
                        "latente": round(valor - coste, 2) if valor is not None else None,
                        "rent": round((valor / coste - 1) * 100, 2) if valor is not None and coste else None,
-                       "dia": round((precio / ayer - 1) * 100, 2) if precio and ayer else None,
+                       "dia": round(dia_eur / base * 100, 2) if dia_eur is not None else None,
+                       "dia_eur": round(dia_eur, 2) if dia_eur is not None else None,
                        "realizado": round(x["realizado"], 2), "dividendos": round(x["dividendos"], 2),
                        "comisiones": round(x["comisiones"], 2), "aportado": round(x["aportado"], 2), "retirado": round(x["retirado"], 2),
                        "precio_hora": serie.get("hora")})
@@ -346,7 +355,7 @@ def informe(hoy=None):
                   "rent": round((valor / coste - 1) * 100, 2) if coste else None,
                   "realizado": round(sum(x["realizado"] for x in pos), 2), "dividendos": round(sum(x["dividendos"] for x in pos), 2),
                   "comisiones": round(sum(x["comisiones"] for x in pos), 2), "ter_medio": round(ter, 3),
-                  "dia": round(sum((x["valor"] or 0) * (x["dia"] or 0) / (100 + (x["dia"] or 0)) for x in pos), 2)},
+                  "dia": round(sum(x["dia_eur"] or 0 for x in pos), 2)},
         "reparto": reparto, "serie": serie,
         "historicos": {a["simbolo"]: dict(sorted(p.get(a["simbolo"], {}).get("dias", {}).items())[-1300:]) for a in d["activos"]},
         "referencia": {"simbolo": d["perfil"]["referencia"], "nombre": p.get(d["perfil"]["referencia"], {}).get("nombre")},
