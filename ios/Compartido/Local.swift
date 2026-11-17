@@ -70,6 +70,16 @@ enum Local {
                 return "Borrar tarea"
             case ("POST", "/api/leido"):
                 return "Marcar como leído"
+            case ("POST", "/api/nota"):
+                return "Nota: \((json["t"] as? String) ?? "")"
+            case ("POST", "/api/nota/edita"):
+                return "Cambiar nota: \((json["t"] as? String) ?? "")"
+            case ("POST", "/api/nota/borra"):
+                return "Borrar nota"
+            case ("POST", "/api/nota/restaura"):
+                return "Recuperar nota"
+            case ("POST", "/api/nota/tarea"):
+                return "Pasar nota a Pendientes"
             case ("POST", "/api/documentos"):
                 let meta = cabeceras["x-doc"].flatMap { $0.removingPercentEncoding }.flatMap { $0.data(using: .utf8) }
                     .flatMap { (try? JSONSerialization.jsonObject(with: $0)) as? [String: Any] }

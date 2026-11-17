@@ -38,8 +38,14 @@ struct HoyApp: App {
     /// hoy://ruta?r=/habitos.html (el widget, los controles): la pantalla nativa de esa ruta (una desconocida, Hoy).
     /// hoy://voz abre el modo voz.
     /// hoy://configurar abre Configurar (sin claves ya está delante).
+    /// hoy://apuntar?tipo=nota|tarea abre la caja rápida de apuntar (el widget «Apuntar»).
     private func abre(_ url: URL) {
         guard url.scheme == "hoy" else { return }
+        if url.host == "apuntar" {
+            let tipo = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "tipo" }?.value
+            Navegador.shared.apuntar = TipoApunte(rawValue: tipo ?? "") ?? .nota
+            return
+        }
         if url.host == "voz" {
             Navegador.shared.voz = true
             return
@@ -88,6 +94,12 @@ struct Raiz: View {
                 set: { Escalada.shared.hojaVisible = $0 })
     }
 
+    /// La caja rápida de apuntar, tampoco por encima del bloqueo.
+    private var apuntarVisible: Binding<TipoApunte?> {
+        Binding(get: { estado.bloqueado ? nil : navegador.apuntar },
+                set: { navegador.apuntar = $0 })
+    }
+
     /// Igual con Configurar: lo pedido con la app bloqueada sale después de desbloquear.
     private var configurarVisible: Binding<Bool> {
         Binding(get: { estado.configurando && !estado.bloqueado },
@@ -110,6 +122,9 @@ struct Raiz: View {
                     }
                     .sheet(isPresented: escaladaVisible) {
                         HojaEscalada()
+                    }
+                    .sheet(item: apuntarVisible) { tipo in
+                        HojaApuntar(tipo: tipo)
                     }
                     .fullScreenCover(isPresented: vozVisible) {
                         Voz()

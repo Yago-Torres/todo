@@ -1,6 +1,12 @@
 import Foundation
 import Combine
 
+/// Lo que se apunta en la caja rápida (Hoy/Nativo/Notas/HojaApuntar.swift): una nota rápida o un pendiente.
+enum TipoApunte: String, CaseIterable, Identifiable {
+    case nota, tarea
+    var id: String { rawValue }
+}
+
 /// Lo que pide abrir el widget, los accesos del icono, Siri o un aviso: una ruta («/entreno.html»,
 /// «/habitos.html?hecho=id») que acaba siempre en su pantalla nativa; una que no se conoce, en Hoy.
 @MainActor
@@ -19,6 +25,10 @@ final class Navegador: ObservableObject {
     @Published var marcaPendiente: String?
     /// «/pendientes.html?nueva=1» (el control «Apuntar una tarea»): Pendientes enfoca el campo de apuntar.
     @Published var apuntarTarea = false
+    /// La caja rápida de apuntar, encima de todo (el widget «Apuntar», hoy://apuntar?tipo=nota|tarea, el control).
+    @Published var apuntar: TipoApunte?
+    /// «/notas.html» (o el botón de Pendientes): la hoja de Notas rápidas sobre Pendientes.
+    @Published var verNotas = false
 
     /// Lo rellena la app al arrancar con RegistroNativo.rutas (Compartido también compila en el widget, que no las tiene).
     static var nativas: Set<String> = ["/"]
@@ -46,6 +56,7 @@ final class Navegador: ObservableObject {
     @Published var configurar = false
 
     private static let claveVoz = "abreVoz"
+    private static let claveApuntar = "abreApuntar"
 
     func abre(_ ruta: String) {
         let r = ruta.hasPrefix("/") ? ruta : "/" + ruta
@@ -57,7 +68,35 @@ final class Navegador: ObservableObject {
         if destino == "/pendientes.html", datos.contains(where: { $0.name == "nueva" && $0.value == "1" }) {
             apuntarTarea = true
         }
+        // las notas rápidas no son una sección de la barra: se abren como hoja encima de Pendientes
+        if r.components(separatedBy: CharacterSet(charactersIn: "?#")).first == "/notas.html" {
+            verNotas = true
+            pestana = Self.pantalla("/pendientes.html")
+            return
+        }
         pestana = destino
+    }
+
+    /// Como abreVoz: el botón del widget o del control puede correr en su proceso, así que también deja una marca
+    /// en el app group («nota 1731840000») que la app recoge al activarse.
+    func abreApuntar(_ tipo: TipoApunte) {
+        apuntar = tipo
+        Almacen.defaults.set("\(tipo.rawValue) \(Date().timeIntervalSince1970)", forKey: Self.claveApuntar)
+    }
+
+    /// Al pasar a primer plano: una marca de hace menos de un minuto abre la caja de apuntar.
+    func recogeApuntar() {
+        guard let marca = Almacen.defaults.string(forKey: Self.claveApuntar) else { return }
+        Almacen.defaults.removeObject(forKey: Self.claveApuntar)
+        let partes = marca.split(separator: " ")
+        guard partes.count == 2, let tipo = TipoApunte(rawValue: String(partes[0])),
+              let cuando = Double(partes[1]), Date().timeIntervalSince1970 - cuando < 60 else { return }
+        apuntar = tipo
+    }
+
+    /// Con la caja ya abierta, la marca sobra.
+    func olvidaApuntar() {
+        Almacen.defaults.removeObject(forKey: Self.claveApuntar)
     }
 
     /// Un toque en la barra.
