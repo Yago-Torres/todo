@@ -79,6 +79,12 @@ extension API {
         return try await escribeOEncola("/api/tarea", json: json) == nil
     }
 
+    /// Una nota rápida (Notas rápidas.md del vault). Devuelve true si se quedó en la cola.
+    @discardableResult
+    static func notaOEncola(_ texto: String) async throws -> Bool {
+        try await escribeOEncola("/api/nota", json: ["t": texto]) == nil
+    }
+
     /// Como apuntaGasto, pero con el día puesto: si sale mañana de la cola, sigue siendo el gasto de hoy.
     static func apuntaGastoOEncola(importe: Double, nota: String? = nil, cat: String? = nil,
                                    src: String = "siri") async throws -> String {

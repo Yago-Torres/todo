@@ -35,6 +35,7 @@ enum Arranque {
     /// Cada vez que la app pasa a primer plano (también la primera).
     static func alActivar(conClaves: Bool) {
         Navegador.shared.recogeVoz()
+        Navegador.shared.recogeApuntar()
         primeraVez()
         Task { @MainActor in
             await trasPintar(conClaves ? 400 : 0)

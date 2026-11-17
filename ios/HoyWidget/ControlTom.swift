@@ -49,6 +49,21 @@ struct ApuntaTareaControl: ControlWidget {
     }
 }
 
+/// «Apuntar nota»: abre Tom con la caja de apuntar en «Nota rápida» (AbreApuntarIntent deja la marca en el app group,
+/// como «Habla con Tom», porque el control corre en el proceso del widget).
+@available(iOS 18.0, *)
+struct ApuntaNotaControl: ControlWidget {
+    var body: some ControlWidgetConfiguration {
+        StaticControlConfiguration(kind: "dev.yagotg.hoy.nota") {
+            ControlWidgetButton(action: AbreApuntarIntent(tipo: .nota)) {
+                Label("Apuntar nota", systemImage: "lightbulb")
+            }
+        }
+        .displayName("Apuntar nota")
+        .description("Abre Tom para apuntar una nota rápida, una idea que aún no es tarea.")
+    }
+}
+
 // MARK: marcar un hábito
 
 @available(iOS 18.0, *)

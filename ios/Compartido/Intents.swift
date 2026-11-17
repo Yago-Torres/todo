@@ -108,6 +108,47 @@ struct ApuntaTareaIntent: AppIntent {
     }
 }
 
+// MARK: apuntar una nota rápida
+
+/// Para Siri y Atajos: una idea suelta a Notas rápidas (no es una tarea). Sin red, a la cola.
+struct ApuntaNotaIntent: AppIntent {
+    static var title: LocalizedStringResource = "Apuntar una nota"
+    static var description = IntentDescription("Guarda una nota rápida: una idea que todavía no es una tarea.")
+
+    @Parameter(title: "Nota", requestValueDialog: "¿Qué apunto?") var texto: String
+
+    init() {}
+
+    init(texto: String) { self.texto = texto }
+
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        let limpio = texto.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !limpio.isEmpty else { throw APIError(mensaje: "La nota está vacía") }
+        let encolado = try await API.notaOEncola(limpio)
+        let texto = encolado ? "Nota: \(API.avisoEncolado.lowercased())" : "Nota apuntada"
+        return .result(dialog: "\(texto)")
+    }
+}
+
+/// Los botones del widget «Apuntar» y el control: abren Tom con la caja de apuntar (un widget no puede pedir texto).
+struct AbreApuntarIntent: AppIntent {
+    static var title: LocalizedStringResource = "Abrir la caja de apuntar"
+    static var isDiscoverable: Bool { false }
+    static var openAppWhenRun = true
+
+    @Parameter(title: "Qué (nota o tarea)") var tipo: String
+
+    init() {}
+
+    init(tipo: TipoCaptura) { self.tipo = tipo.rawValue }
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        Navegador.shared.abreApuntar(TipoCaptura(rawValue: tipo) ?? .nota)
+        return .result()
+    }
+}
+
 // MARK: abrir una sección
 
 enum Seccion: String, AppEnum {

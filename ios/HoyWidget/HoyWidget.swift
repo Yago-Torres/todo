@@ -87,6 +87,7 @@ struct WidgetHoy: Widget {
 struct HoyWidgets: WidgetBundle {
     var body: some Widget {
         WidgetsDePantalla().body
+        WidgetsDeApuntar().body
         WidgetsVivos().body
         if #available(iOS 18.0, *) {
             ControlesTom().body
@@ -108,6 +109,13 @@ struct WidgetsDePantalla: WidgetBundle {
     }
 }
 
+/// Aparte porque WidgetsDePantalla ya va por nueve.
+struct WidgetsDeApuntar: WidgetBundle {
+    var body: some Widget {
+        ApuntarWidget()
+    }
+}
+
 struct WidgetsVivos: WidgetBundle {
     var body: some Widget {
         EntrenoLiveActivity()
@@ -120,6 +128,7 @@ struct ControlesTom: WidgetBundle {
     var body: some Widget {
         HablaConTomControl()
         ApuntaTareaControl()
+        ApuntaNotaControl()
         MarcaHabitoControl()
         AbreSeccionControl()
     }

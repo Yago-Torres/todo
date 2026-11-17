@@ -55,6 +55,8 @@ struct PantallaPendientes: View {
                       estado: t.estadoBoard, alMover: { e in await datos.mueve(t, a: e) })
         }
         .fullScreenCover(isPresented: $viendoBoard) { BoardHorizontal(datos: datos) }
+        // las notas rápidas (el botón «Notas», o /notas.html desde un enlace): al cerrarlas, lo que pasó a tarea ya está
+        .sheet(isPresented: $navegador.verNotas, onDismiss: { Task { await datos.recarga() } }) { PantallaNotas() }
         .sheet(isPresented: $eligiendoCuando) {
             HojaTarea(titulo: "Cuándo", dia: nuevaDia, hora: nuevaHora, conTexto: false,
                       alGuardar: { _, dia, hora in
@@ -79,6 +81,14 @@ struct PantallaPendientes: View {
                 if datos.cargando && datos.bandeja == nil {
                     ProgressView().tint(Tema.suave)
                 }
+                Button { navegador.verNotas = true } label: {
+                    Label("Notas", systemImage: "lightbulb")
+                        .font(Tema.fuente(.pequeno, peso: .medium)).foregroundStyle(Tema.texto)
+                        .padding(.horizontal, 12).padding(.vertical, 7)
+                        .background(Tema.carta2, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Abre las notas rápidas: ideas que aún no son tareas")
                 Button { viendoBoard = true } label: {
                     Label("Board", systemImage: "rectangle.split.3x1")
                         .font(Tema.fuente(.pequeno, peso: .medium)).foregroundStyle(Tema.texto)

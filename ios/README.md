@@ -115,7 +115,7 @@ Desde entonces, dos toques en la espalda del iPhone abren Tom escuchando.
 
 ### Centro de control y botón de acción (iOS 18)
 
-Abre el centro de control, mantén pulsado un hueco, toca **Añadir un control** y busca **Tom**: el control **Habla con Tom** abre el modo voz. El mismo control se puede poner en la pantalla de bloqueo (en lugar de la linterna o la cámara). El iPhone 15 no Pro no tiene botón de acción; en un modelo con botón, también se puede asignar ahí.
+Abre el centro de control, mantén pulsado un hueco, toca **Añadir un control** y busca **Tom**: el control **Habla con Tom** abre el modo voz; **Apuntar nota** abre la caja de apuntar (ver «Notas rápidas y apuntar»). El mismo control se puede poner en la pantalla de bloqueo (en lugar de la linterna o la cámara). El iPhone 15 no Pro no tiene botón de acción; en un modelo con botón, también se puede asignar ahí.
 
 ## Actualizar
 
@@ -379,6 +379,26 @@ Conocidas (sin Enlace): Instagram, TikTok, YouTube, X, Facebook, Reddit, WhatsAp
 ## Ajustes de Tom desde el icono
 
 Mantén pulsado el icono de Tom → **Ajustes de Tom**. Ahí están las claves, Salud, los avisos, el freno y **Diagnóstico → Comprobar conexión**: la firma (app group, Salud), las claves y si el servidor contesta (con qué código y en cuánto). Si algo sale con ✗, manda una captura.
+
+## Notas rápidas y apuntar (`Hoy/Nativo/Notas/`)
+
+Las **notas rápidas** son ideas sueltas que no son tareas (viven en `Notas rápidas.md` del vault, como en la web
+`/notas.html` y la app de escritorio). Las que acaben siendo tareas se pasan a Pendientes.
+- `PantallaNotas`: una hoja sobre Pendientes (botón **Notas** de la cabecera, o un enlace a `/notas.html`, que abre
+  Pendientes con la hoja: `Navegador.verNotas`). Apuntar arriba; deslizar a la derecha (o la flecha) la pasa a
+  Pendientes y a la izquierda la borra, las dos con «Deshacer». API: `GET /api/notas`, `POST /api/nota`, `/api/nota/borra`,
+  `/api/nota/restaura`, `/api/nota/tarea` (`DatosNotas`).
+- `HojaApuntar`: la caja rápida, encima de todo y con el teclado ya fuera: **Nota rápida** o **Pendiente** (sin fecha o
+  «Para hoy»). Intro guarda y se cierra. Sin red, a la cola de siempre (una nota apuntada sin red sale «Sin enviar» y no
+  se puede borrar ni pasar a tarea hasta que salga).
+- Se abre con `hoy://apuntar?tipo=nota` o `?tipo=tarea`, con el widget **Apuntar** y con el control **Apuntar nota**.
+  Un widget o un control no pueden pedir texto: corren `AbreApuntarIntent`, que abre Tom y, como «Habla con Tom», deja
+  una marca en el app group (`Navegador.abreApuntar` / `recogeApuntar` al activarse) por si corre en el proceso del widget.
+- **Widget «Apuntar»** (`HoyWidget/ApuntarWidget.swift`, kind `HoyApuntar`): pequeño (Nota y Pendiente, uno encima de
+  otro), mediano (los dos lado a lado) y en la pantalla de bloqueo (circular: nota; rectangular: los dos botones).
+- **Siri y Atajos**: la acción **Apuntar una nota** (`ApuntaNotaIntent`) está en Atajos > Tom, y **Apuntar una tarea** ya
+  estaba. «Apunta una nota en Tom» no tiene frase propia de Siri porque ya hay 10 `AppShortcut` (el máximo de iOS): para
+  dársela habría que quitar otra en `Hoy/Atajos.swift`.
 
 ## Trabajar en paralelo (ramas nativo/*)
 
