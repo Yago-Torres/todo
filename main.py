@@ -404,8 +404,9 @@ HEX = re.compile(r"#[0-9a-fA-F]{6}")
 
 
 def limpia_apariencia(v):
-    """{tema, modo, base, acento, fuente, titulos, esquinas, fondo}: base y acento son colores libres (#RRGGBB);
-    el tema es solo de dónde salió (si luego cambias algo, se queda en «propio» en la web y en Tom)."""
+    """{tema, modo, base, acento, fuente, titulos, esquinas, fondo, aparato}: base y acento son colores libres (#RRGGBB);
+    el tema es solo de dónde salió (si luego cambias algo, se queda en «propio» en la web y en Tom). El aparato
+    (calma | hardware) es la carcasa entera y va aparte del tema."""
     v, c = dct(v), catalogo()
     d = dict(c["defecto"])
     d.pop("paleta", None)
@@ -415,11 +416,14 @@ def limpia_apariencia(v):
     for k in ("base", "acento"):
         if HEX.fullmatch(str(v.get(k) or "")):
             d[k] = v[k].upper()
-    for k, lista in (("fuente", "fuentes"), ("titulos", "fuentes"), ("esquinas", "esquinas"), ("fondo", "fondos")):
+    for k, lista in (("fuente", "fuentes"), ("titulos", "fuentes"), ("esquinas", "esquinas"), ("fondo", "fondos"), ("aparato", "aparatos")):
         if v.get(k) in ids(lista):
             d[k] = v[k]
     if v.get("modo") in ("sistema", "claro", "oscuro"):
         d["modo"] = v["modo"]
+    # una página vieja (de la copia del service worker) no manda aparato: que lo ponga el tema
+    if "aparato" not in v:
+        d["aparato"] = next((x.get("aparato", "calma") for x in c.get("temas", []) if x["id"] == d["tema"]), d["aparato"])
     return d
 
 

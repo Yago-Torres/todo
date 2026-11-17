@@ -39,7 +39,10 @@ También como app nativa de iPhone, **Tom**, con Siri y modo voz, gratis con Sid
 - **Salud** — fases de la noche, nota de 0 a 100, pasos, peso con su media de 7 días y composición
   de la báscula, con los datos de Salud del iPhone.
 - **Pendientes** — tareas guardadas como Markdown en un vault de Obsidian (formato del plugin Tasks).
-- **Ajustes** — nombre, qué secciones están activas, cuáles salen en la barra de abajo y la mascota.
+- **Ajustes** — nombre, qué secciones están activas, cuáles salen en la barra de abajo y la mascota, la apariencia
+  (tema, colores, letra) y el **aparato**, la carcasa entera: Calma, juno1980 (sintetizador de los 80, con
+  vúmetros y LCD), Solarpunk (fotos de arquitectura con plantas; créditos en `static/fotos/CREDITOS.md`),
+  Plano (plano técnico / cianotipo) y Conserje (gran hotel de los años 30).
 - **Avisos** por Web Push y un **widget** para Scriptable (`static/widget-hoy.js`).
 
 ## Cómo está hecho

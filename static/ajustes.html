@@ -14,12 +14,12 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Ajustes">
 <link rel="preload" href="/fuentes/instrument-sans-normal-latin.woff2?v=1" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/calma.css?v=f18e764d">
-<script src="/calma.js?v=f18e764d"></script>
+<link rel="stylesheet" href="/calma.css?v=efb64faa">
+<script src="/calma.js?v=efb64faa"></script>
 <script src="/tom.js?v=1"></script>
 <script src="/mascota.js?v=6"></script>
 <script src="/anime-4.5.0.min.js"></script>
-<script src="/anima.js?v=f18e764d"></script>
+<script src="/anima.js?v=efb64faa"></script>
 <style>
   /* de una página a otra, la cabecera vuela y la barra de abajo se queda quieta (calma.css, calma.js) */
   @view-transition { navigation: auto; }
@@ -125,6 +125,7 @@
       <h2 id="t-ap">Apariencia</h2>
       <p class="pista">Elige un tema o hazte el tuyo. Se aplica al momento en todas las apps y en Tom.</p>
       <div class="temas" id="ap-temas" role="group" aria-label="Temas"></div>
+      <div class="ap-grupo"><b>Aparato</b><div class="ap-ops" id="ap-aparato"></div></div>
       <div class="ap-grupo"><b>Personalizar <span id="ap-propio" class="c-chip" hidden>propio</span></b></div>
       <div class="ap-colores">
         <label class="ap-color"><span>Fondo</span><input type="color" id="ap-base" aria-label="Color del fondo"></label>
@@ -369,7 +370,7 @@ cargar();
     b.style.setProperty("--t-fondo", n.fondo); b.style.setProperty("--t-texto", n.texto);
     b.innerHTML = `<b style="font-family:${fam(t.titulos).css.replace(/"/g, "'")}">${t.nombre}</b><small style="font-family:${fam(t.fuente).css.replace(/"/g, "'")}">${t.vibra}</small>`
       + `<span class="pts"><i style="background:${n.carta}"></i><i style="background:${a.acento}"></i><i style="background:${g.ac.gota}"></i><i style="background:${(oscuro ? g.claro : g.oscuro).fondo}"></i></span>`;
-    b.addEventListener("click", () => { el = {tema: t.id, modo: t.modo, base: t.base, acento: t.acento, fuente: t.fuente, titulos: t.titulos, esquinas: t.esquinas, fondo: t.fondo}; guarda(); });
+    b.addEventListener("click", () => { el = {tema: t.id, modo: t.modo, base: t.base, acento: t.acento, fuente: t.fuente, titulos: t.titulos, esquinas: t.esquinas, fondo: t.fondo, aparato: t.aparato || "calma"}; guarda(); });
     $a("ap-temas").append(b);
   }
   const sugerencias = (caja, lista, clave) => {
@@ -390,10 +391,12 @@ cargar();
   [...$a("ap-fuente").children, ...$a("ap-titulos").children].forEach(b => { b.style.fontFamily = fam(b.dataset.id).css; });
   opciones("ap-esquinas", cat.esquinas, "esquinas");
   opciones("ap-fondo", cat.fondos, "fondo");
+  // la carcasa: Calma (cartas y cristal) o Hardware (un aparato con teclas y pantallas); los colores siguen siendo tuyos
+  opciones("ap-aparato", cat.aparatos || [{id: "calma", nombre: "Calma"}], "aparato");
   opciones("ap-modo", [{id: "sistema", nombre: "Como el sistema"}, {id: "claro", nombre: "Claro"}, {id: "oscuro", nombre: "Oscuro"}], "modo");
   $a("ap-reset").addEventListener("click", () => { const {paleta, ...d} = cat.defecto; el = {...d}; guarda(); });
   function pinta() {
-    for (const [caja, clave] of [["ap-modo", "modo"], ["ap-fuente", "fuente"], ["ap-titulos", "titulos"], ["ap-esquinas", "esquinas"], ["ap-fondo", "fondo"], ["ap-temas", "tema"],
+    for (const [caja, clave] of [["ap-modo", "modo"], ["ap-aparato", "aparato"], ["ap-fuente", "fuente"], ["ap-titulos", "titulos"], ["ap-esquinas", "esquinas"], ["ap-fondo", "fondo"], ["ap-temas", "tema"],
                                  ["ap-sug-base", "base"], ["ap-sug-acento", "acento"]])
       for (const b of $a(caja).children) b.setAttribute("aria-pressed", String((b.dataset.id || "").toUpperCase() === String(el[clave] || "").toUpperCase()));
     $a("ap-base").value = el.base.toLowerCase(); $a("ap-acento-c").value = el.acento.toLowerCase();

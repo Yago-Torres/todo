@@ -15,13 +15,13 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Pendientes">
 <link rel="preload" href="/fuentes/instrument-sans-normal-latin.woff2?v=1" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/calma.css?v=f18e764d">
-<script src="/calma.js?v=f18e764d"></script>
+<link rel="stylesheet" href="/calma.css?v=efb64faa">
+<script src="/calma.js?v=efb64faa"></script>
 <script src="/tom.js?v=1"></script>
 <script src="/mascota.js?v=6"></script>
 <script src="/anime-4.5.0.min.js"></script>
-<script src="/anima.js?v=f18e764d"></script>
-<script src="/hoja.js?v=f18e764d"></script>
+<script src="/anima.js?v=efb64faa"></script>
+<script src="/hoja.js?v=efb64faa"></script>
 <style>
   /* de una página a otra, la cabecera vuela y la barra de abajo se queda quieta (calma.css, calma.js) */
   @view-transition { navigation: auto; }
@@ -179,6 +179,37 @@
   .h-fila { display: flex; gap: 10px; align-items: baseline; padding: 6px 2px; border-bottom: 1px solid var(--linea); }
   .h-fila span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
   .h-fila small { flex: none; color: var(--suave); font-size: var(--t-pequeno); }
+
+  /* ---------- aparato hardware (la carcasa común está en hardware.css; aquí, Pendientes) ---------- */
+  /* la lista: casillas de tecla cuadrada y fechas en la letra de la pantalla */
+  [data-aparato="hardware"] .tarea .bx { border-radius: 4px; border: 2px solid var(--suave); }
+  [data-aparato="hardware"] .tarea .bx.ok { border-color: var(--acento); }
+  [data-aparato="hardware"] .tarea .cuando { font-family: var(--f-lcd); font-weight: 400; text-transform: uppercase; }
+  [data-aparato="hardware"] .grupo { text-transform: uppercase; letter-spacing: .12em; font-size: 11px; font-stretch: 85%; }
+  [data-aparato="hardware"] .tarea .est { border-radius: 3px; font-family: var(--f-lcd); font-weight: 400; }
+  /* el board: cada columna es un canal hundido con su LED; cada tarjeta, un tique impreso */
+  [data-aparato="hardware"] .col-b { background: var(--hw-carril); border-radius: 6px; box-shadow: inset 0 2px 5px #000, 0 1px 0 var(--hw-relieve); }
+  [data-aparato="hardware"] .col-b h3 { color: var(--hw-carril-texto); text-transform: uppercase; letter-spacing: .12em; font-size: 11px; font-stretch: 85%; }
+  [data-aparato="hardware"] .col-b h3 .n { font-family: var(--f-lcd); font-weight: 400; font-size: var(--t-texto); }
+  [data-aparato="hardware"] .col-b h3::before { background: var(--hw-led-off); }
+  [data-aparato="hardware"] .col-activa h3::before { background: var(--hw-led); box-shadow: 0 0 6px var(--hw-led); }
+  [data-aparato="hardware"] .col-bloqueada h3::before { background: var(--hw-rojo); box-shadow: 0 0 6px var(--hw-rojo); }
+  [data-aparato="hardware"] .col-hecha h3::before { background: var(--hw-ambar); box-shadow: 0 0 6px var(--hw-ambar); }
+  [data-aparato="hardware"] .tarj { position: relative; margin-bottom: 5px; border-radius: 1px; background: var(--hw-papel); color: var(--hw-papel-texto);
+    font-family: var(--f-lcd); box-shadow: 0 1px 3px rgba(0, 0, 0, .3); }
+  [data-aparato="hardware"] .tarj::after { content: ""; position: absolute; left: 0; right: 0; bottom: -5px; height: 6px;
+    background: conic-gradient(from 135deg at 50% 0, var(--hw-papel) 90deg, transparent 0) 0 0 / 10px 6px repeat-x; }
+  [data-aparato="hardware"] .tarj .tit { font-size: 14.5px; }
+  [data-aparato="hardware"] .tarj .kicker { color: inherit; opacity: .7; font-weight: 400; text-transform: uppercase; }
+  [data-aparato="hardware"] .col-hecha .tarj .tit { color: inherit; opacity: .6; }
+  [data-aparato="hardware"] .meta-b .tag { border-radius: 2px; background: none; border: 1px solid var(--hw-papel-linea); color: inherit; }
+  [data-aparato="hardware"] .tarj .prog { background: rgba(0, 0, 0, .1); }
+  [data-aparato="hardware"] .b-chip { border: 0; border-radius: 5px 5px 7px 7px; margin-bottom: 3px; background: linear-gradient(180deg, var(--hw-clara), var(--hw-clara-2));
+    color: var(--hw-clara-texto); box-shadow: 0 0 0 1px var(--hw-clara-borde), 0 3px 0 var(--hw-clara-borde); }
+  [data-aparato="hardware"] .b-chip small { color: inherit; opacity: .7; }
+  [data-aparato="hardware"] .b-chip[aria-pressed="true"] { background: linear-gradient(180deg, var(--acento), color-mix(in srgb, var(--acento) 80%, #000)); color: var(--acento-texto);
+    transform: translateY(3px); box-shadow: 0 0 0 1px color-mix(in srgb, var(--acento) 45%, #000), inset 0 2px 3px rgba(0, 0, 0, .25); }
+  [data-aparato="hardware"] .cuando-btn { border-radius: 5px 5px 8px 8px; }
 </style>
 <body>
 

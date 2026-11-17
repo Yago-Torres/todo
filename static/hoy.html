@@ -16,14 +16,14 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Hoy">
 <link rel="preload" href="/fuentes/instrument-sans-normal-latin.woff2?v=1" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/calma.css?v=f18e764d">
-<script src="/calma.js?v=f18e764d"></script>
+<link rel="stylesheet" href="/calma.css?v=efb64faa">
+<script src="/calma.js?v=efb64faa"></script>
 <script src="/anime-4.5.0.min.js"></script>
-<script src="/anima.js?v=f18e764d"></script>
+<script src="/anima.js?v=efb64faa"></script>
 <script src="/tom.js?v=1"></script>
 <script src="/mascota.js?v=6"></script>
 <script src="/sinred.js?v=1"></script>
-<script src="/hoja.js?v=f18e764d"></script>
+<script src="/hoja.js?v=efb64faa"></script>
 <script src="/movimiento.js?v=2"></script>
 <script defer src="/gsap-3.13.0.min.js"></script>
 <script defer src="/MorphSVGPlugin-3.13.0.min.js"></script>
@@ -200,7 +200,141 @@
   .anio-pie { display: flex; justify-content: space-between; gap: 10px; margin-top: 8px; font-size: var(--t-pequeno); color: var(--suave); }
 
   .puerta input, .puerta button { width: 100%; }
+
+  /* ---------- aparato solar (solar.css): arcos de sol en vez de anillos y hábitos en fichas con su brote ---------- */
+  [data-aparato="solar"] .anillos { align-content: center; }
+  [data-aparato="solar"] .anillos .dentro { display: none; }
+  [data-aparato="solar"] .hw-vus { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 6px 0; }
+  @media (min-width: 920px) { [data-aparato="solar"] .hw-vus { grid-template-columns: 1fr; gap: 18px; } [data-aparato="solar"] .hw-vus .sol-arco svg { max-width: 150px; } }
+  [data-aparato="solar"] #habitos, [data-aparato="solar"] details.resto[open] { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  @media (min-width: 920px) { [data-aparato="solar"] #habitos, [data-aparato="solar"] details.resto[open] { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  [data-aparato="solar"] details.resto { grid-column: 1 / -1; }
+  [data-aparato="solar"] details.resto > summary { margin-bottom: 4px; }
+  [data-aparato="solar"] #habitos .fila { min-height: 52px; padding: 8px 10px; border-radius: 16px; background: var(--carta-2); border: 0; gap: 8px; }
+  [data-aparato="solar"] #habitos .fila[aria-pressed="true"] { background: color-mix(in srgb, var(--c) 20%, var(--carta)); }
+  [data-aparato="solar"] #habitos .fila .nom { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  [data-aparato="solar"] #habitos .fila .plan:not(.libre) { display: none; }
+  [data-aparato="solar"] #b-hab { display: none; }
+
+  /* ---------- aparato plano (plano.css): cotas en vez de anillos y los hábitos como lista de materiales ---------- */
+  [data-aparato="plano"] .anillos .dentro, [data-aparato="conserje"] .anillos .dentro { display: none; }
+  [data-aparato="plano"] .anillos { align-content: center; }
+  [data-aparato="plano"] .hw-vus { display: grid; gap: 16px; padding: 4px 2px; }
+  [data-aparato="plano"] #habitos { counter-reset: pl; }
+  [data-aparato="plano"] #habitos .fila { counter-increment: pl; border-radius: 0; border-bottom: 1px solid var(--linea); }
+  [data-aparato="plano"] #habitos .fila::before { content: counter(pl, decimal-leading-zero); font: 600 11px var(--pl-mono); color: var(--suave); min-width: 20px; }
+  [data-aparato="plano"] #habitos .fila .nom { font-family: var(--pl-mono); font-size: 13.5px; text-transform: uppercase; letter-spacing: .02em; }
+  [data-aparato="plano"] #habitos .fila[aria-pressed="true"] .nom { text-decoration: line-through; text-decoration-thickness: 1.5px; }
+  [data-aparato="plano"] .carta .cifra { font-family: var(--pl-mono); letter-spacing: -.02em; }
+  [data-aparato="plano"] #b-hab { display: none; }
+
+  /* ---------- aparato conserje (conserje.css): medallones y los hábitos como llaves colgadas de su tablero ---------- */
+  [data-aparato="conserje"] .anillos { align-content: center; }
+  [data-aparato="conserje"] .hw-vus { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 8px 0; }
+  @media (min-width: 920px) { [data-aparato="conserje"] .hw-vus { grid-template-columns: 1fr; gap: 18px; } [data-aparato="conserje"] .cj-medalla svg { max-width: 130px; } }
+  [data-aparato="conserje"] #habitos, [data-aparato="conserje"] details.resto[open] { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 8px; counter-reset: llave; padding-top: 8px;
+    background: radial-gradient(circle, var(--cj-oro) 2.5px, transparent 3px) 0 0 / calc(100% / 3) 100% repeat-x; }
+  @media (min-width: 920px) { [data-aparato="conserje"] #habitos, [data-aparato="conserje"] details.resto[open] { grid-template-columns: repeat(4, minmax(0, 1fr)); background-size: 25% 100%; } }
+  [data-aparato="conserje"] details.resto { grid-column: 1 / -1; }
+  [data-aparato="conserje"] #habitos .fila { counter-increment: llave; position: relative; display: grid; justify-items: center; align-content: start; gap: 4px; min-height: 96px;
+    padding: 22px 6px 10px; border: 1.5px solid var(--cj-granate); border-radius: 6px 6px 40px 40px; background: var(--cj-carta); text-align: center; }
+  [data-aparato="conserje"] #habitos .fila::before { content: "Nº " counter(llave, decimal-leading-zero); position: absolute; top: 6px; font: 600 9.5px/1 var(--fuente); letter-spacing: .14em; color: var(--cj-oro); }
+  [data-aparato="conserje"] #habitos .fila::after { content: ""; position: absolute; top: -9px; left: 50%; width: 1.5px; height: 9px; background: var(--cj-oro); }
+  [data-aparato="conserje"] #habitos .fila .nom { font-size: 12.5px; font-weight: 600; line-height: 1.2; overflow-wrap: anywhere; }
+  [data-aparato="conserje"] #habitos .fila .bx { order: 3; }
+  [data-aparato="conserje"] #habitos .fila .plan, [data-aparato="conserje"] #habitos .fila .rn { font-size: 10px; }
+  [data-aparato="conserje"] #habitos .fila[aria-pressed="true"] { background: var(--cj-granate); color: var(--acento-texto); box-shadow: inset 0 0 0 3px var(--cj-granate), inset 0 0 0 4px var(--cj-oro-claro); }
+  [data-aparato="conserje"] .carta .cifra { font-family: var(--cj-titulo); font-weight: 500; }
+  [data-aparato="conserje"] #b-hab { display: none; }
+
+  /* ---------- aparato hardware (la carcasa común está en hardware.css; aquí, la distribución de Hoy) ---------- */
+  .hw-vus { display: none; }
+  [data-aparato="hardware"] #cielo { display: none; }
+  [data-aparato="hardware"] .anillos { align-content: start; }
+  [data-aparato="hardware"] .anillos .dentro { display: none; }
+  [data-aparato="hardware"] .hw-vus { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 14px 4px 4px; }
+  [data-aparato="hardware"] .hw-vus .hw-vu { padding: 6px 4px 8px; }
+  [data-aparato="hardware"] .anillos .hw-vu svg { width: 100%; aspect-ratio: auto; flex: initial; }
+  @media (max-width: 400px) { [data-aparato="hardware"] .hw-vus .hw-vu-valor { font-size: 22px; } [data-aparato="hardware"] .hw-vus .hw-vu-que { font-size: 13px; letter-spacing: .04em; } }
+  @media (min-width: 920px) { [data-aparato="hardware"] .hw-vus { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; } }
+  [data-aparato="hardware"] .carta .cifra { font-family: var(--f-lcd); font-weight: 400; letter-spacing: -.02em; }
+  /* las cifras: cada una, su pantalla LCD en su marco */
+  [data-aparato="hardware"] .c-carta.pieza { margin: 5px; background: var(--hw-lcd); color: var(--hw-lcd-texto);
+    box-shadow: inset 0 2px 3px rgba(0, 0, 0, .35), 0 0 0 5px var(--hw-bisel), 0 0 0 6px rgba(0, 0, 0, .3); border-radius: 4px; }
+  [data-aparato="hardware"] .pieza .c-eti { color: var(--hw-lcd-suave); }
+  [data-aparato="hardware"] .pieza .cifra { font-family: var(--f-lcd); font-weight: 400; letter-spacing: -.02em; }
+  [data-aparato="hardware"] .pieza .bajo, [data-aparato="hardware"] .pieza .apps { color: var(--hw-lcd-suave); }
+  [data-aparato="hardware"] .pieza .spark polyline { stroke: var(--hw-lcd-texto); stroke-width: 1.6; }
+  [data-aparato="hardware"] .pieza .spark circle { fill: var(--hw-lcd-texto); }
+  /* hábitos: un teclado; la tecla hecha queda hundida y del color del acento, con su LED */
+  [data-aparato="hardware"] #habitos, [data-aparato="hardware"] details.resto[open] { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 8px; }
+  @media (min-width: 920px) { [data-aparato="hardware"] #habitos, [data-aparato="hardware"] details.resto[open] { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  [data-aparato="hardware"] details.resto { grid-column: 1 / -1; }
+  [data-aparato="hardware"] details.resto summary { grid-column: 1 / -1; font-weight: 600; text-transform: uppercase; letter-spacing: .1em; font-size: 11px; }
+  [data-aparato="hardware"] .fila { flex-direction: column; justify-content: center; gap: 3px; min-height: 68px; padding: 16px 6px 8px; margin-bottom: 4px; text-align: center;
+    border-radius: 8px 8px 12px 12px; background: linear-gradient(180deg, var(--hw-clara), var(--hw-clara-2)); color: var(--hw-clara-texto);
+    box-shadow: 0 0 0 1px var(--hw-clara-borde), inset 0 1px 0 rgba(255, 255, 255, .35), 0 4px 0 var(--hw-clara-borde), 0 6px 8px rgba(0, 0, 0, .2); }
+  [data-aparato="hardware"] .fila:hover { background: linear-gradient(180deg, var(--hw-clara), var(--hw-clara-2)); filter: brightness(1.03); }
+  [data-aparato="hardware"] .fila[aria-pressed="true"] { transform: translateY(3px); color: var(--acento-texto);
+    background: linear-gradient(180deg, var(--acento), color-mix(in srgb, var(--acento) 80%, #000));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--acento) 45%, #000), inset 0 2px 3px rgba(0, 0, 0, .25), 0 1px 0 color-mix(in srgb, var(--acento) 45%, #000); }
+  @media (prefers-reduced-motion: no-preference) { [data-aparato="hardware"] .fila { transition: transform .06s, box-shadow .06s; } }
+  [data-aparato="hardware"] .fila .bx, [data-aparato="hardware"] .fila[aria-pressed="true"] .bx { position: absolute; top: 7px; left: 8px; width: 8px; height: 8px; flex: none;
+    border: 0; border-radius: 50%; background: var(--hw-led-off); box-shadow: inset 0 1px 1px rgba(0, 0, 0, .4); animation: none; }
+  [data-aparato="hardware"] .fila .bx > * { display: none; }
+  [data-aparato="hardware"] .fila[aria-pressed="true"] .bx { background: var(--hw-led); box-shadow: 0 0 6px var(--hw-led); }
+  [data-aparato="hardware"] .fila .nom { flex: none; max-width: 100%; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    font-size: var(--t-pequeno); font-weight: 650; line-height: 1.15; overflow-wrap: anywhere; }
+  [data-aparato="hardware"] .fila[aria-pressed="true"] .nom { color: inherit; text-decoration: none; }
+  [data-aparato="hardware"] .fila .plan { padding: 0; background: none; color: inherit; opacity: .7; font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; }
+  [data-aparato="hardware"] .fila .rn { position: absolute; top: 3px; right: 7px; font-family: var(--f-lcd); font-weight: 400; font-size: var(--t-pequeno); color: inherit; }
+  [data-aparato="hardware"] .fila .rn.cero { opacity: .5; }
+  [data-aparato="hardware"] .fila .llama { width: 10px; height: 10px; fill: currentColor; }
+  /* para hoy: impreso en el rollo de papel, que sale por su ranura */
+  [data-aparato="hardware"] #tareas::before { content: ""; display: block; height: 10px; margin: 0 -2px -4px; border-radius: 6px; background: var(--hw-bisel);
+    box-shadow: inset 0 2px 3px #000; position: relative; z-index: 2; }
+  [data-aparato="hardware"] .pila { height: auto !important; padding: 10px 14px 20px; background: var(--hw-papel); color: var(--hw-papel-texto); box-shadow: 0 2px 6px rgba(0, 0, 0, .18);
+    -webkit-mask: linear-gradient(#000 0 0) top / 100% calc(100% - 8px) no-repeat, conic-gradient(from -45deg at 50% 100%, #000 90deg, transparent 0) bottom / 12px 8px repeat-x;
+            mask: linear-gradient(#000 0 0) top / 100% calc(100% - 8px) no-repeat, conic-gradient(from -45deg at 50% 100%, #000 90deg, transparent 0) bottom / 12px 8px repeat-x; }
+  [data-aparato="hardware"] .pila .tarea { position: static; transform: none !important; min-height: 46px; padding: 6px 0; border-radius: 0; background: none; color: inherit;
+    box-shadow: none; border-bottom: 1px dashed var(--hw-papel-linea); font-family: var(--f-lcd); font-size: 14.5px; }
+  [data-aparato="hardware"] .pila .tarea .t { font-weight: 400; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  [data-aparato="hardware"] .pila .tarea .bx { visibility: visible; flex-basis: 24px; height: 24px; border-radius: 4px; border: 1.5px solid currentColor; opacity: .75; }
+  [data-aparato="hardware"] .pila .tarea .bx.ok { background: var(--hw-papel-texto); color: var(--hw-papel); opacity: 1; }
+  [data-aparato="hardware"] .pila .tarea .cuando { font-weight: 400; text-transform: uppercase; opacity: .8; }
+  [data-aparato="hardware"] .pila .tarea .cuando.mal { background: none; padding: 0; color: var(--hw-papel-rojo); opacity: 1; }
+  [data-aparato="hardware"] .pila-pista { display: none; }
+  /* el rollo enseña las 8 primeras; el resto, en Pendientes */
+  [data-aparato="hardware"] .pila .tarea:nth-child(n+9) { display: none; }
+  [data-aparato="hardware"] .pila:has(.tarea:nth-child(9))::after { content: "… y más en Pendientes"; display: block; padding-top: 8px; font: 400 13px var(--f-lcd); opacity: .75; }
+  [data-aparato="hardware"] .mas-tarea { border-radius: 6px 6px 9px 9px; box-shadow: 0 0 0 1px color-mix(in srgb, var(--acento) 45%, #000), 0 3px 0 color-mix(in srgb, var(--acento) 45%, #000); }
+  /* la mejor racha: en el cristal ámbar del receptor */
+  [data-aparato="hardware"] .racha { background: var(--hw-ambar-fondo); color: var(--hw-ambar); font-family: var(--f-ambar); border-radius: 6px; margin: 4px;
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, .6), inset 0 0 0 1px #000, 0 0 0 4px var(--hw-bisel), 0 1px 0 var(--hw-relieve); text-shadow: 0 0 6px rgba(255, 160, 40, .45); }
+  [data-aparato="hardware"] .racha::after { background: linear-gradient(160deg, rgba(255, 255, 255, .1), transparent 40%); }
+  [data-aparato="hardware"] .racha small { font-size: 17px; opacity: 1; color: var(--hw-ambar-suave); }
+  [data-aparato="hardware"] .racha b { font-weight: 400; font-size: 46px; letter-spacing: 0; }
+  /* el año: una matriz de LEDs */
+  [data-aparato="hardware"] .anio { padding: 8px; border-radius: 4px; background: var(--hw-bisel); box-shadow: inset 0 2px 4px #000; gap: 2px; }
+  [data-aparato="hardware"] .anio i { border-radius: 50%; background: rgba(255, 255, 255, .07); }
+  [data-aparato="hardware"] .anio i[data-n="1"] { background: color-mix(in srgb, var(--acento) 45%, #000); }
+  [data-aparato="hardware"] .anio i[data-n="2"] { background: color-mix(in srgb, var(--acento) 75%, #000); }
+  [data-aparato="hardware"] .anio i[data-n="3"] { background: var(--acento); box-shadow: 0 0 4px var(--acento); }
+  [data-aparato="hardware"] .anio i.futuro { background: rgba(255, 255, 255, .03); box-shadow: none; }
+  [data-aparato="hardware"] .anio i.hoy { outline-color: var(--hw-ambar); }
+  [data-aparato="hardware"] .sesion { border-radius: 4px; background: var(--hw-lcd); color: var(--hw-lcd-texto); font-family: var(--f-lcd); margin: 4px;
+    box-shadow: inset 0 2px 3px rgba(0, 0, 0, .35), 0 0 0 4px var(--hw-bisel); }
+  [data-aparato="hardware"] .sesion small { color: var(--hw-lcd-suave); }
+  [data-aparato="hardware"] .sesion b { font-weight: 400; }
   @media (prefers-reduced-motion: reduce) { .llama, .anio i.hoy { animation: none; } .pila, .pila .tarea, .racha, h1 { transition: none; } }
+
+  /* gastos: la barra de dinero del receptor, en su cristal ámbar */
+  [data-aparato="hardware"] section[data-mod="gastos"] { margin: 4px; background: var(--hw-ambar-fondo); color: var(--hw-ambar); border-radius: 8px;
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, .6), inset 0 0 0 1px #000, 0 0 0 4px var(--hw-bisel), 0 1px 0 var(--hw-relieve); text-shadow: 0 0 6px rgba(255, 160, 40, .4); }
+  [data-aparato="hardware"] section[data-mod="gastos"] h2, [data-aparato="hardware"] section[data-mod="gastos"] h2 a { color: var(--hw-ambar-suave); }
+  [data-aparato="hardware"] section[data-mod="gastos"] .cifra { font-family: var(--f-ambar); font-size: 50px; letter-spacing: 0; }
+  [data-aparato="hardware"] section[data-mod="gastos"] .bajo { color: var(--hw-ambar-suave); font-family: var(--f-ambar); font-size: 17px; }
+  [data-aparato="hardware"] section[data-mod="gastos"] .c-barra { background-color: #000; box-shadow: inset 0 1px 3px #000; }
 </style>
 <body>
 
@@ -239,6 +373,7 @@
         <li data-mod="salud" style="--c: var(--serie-1)"><i></i><small>Dormido anoche</small><b id="l-sue">—</b></li>
       </ul>
     </div>
+    <div class="hw-vus" id="hw-vus"></div>
   </section>
 
   <a data-mod="salud" class="carta c-carta c-foco pieza" href="/salud.html"><span class="c-eti">Dormido anoche</span><span class="cifra" id="sueno">—</span><span class="bajo" id="sueno-sub"></span><svg class="spark" id="sp-sueno" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true"></svg></a>
@@ -346,7 +481,25 @@ function dia_() {
     calma.fiesta("anillos");
   }
   caja.classList.toggle("cerrados", cerrados);
+  vumetros(p, hechos, hs.length, pa, su);
 }
+// con el aparato hardware, los anillos son tres vúmetros de aguja (calma.vu); con Calma, la caja queda vacía
+function vumetros(p, hechos, total, pa, su) {
+  const caja = $("#hw-vus");
+  if (!caja) return;
+  const ap = calma.aparato?.(), salud = H.ajustes.modulos.salud.activo;
+  if (ap === "solar") return caja.innerHTML = calma.arco(p, `${hechos}/${total}`, "hábitos")
+    + (salud ? calma.arco((pa || 0) / OBJ.pasos, pa ? miles(pa) : "—", "pasos ayer", "#E8A93A") + calma.arco((su || 0) / OBJ.sueno, su ? hm(su) : "—", "dormido", "#5C8DD6") : "");
+  const tres = (fn, ...c) => fn(p, `${hechos}/${total}`, "hábitos", c[0])
+    + (salud ? fn((pa || 0) / OBJ.pasos, pa ? miles(pa) : "—", "pasos ayer", c[1]) + fn((su || 0) / OBJ.sueno, su ? hm(su) : "—", "dormido", c[2]) : "");
+  if (ap === "plano") return caja.innerHTML = tres(calma.cota);
+  if (ap === "conserje") return caja.innerHTML = tres(calma.medalla);
+  if (ap !== "hardware") return caja.replaceChildren();
+  caja.innerHTML = calma.vu(p, `${hechos}/${total}`, "hábitos")
+    + (salud ? calma.vu((pa || 0) / OBJ.pasos, pa ? miles(pa) : "—", "pasos ayer") + calma.vu((su || 0) / OBJ.sueno, su ? hm(su) : "—", "dormido") : "");
+}
+// la apariencia puede llegar después que los datos (o cambiar en Ajustes): se vuelven a pintar los medidores
+addEventListener("calma-tema", () => { if (H) dia_(); });
 
 // ---------- hábitos ----------
 const LIBRE = {descanso: "descanso", vacaciones: "vacaciones", enfermedad: "enfermo", comodin: "comodín"};
@@ -517,7 +670,8 @@ function tareas() {
   });
   pila.tabIndex = 0;
   pila.setAttribute("aria-label", `${tarjetas.length} ${sola ? "tarea" : "tareas"} para hoy`);
-  coloca(sola || pilaAbierta);
+  // con el aparato hardware no hay pila: las tareas salen impresas en el rollo de papel, todas a la vista
+  coloca(sola || pilaAbierta || calma.aparato?.() === "hardware");
   caja.replaceChildren(pila, pista);
 }
 
