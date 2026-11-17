@@ -152,7 +152,7 @@ def test_agenda():
         except ValueError:
             pass
     # repeticiones: semanal con fin, mensual que se salta los meses sin día 31, excepción
-    s = agenda.nuevo({"t": "Ensayo", "dia": "2026-11-02", "inicio": "19:00", "repite": "semanal", "hasta": "2026-11-23", "cal": "ensayos"})
+    s = agenda.nuevo({"t": "Ensayo", "dia": "2026-11-02", "inicio": "19:00", "repite": "semanal", "hasta": "2026-11-23", "cal": "ocio"})
     assert agenda.ocurrencias(agenda.todos()[1], "2026-11-01", "2026-12-31") == ["2026-11-02", "2026-11-09", "2026-11-16", "2026-11-23"]
     m = agenda.limpia({"t": "Pago", "dia": "2026-01-31", "repite": "mensual"})
     assert agenda.ocurrencias(m, "2026-01-01", "2026-05-31") == ["2026-01-31", "2026-03-31", "2026-05-31"]

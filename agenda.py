@@ -35,7 +35,8 @@ ZONA = ZoneInfo("Europe/Madrid")
 # id (el mismo nombre que en el bot y en Google) -> nombre y color
 CALENDARIOS = {"day-to-day": ("Día a día", "#3B82F6"), "Deporte": ("Deporte", "#16A34A"),
                "universidad": ("Universidad", "#9333EA"), "musica": ("Música", "#EA580C"),
-               "ensayos": ("Ensayos", "#DB2777")}
+               "ocio": ("Ocio", "#F59E0B"), "trabajo": ("Trabajo", "#475569"),
+               "vacaciones": ("Vacaciones", "#0891B2"), "cumples": ("Cumpleaños", "#DB2777")}
 REPITE = {"", "diario", "semanal", "mensual", "anual"}
 DIA = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 HORA = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
@@ -377,7 +378,10 @@ def icloud_calendarios():
     return cals
 
 
-ALIAS_ICLOUD = {"universidad": "estudio"}
+# Lo dijo Yago (17/11): ocio a «ocio !!», trabajo a «trabajo yaguito», vacaciones a «vacations»,
+# cumpleaños a «calendar». Nombres exactos de iCloud; mandan sobre el parecido.
+ALIAS_ICLOUD = {"day-to-day": "daytoday yago", "universidad": "estudio", "ocio": "ocio !!", "musica": "ocio !!",
+                "trabajo": "trabajo yaguito", "vacaciones": "vacations", "cumples": "calendar", "Deporte": "calendar"}
 
 
 def icloud_destino(cal):
@@ -390,8 +394,10 @@ def icloud_destino(cal):
     mapa = dict(par.split("=", 1) for par in os.getenv("ICLOUD_MAPA", "").split(",") if "=" in par)
     if mapa.get(cal, "").strip().lower() in cals:
         return cals[mapa[cal].strip().lower()]
+    if ALIAS_ICLOUD.get(cal) in cals:
+        return cals[ALIAS_ICLOUD[cal]]
     plano = lambda s: re.sub(r"[^a-z0-9áéíóúñ]", "", s.lower())
-    for nombre in (cal, CALENDARIOS[cal][0], ALIAS_ICLOUD.get(cal, "")):
+    for nombre in (cal, CALENDARIOS[cal][0]):
         if not plano(nombre):
             continue
         for suyo, url in cals.items():
@@ -427,6 +433,11 @@ def _error(ex):
     return f"error: {str(ex)[:120]}"
 
 
+def _gcal(g, cal):
+    """El id del calendario de Google; los que no tienen uno propio allí (ocio, trabajo…) van al de day-to-day."""
+    return urllib.parse.quote(g.CALENDARIOS.get(cal) or g.CALENDARIOS["day-to-day"])
+
+
 def _copia(e):
     """Escribe (o reescribe) un evento en Google y en iCloud. Devuelve (ext, sincro)."""
     ext, sincro = dict(e.get("ext") or {}), {}
@@ -435,11 +446,11 @@ def _copia(e):
         sincro["google"] = "sin configurar"
     else:
         try:
-            cid = urllib.parse.quote(g.CALENDARIOS[e["cal"]])
+            cid = _gcal(g, e["cal"])
             viejo = ext.get("mover_de")
-            if viejo and ext.get("google"):
+            if viejo and ext.get("google") and _gcal(g, viejo) != cid:
                 try:
-                    g._api("DELETE", f"calendars/{urllib.parse.quote(g.CALENDARIOS[viejo])}/events/{ext['google']}")
+                    g._api("DELETE", f"calendars/{_gcal(g, viejo)}/events/{ext['google']}")
                 except urllib.error.HTTPError:
                     pass
                 ext.pop("google", None)
@@ -475,7 +486,7 @@ def _quita(e):
     g = google()
     if g and ext.get("google"):
         try:
-            g._api("DELETE", f"calendars/{urllib.parse.quote(g.CALENDARIOS[e['cal']])}/events/{ext['google']}")
+            g._api("DELETE", f"calendars/{_gcal(g, e['cal'])}/events/{ext['google']}")
         except urllib.error.HTTPError as ex:
             if ex.code not in (404, 410):
                 raise
