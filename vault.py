@@ -15,6 +15,7 @@ from pathlib import Path
 VAULT = Path(os.getenv("VAULT", "/srv/obsidian/Yago_obsidian_vault"))
 PENDIENTES = "Pendientes.md"          # donde caen las tareas sueltas (bot y web)
 LEER = "Recursos/Leer luego"
+RAPIDAS = "Notas rápidas.md"          # ideas sueltas: no son tareas (sin casilla), pueden llegar a serlo o no
 FUERA = {"Archivo", "_plantillas", "templates", "_adjuntos", ".obsidian", ".trash", "Inbox"}
 SOLO_LECTURA = ("Curro/",)            # lo escribe el portátil del trabajo: se tacha, pero no se edita ni se borra
 # el hub lleva la bucket list ("Visit Japan"): son sueños, no pendientes
@@ -366,6 +367,92 @@ def restaura(rel, i, linea):
     lineas.insert(i, str(linea) + "\n")
     escribe(p, "".join(lineas))
     return {"id": tid(ruta(p), str(linea))}
+
+
+# ---------- notas rápidas ----------
+# Una viñeta sin casilla por nota, con la hora delante: «- 2026-11-17 10:32 · texto». Sin casilla, Tasks y
+# tareas() no las cuentan. Las que Yago escriba a mano en Obsidian (sin hora) también valen.
+RAPIDA = re.compile(r"^[-*] (?!\[[ xX]\] )(?:(\d{4}-\d{2}-\d{2} \d{2}:\d{2}) · )?(.+)$")
+
+
+def _rapidas():
+    p = VAULT / RAPIDAS
+    return p, (p.read_text("utf-8").splitlines(keepends=True) if p.exists() else [])
+
+
+def _rapida(linea, i):
+    m = RAPIDA.match(linea.rstrip("\n"))
+    return m and {"id": tid(RAPIDAS, linea), "t": m[2].strip(), "cuando": m[1] or "", "i": i}
+
+
+def notas_rapidas():
+    """Las más nuevas primero (en el fichero van en orden de llegada)."""
+    _, lineas = _rapidas()
+    return [n for n in (_rapida(x, i) for i, x in enumerate(lineas)) if n][::-1]
+
+
+def _texto_nota(texto):
+    texto = " ".join(str(texto or "").split())[:1000]
+    if not texto:
+        raise ValueError("nota vacía")
+    return texto
+
+
+def nueva_nota(texto, cuando=None):
+    texto = _texto_nota(texto)
+    linea = f"- {(cuando or datetime.now()).strftime('%Y-%m-%d %H:%M')} · {texto}"
+    p, lineas = _rapidas()
+    previo = "".join(lineas) if lineas else (
+        f"---\ntype: area\ntags: [notas]\ncreated: {date.today()}\nsource: claude\n---\n"
+        "# Notas rápidas\n\nIdeas sueltas de la web y la app de escritorio de todo. No son tareas: "
+        "las que lo acaben siendo se pasan a Pendientes.\n\n")
+    escribe(p, previo.rstrip("\n") + "\n" + linea + "\n")
+    return _rapida(linea, previo.count("\n"))
+
+
+def _busca_nota(id_):
+    p, lineas = _rapidas()
+    for i, x in enumerate(lineas):
+        if RAPIDA.match(x.rstrip("\n")) and tid(RAPIDAS, x) == id_:
+            return p, lineas, i
+    raise ValueError("esa nota ya no está (¿la has cambiado en Obsidian?)")
+
+
+def edita_nota(id_, texto):
+    p, lineas, i = _busca_nota(id_)
+    viejo = _rapida(lineas[i], i)
+    linea = f"- {viejo['cuando'] + ' · ' if viejo['cuando'] else ''}{_texto_nota(texto)}"
+    lineas[i] = linea + "\n"
+    escribe(p, "".join(lineas))
+    return _rapida(linea, i)
+
+
+def borra_nota(id_):
+    """Devuelve {i, linea} para deshacer con restaura_nota()."""
+    p, lineas, i = _busca_nota(id_)
+    linea = lineas.pop(i).rstrip("\n")
+    escribe(p, "".join(lineas))
+    return {"i": i, "linea": linea}
+
+
+def restaura_nota(i, linea):
+    linea = str(linea)
+    if "\n" in linea or not RAPIDA.match(linea):
+        raise ValueError("no se puede restaurar eso")
+    p, lineas = _rapidas()
+    i = max(0, min(int(i or 0), len(lineas)))
+    if lineas and not lineas[-1].endswith("\n"):
+        lineas[-1] += "\n"
+    lineas.insert(i, linea + "\n")
+    escribe(p, "".join(lineas))
+    return _rapida(linea, i)
+
+
+def nota_a_tarea(id_, due="", hora="", tags=()):
+    """La nota se va de Notas rápidas y aparece en Pendientes. Devuelve la tarea y cómo deshacerlo."""
+    _, lineas, i = _busca_nota(id_)
+    tarea = nueva_tarea(_rapida(lineas[i], i)["t"][:200], due, hora, tags)
+    return {"tarea": tarea, "nota": borra_nota(id_)}
 
 
 def nueva_tarea(texto, due="", hora="", tags=(), historia=False, padre=""):

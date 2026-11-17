@@ -2088,6 +2088,46 @@ def nueva_tarea(t: dict, todo_sesion: str = Cookie(None), authorization: str = H
                    tags, t.get("historia") is True, str(t.get("padre") or ""))
 
 
+# Notas rápidas (vault.RAPIDAS): ideas que no son tareas. «A tarea» la pasa a Pendientes.md.
+@app.get("/api/notas")
+def notas_rapidas(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    return {"notas": vault.notas_rapidas()}
+
+
+@app.post("/api/nota")
+def nueva_nota(n: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    return _valida(vault.nueva_nota, n.get("t"))
+
+
+@app.post("/api/nota/edita")
+def edita_nota(n: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    return _valida(vault.edita_nota, str(n.get("id") or ""), n.get("t"))
+
+
+@app.post("/api/nota/borra")
+def borra_nota(n: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    return _valida(vault.borra_nota, str(n.get("id") or ""))
+
+
+@app.post("/api/nota/restaura")
+def restaura_nota(n: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    return _valida(vault.restaura_nota, n.get("i"), n.get("linea"))
+
+
+@app.post("/api/nota/tarea")
+def nota_a_tarea(n: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    hora = str(n.get("hora") or "")[:5]
+    tags = n.get("tags") if isinstance(n.get("tags"), list) else []
+    return _valida(vault.nota_a_tarea, str(n.get("id") or ""), day(n.get("due")),
+                   hora if len(hora) == 5 and hora[2] == ":" else "", tags)
+
+
 @app.post("/api/tarea/edita")
 def edita_tarea(t: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
     exige(todo_sesion, authorization)

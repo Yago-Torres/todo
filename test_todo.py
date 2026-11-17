@@ -6,6 +6,17 @@ import main
 from main import EMPTY, clean, firma, vale
 
 
+def test_aparato():
+    assert main.limpia_apariencia({"tema": "hardware"})["aparato"] == "hardware"
+    assert main.limpia_apariencia({"tema": "hardware", "aparato": "calma"})["aparato"] == "calma"
+    # la carcasa (aparato) va aparte del tema: se guarda si existe en el catálogo, si no, la de siempre
+    a = main.limpia_apariencia({"tema": "propio", "acento": "#112233", "aparato": "hardware"})
+    assert a["aparato"] == "hardware" and a["acento"] == "#112233" and a["tema"] == "propio"
+    assert main.limpia_apariencia({"aparato": "tostadora"})["aparato"] == "calma"
+    assert main.limpia_apariencia({})["aparato"] == "calma"
+    assert any(t["id"] == "hardware" and t["aparato"] == "hardware" for t in main.catalogo()["temas"])
+
+
 def test_clean():
     # basura entera -> estado vacío, no excepción
     assert clean({}) == EMPTY
@@ -250,6 +261,29 @@ def test_vault():
     vault.leido("Recursos/Leer luego/https a.b.md")
     assert vault.plano("![[a.jpg]] Hola **[[Raspberry Pi|la Pi]]** y [web](https://x.y) `code`\n- [ ] tarea") \
         == "Hola la Pi y web code tarea"
+    # notas rápidas: no son tareas, se editan, se borran con deshacer y se pasan a Pendientes
+    from datetime import datetime
+    (vault.VAULT / vault.RAPIDAS).write_text("# Notas\n- a mano sin hora\n- [ ] esto sí es tarea\n", "utf-8")
+    n = vault.nueva_nota("  idea   para la app ", datetime(2026, 11, 17, 10, 32))
+    assert n["t"] == "idea para la app" and n["cuando"] == "2026-11-17 10:32", n
+    assert [x["t"] for x in vault.notas_rapidas()] == ["idea para la app", "a mano sin hora"]
+    assert "idea para la app" not in [t["t"] for t in vault.tareas()] and "esto sí es tarea" in [t["t"] for t in vault.tareas()]
+    e = vault.edita_nota(n["id"], "idea mejor")
+    assert e["cuando"] == "2026-11-17 10:32" and "- 2026-11-17 10:32 · idea mejor\n" in (vault.VAULT / vault.RAPIDAS).read_text("utf-8")
+    antes = (vault.VAULT / vault.RAPIDAS).read_text("utf-8")
+    b = vault.borra_nota(e["id"])
+    vault.restaura_nota(b["i"], b["linea"])
+    assert (vault.VAULT / vault.RAPIDAS).read_text("utf-8") == antes
+    r = vault.nota_a_tarea(e["id"], "2026-11-20")
+    assert r["tarea"]["t"] == "idea mejor" and r["tarea"]["due"] == "2026-11-20", r
+    assert [x["t"] for x in vault.notas_rapidas()] == ["a mano sin hora"]
+    for malo in (lambda: vault.nueva_nota("   "), lambda: vault.edita_nota("nohay", "x"), lambda: vault.restaura_nota(0, "- [ ] tarea")):
+        try:
+            malo()
+            raise AssertionError("debía fallar")
+        except ValueError:
+            pass
+    (vault.VAULT / vault.RAPIDAS).unlink()
     try:
         vault.leido("Proyectos/Pi.md")
         raise AssertionError("leido fuera de Leer luego")
@@ -986,4 +1020,5 @@ if __name__ == "__main__":
     test_rachas()
     test_descansos_api()
     test_escalada()
+    test_aparato()
     print("ok")

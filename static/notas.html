@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="es" data-vt>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#F2F2F2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)">
+<title>Notas rápidas</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.json" crossorigin="use-credentials">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Notas">
+<link rel="preload" href="/fuentes/instrument-sans-normal-latin.woff2?v=1" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/calma.css?v=efb64faa">
+<script src="/calma.js?v=efb64faa"></script>
+<style>
+  @view-transition { navigation: auto; }
+  @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }
+  /* Notas rápidas: ideas sueltas que no son tareas (vault.RAPIDAS). Tokens y componentes en /calma.css. */
+  body { padding: 16px; padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px)); }
+  .app { max-width: 760px; margin: 0 auto; display: grid; gap: 14px; }
+  .top { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 4px 2px 0; }
+  h1 { margin: 0; font-size: var(--t-titulo); font-weight: 700; letter-spacing: -.02em; }
+  .top nav { margin-left: auto; display: flex; gap: 6px; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .top nav a { text-decoration: none; }
+  #estado { font-size: var(--t-pequeno); color: var(--suave); }
+  .carta { padding: 16px; min-width: 0; }
+  #f-nueva { display: flex; gap: 8px; }
+  #f-nueva input { flex: 1; min-width: 0; }
+  #buscar { width: 100%; margin-bottom: 10px; }
+  .nota { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; padding: 10px 4px; border-top: 1px solid var(--linea); }
+  .nota:first-child { border-top: 0; }
+  .nota p { margin: 0; line-height: 1.45; overflow-wrap: anywhere; cursor: text; }
+  .nota small { grid-column: 1; font-size: var(--t-pequeno); color: var(--suave); }
+  .nota .acc { grid-row: 1 / span 2; grid-column: 2; display: flex; gap: 6px; align-items: start; }
+  .nota input { width: 100%; }
+  .vacio { margin: 6px 4px; color: var(--suave); }
+  .puerta input, .puerta button { width: 100%; }
+  @media (prefers-reduced-motion: no-preference) { .nota.fuera { opacity: 0; transform: translateX(12px); transition: opacity .2s, transform .2s; } }
+</style>
+<body>
+<div class="c-toast" id="toast" role="status"><b id="toast-txt"></b><button id="toast-btn">Deshacer</button></div>
+
+<div class="puerta c-puerta" id="puerta">
+  <form id="f-clave">
+    <h2>Notas rápidas</h2>
+    <p id="puerta-msg">Contraseña de todo</p>
+    <input class="c-campo" type="password" name="pass" required autocomplete="current-password" aria-label="Contraseña">
+    <button class="c-btn pri" type="submit">Entrar</button>
+  </form>
+</div>
+
+<div class="app">
+  <header class="top">
+    <h1>Notas rápidas</h1>
+    <span id="estado">Cargando…</span>
+    <nav><a class="c-btn mini" href="/">Hoy</a><a class="c-btn mini" href="/habitos.html">Hábitos</a><a class="c-btn mini" href="/pendientes.html">Pendientes</a><a class="c-btn mini" href="/entreno.html">Entreno</a><a class="c-btn mini" href="/salud.html">Salud</a><a class="c-btn mini" href="/gastos.html">Gastos</a></nav>
+  </header>
+
+  <section class="carta c-carta">
+    <form id="f-nueva">
+      <input class="c-campo" name="t" maxlength="1000" required autocomplete="off" placeholder="Lo que se te acaba de ocurrir" aria-label="Nota nueva">
+      <button class="c-btn pri" type="submit">Apuntar</button>
+    </form>
+  </section>
+
+  <section class="carta c-carta" aria-label="Notas">
+    <input class="c-campo" id="buscar" type="search" placeholder="Buscar" aria-label="Buscar en las notas" hidden>
+    <div id="lista"></div>
+  </section>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const el = (t, cls, txt) => { const e = document.createElement(t); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+let N = [], deshacer = null, reloj;
+
+function puerta(mostrar, msg) {
+  $("#puerta").toggleAttribute("data-on", mostrar);
+  $("#puerta-msg").textContent = msg || "Contraseña de todo";
+  if (mostrar) $("#puerta input").focus();
+}
+
+async function api(url, cuerpo) {
+  const r = await fetch(url, cuerpo === undefined ? {} : {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(cuerpo)});
+  if (r.status === 401) { puerta(true); throw new Error("401"); }
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.status);
+  return r.json();
+}
+
+function toast(txt, fn) {
+  deshacer = fn;
+  $("#toast-txt").textContent = txt;
+  $("#toast-btn").hidden = !fn;
+  $("#toast").toggleAttribute("data-on", true);
+  clearTimeout(reloj);
+  reloj = setTimeout(() => $("#toast").removeAttribute("data-on"), 5000);
+}
+$("#toast-btn").onclick = async () => { $("#toast").removeAttribute("data-on"); if (deshacer) { await deshacer(); cargar(); } };
+
+const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+function cuando(s) {
+  if (!s) return "escrita en Obsidian";
+  const [d, h] = s.split(" "), [a, m, dia] = d.split("-").map(Number), hoy = new Date();
+  const mismo = a === hoy.getFullYear() && m === hoy.getMonth() + 1 && dia === hoy.getDate();
+  return mismo ? `hoy, ${h}` : `${dia} ${MESES[m - 1]}${a !== hoy.getFullYear() ? " " + a : ""}, ${h}`;
+}
+
+async function fuera(f) {
+  if (matchMedia("(prefers-reduced-motion: no-preference)").matches) { f.classList.add("fuera"); await new Promise(r => setTimeout(r, 200)); }
+}
+
+function edita(n, f) {
+  const p = f.querySelector("p"), inp = el("input", "c-campo");
+  inp.value = n.t; inp.maxLength = 1000;
+  p.replaceWith(inp); inp.focus();
+  let hecho = false;
+  const guarda = async () => {
+    if (hecho) return; hecho = true;
+    const t = inp.value.trim();
+    if (t && t !== n.t) { try { await api("/api/nota/edita", {id: n.id, t}); } catch (e) { toast(`No se guardó: ${e.message}`); } }
+    cargar();
+  };
+  inp.onkeydown = e => { if (e.key === "Enter") guarda(); if (e.key === "Escape") { hecho = true; pinta(); } };
+  inp.onblur = guarda;
+}
+
+function fila(n) {
+  const f = el("div", "nota");
+  const p = el("p", null, n.t);
+  p.title = "Toca para editar";
+  p.onclick = () => edita(n, f);
+  const acc = el("div", "acc");
+  const aTarea = el("button", "c-btn mini", "→ Pendiente");
+  aTarea.title = "Pasarla a Pendientes como tarea";
+  aTarea.onclick = async () => {
+    try {
+      const r = await api("/api/nota/tarea", {id: n.id});
+      await fuera(f);
+      toast("Ya es una tarea de Pendientes", async () => { await api("/api/tarea/borra", {id: r.tarea.id}); await api("/api/nota/restaura", r.nota); });
+      cargar();
+    } catch (e) { toast(`No se pudo: ${e.message}`); }
+  };
+  const borra = el("button", "c-btn mini peligro", "Borrar");
+  borra.onclick = async () => {
+    try {
+      const r = await api("/api/nota/borra", {id: n.id});
+      await fuera(f);
+      toast("Nota borrada", () => api("/api/nota/restaura", r));
+      cargar();
+    } catch (e) { toast(`No se pudo: ${e.message}`); }
+  };
+  acc.append(aTarea, borra);
+  f.append(p, acc, el("small", null, cuando(n.cuando)));
+  return f;
+}
+
+function pinta() {
+  const q = $("#buscar").value.trim().toLowerCase();
+  const l = q ? N.filter(n => n.t.toLowerCase().includes(q)) : N;
+  $("#buscar").hidden = N.length < 8;
+  $("#lista").replaceChildren(...(l.length ? l.map(fila) : [el("p", "vacio", q ? "Nada con eso." : "Sin notas. Lo que apuntes aquí no es una tarea hasta que tú lo digas.")]));
+  $("#estado").textContent = N.length === 1 ? "1 nota" : `${N.length} notas`;
+}
+
+async function cargar() {
+  try {
+    N = (await api("/api/notas")).notas;
+    puerta(false);
+    pinta();
+  } catch (e) {
+    if (e.message !== "401") $("#estado").textContent = "Sin conexión";
+  }
+}
+
+$("#buscar").oninput = pinta;
+$("#f-nueva").onsubmit = async e => {
+  e.preventDefault();
+  const inp = e.target.t, t = inp.value.trim();
+  if (!t) return;
+  try { await api("/api/nota", {t}); inp.value = ""; cargar(); } catch (err) { toast(`No se guardó: ${err.message}`); }
+};
+$("#f-clave").onsubmit = async e => {
+  e.preventDefault();
+  const inp = e.target.pass;
+  const r = await fetch("/api/login", {method: "POST", headers: {"Content-Type": "application/json"},
+                                       body: JSON.stringify({pass: inp.value})}).catch(() => null);
+  if (r && r.ok) { inp.value = ""; await cargar(); }
+  else puerta(true, r && r.status === 401 ? "Contraseña incorrecta" : "No se pudo conectar");
+};
+addEventListener("visibilitychange", () => document.visibilityState === "visible" && cargar());
+// la app de escritorio abre /notas.html?nueva=1 desde la bandeja: directo a escribir
+if (new URLSearchParams(location.search).has("nueva")) $("#f-nueva input").focus();
+cargar();
+</script>
+</body>
+</html>
