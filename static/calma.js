@@ -239,6 +239,7 @@ const calma = (() => {
     ["/gastos.html", "Gastos", I('<rect x="3" y="6" width="18" height="13" rx="2.5"/><path d="M3 10h18M16 15h2"/>')],
     ["/calendario.html", "Calendario", I('<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>')],
     ["/documentos.html", "Docs", I('<path d="M7 3h7l4 4v14H7zM14 3v4h4M10 12h5M10 16h5"/>')],
+    ["/inversiones.html", "Inversión", I('<path d="M3.5 19.5h17M5 15.5l4.5-4.5 3.5 3 6.5-7M15 7h4v4"/>')],
   ];
   /* Lo que cada usuario ha elegido en Ajustes: mascota.js lo deja aquí al llegar del servidor, y así la
      barra y el saludo salen bien desde el primer momento en la página siguiente. */

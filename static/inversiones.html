@@ -1,0 +1,721 @@
+<!doctype html>
+<html lang="es" data-vt>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#F2F2F2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)">
+<title>Inversiones</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.json" crossorigin="use-credentials">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Inversiones">
+<link rel="preload" href="/fuentes/instrument-sans-normal-latin.woff2?v=1" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/calma.css?v=230f1260">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="/calma.js?v=230f1260"></script>
+<script src="/anime-4.5.0.min.js"></script>
+<script src="/anima.js?v=230f1260"></script>
+<style>
+  @view-transition { navigation: auto; }
+  @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }
+  /* Inversiones (inversiones.py): cartera a mano, precios de Yahoo, review del domingo. Tokens en /calma.css. */
+  body { padding: 16px; padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px)); }
+  .app { max-width: 960px; margin: 0 auto; display: grid; gap: 14px; }
+  .top { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 4px 2px 0; }
+  h1 { margin: 0; font-size: var(--t-titulo); font-weight: 700; letter-spacing: -.02em; }
+  h2 { margin: 0 0 10px; font-size: var(--t-seccion); font-weight: 600; letter-spacing: -.01em; }
+  .top nav { margin-left: auto; display: flex; gap: 6px; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .top nav a { text-decoration: none; }
+  #estado { font-size: var(--t-pequeno); color: var(--suave); }
+  .carta { padding: 16px; min-width: 0; }
+  .puerta input, .puerta button { width: 100%; }
+  /* .c-btn y las label con display propio le ganan a [hidden] */
+  .app [hidden] { display: none !important; }
+  .vista { display: grid; gap: 14px; min-width: 0; }
+
+  .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .kpi { padding: 14px 16px; min-width: 0; }
+  .kpi b { display: block; font-size: var(--t-seccion); font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kpi.grande b { font-size: 26px; }
+  .kpi small { font-size: var(--t-pequeno); color: var(--suave); }
+  .sube { color: var(--acento); } .baja { color: var(--peligro); }
+  .cab { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .cab h2 { margin: 0; margin-right: auto; }
+  .rangos { display: inline-grid; }
+  .lienzo { position: relative; height: 240px; }
+  .lienzo.bajo { height: 200px; }
+  .dos { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+  .ley { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font-size: var(--t-pequeno); color: var(--suave); }
+  .ley span { display: inline-flex; align-items: center; gap: 6px; }
+  .ley s { width: 10px; height: 10px; border-radius: 3px; background: var(--c); text-decoration: none; }
+  .ley s.raya { height: 0; border-top: 2px dashed var(--c); background: none; border-radius: 0; width: 14px; }
+  .nota-p { margin: 8px 0 0; font-size: var(--t-pequeno); color: var(--suave); }
+
+  .pos { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 14px; align-items: center; padding: 11px 4px; border-top: 1px solid var(--linea); cursor: pointer; }
+  .pos:first-child { border-top: 0; }
+  .pos .n { font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pos small { grid-column: 1; font-size: var(--t-pequeno); color: var(--suave); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pos .v, .pos .r { text-align: right; font-variant-numeric: tabular-nums; }
+  .pos .r { font-size: var(--t-pequeno); }
+  .pos .peso { grid-column: 1 / -1; height: 4px; border-radius: 99px; background: var(--carta-2); overflow: hidden; margin-top: 6px; }
+  .pos .peso i { display: block; height: 100%; width: var(--p); background: var(--c, var(--acento)); }
+  .pos[aria-expanded="true"] { background: var(--carta-2); border-radius: var(--r-s); }
+  .detalle { padding: 12px 4px 16px; display: grid; gap: 12px; }
+  .datos { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px 14px; font-size: var(--t-pequeno); }
+  .datos div span { display: block; color: var(--suave); }
+  .datos div b { font-weight: 550; font-variant-numeric: tabular-nums; }
+
+  form.rejilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; align-items: end; }
+  form.rejilla label { display: grid; gap: 4px; font-size: var(--t-pequeno); color: var(--suave); min-width: 0; }
+  form.rejilla label.ancho { grid-column: 1 / -1; }
+  form.rejilla .c-campo { width: 100%; min-width: 0; }
+  .botones { display: flex; gap: 8px; flex-wrap: wrap; grid-column: 1 / -1; }
+  .cands { display: grid; gap: 6px; grid-column: 1 / -1; }
+  .cands button { text-align: left; justify-content: flex-start; height: auto; padding: 8px 12px; white-space: normal; }
+  .cands button small { color: var(--suave); margin-left: 6px; }
+  .op { display: grid; grid-template-columns: 74px minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 9px 4px; border-top: 1px solid var(--linea); font-size: var(--t-texto); }
+  .op:first-child { border-top: 0; }
+  .op time { font-size: var(--t-pequeno); color: var(--suave); font-variant-numeric: tabular-nums; }
+  .op span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .op .acc { display: flex; gap: 6px; justify-content: flex-end; }
+  .op b { font-weight: 550; font-variant-numeric: tabular-nums; }
+  .vacio { margin: 6px 4px; color: var(--suave); }
+
+  .fechas { display: flex; gap: 6px; flex-wrap: wrap; }
+  .md { line-height: 1.55; overflow-wrap: anywhere; }
+  .md h2 { margin: 26px 0 8px; font-size: var(--t-seccion); }
+  .md h2:first-child { margin-top: 0; }
+  .md h3 { margin: 18px 0 6px; font-size: var(--t-destacado); }
+  .md h4 { margin: 14px 0 4px; font-size: var(--t-texto); }
+  .md p, .md ul, .md ol { margin: 8px 0; }
+  .md ul, .md ol { padding-left: 22px; }
+  .md li { margin: 3px 0; }
+  .md code { font-size: .92em; background: var(--carta-2); padding: 1px 5px; border-radius: 5px; }
+  .md pre { background: var(--carta-2); padding: 10px; border-radius: var(--r-s); overflow-x: auto; }
+  .md hr { border: 0; border-top: 1px solid var(--linea); margin: 18px 0; }
+  .md a { color: var(--acento); }
+  .md .tabla { overflow-x: auto; margin: 10px 0; }
+  .md table { border-collapse: collapse; font-size: var(--t-pequeno); min-width: 100%; overflow-wrap: normal; }
+  .md th, .md td { padding: 6px 10px; border-bottom: 1px solid var(--linea); text-align: left; vertical-align: top; }
+  .md th { color: var(--suave); font-weight: 550; white-space: nowrap; }
+  .md td { font-variant-numeric: tabular-nums; min-width: 6.5em; max-width: 22em; }   /* con scroll lateral antes que letra a letra */
+  .md .graf { margin: 14px 0; padding: 12px; border: 1px solid var(--linea); border-radius: var(--r-s); }
+  .md .graf b { display: block; font-size: var(--t-pequeno); font-weight: 600; margin-bottom: 8px; }
+  .md .graf .lienzo { height: 230px; }
+
+  @media (max-width: 720px) {
+    .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .dos { grid-template-columns: minmax(0, 1fr); }
+    .op { grid-template-columns: 52px minmax(0, 1fr) auto; gap: 4px 8px; }
+    .op span:not(.acc) { white-space: normal; }
+    .op .acc { grid-column: 2 / -1; }
+  }
+</style>
+<body>
+<div class="c-toast" id="toast" role="status"><b id="toast-txt"></b><button id="toast-btn">Deshacer</button></div>
+
+<div class="puerta c-puerta" id="puerta">
+  <form id="f-clave">
+    <h2>Inversiones</h2>
+    <p id="puerta-msg">Contraseña de todo</p>
+    <input class="c-campo" type="password" name="pass" required autocomplete="current-password" aria-label="Contraseña">
+    <button class="c-btn pri" type="submit">Entrar</button>
+  </form>
+</div>
+
+<div class="app">
+  <header class="top">
+    <h1>Inversiones</h1>
+    <span id="estado">Cargando…</span>
+    <nav><a class="c-btn mini" href="/">Hoy</a><a class="c-btn mini" href="/habitos.html">Hábitos</a><a class="c-btn mini" href="/pendientes.html">Pendientes</a><a class="c-btn mini" href="/entreno.html">Entreno</a><a class="c-btn mini" href="/salud.html">Salud</a><a class="c-btn mini" href="/gastos.html">Gastos</a></nav>
+  </header>
+
+  <div class="c-seg" role="tablist" aria-label="Secciones" id="pestanas">
+    <button role="tab" data-v="cartera">Cartera</button>
+    <button role="tab" data-v="operaciones">Operaciones</button>
+    <button role="tab" data-v="review">Review</button>
+    <button role="tab" data-v="perfil">Perfil</button>
+  </div>
+
+  <!-- CARTERA -->
+  <section class="vista" id="v-cartera">
+    <div class="kpis">
+      <div class="kpi grande c-carta"><small>Valor</small><b id="k-valor">—</b><small id="k-valor-s"></small></div>
+      <div class="kpi c-carta"><small>Ganancia sin vender</small><b id="k-lat">—</b><small id="k-lat-s"></small></div>
+      <div class="kpi c-carta"><small>Hoy</small><b id="k-dia">—</b><small id="k-dia-s"></small></div>
+      <div class="kpi c-carta"><small>Metido (neto)</small><b id="k-met">—</b><small id="k-met-s"></small></div>
+    </div>
+
+    <section class="carta c-carta">
+      <div class="cab">
+        <h2>Evolución</h2>
+        <div class="c-seg rangos" id="rangos">
+          <button data-r="30">1M</button><button data-r="182">6M</button><button data-r="365">1A</button><button data-r="0">Todo</button>
+        </div>
+      </div>
+      <div class="lienzo"><canvas id="g-serie" role="img" aria-label="Valor de la cartera frente a lo metido y a la referencia"></canvas></div>
+      <div class="ley" id="ley-serie"></div>
+      <p class="nota-p" id="nota-serie"></p>
+    </section>
+
+    <div class="dos">
+      <section class="carta c-carta">
+        <h2>Posiciones</h2>
+        <div id="posiciones"></div>
+        <div class="botones" style="margin-top:12px">
+          <button class="c-btn mini" id="b-precios">Actualizar precios</button>
+          <span class="nota-p" id="hora-precios" style="margin:auto 0"></span>
+        </div>
+      </section>
+      <section class="carta c-carta">
+        <h2>Reparto</h2>
+        <div class="lienzo bajo"><canvas id="g-reparto" role="img" aria-label="Peso de cada posición"></canvas></div>
+        <div class="ley" id="ley-reparto"></div>
+        <p class="nota-p">Por la etiqueta de cada producto. Lo que hay dentro de los ETFs (países, sectores, empresas) lo mira la review del domingo.</p>
+      </section>
+    </div>
+  </section>
+
+  <!-- OPERACIONES -->
+  <section class="vista" id="v-operaciones" hidden>
+    <section class="carta c-carta">
+      <h2 id="t-op">Apuntar operación</h2>
+      <form class="rejilla" id="f-op">
+        <input type="hidden" name="id">
+        <label>Activo<select class="c-campo" name="activo" required></select></label>
+        <label>Tipo<select class="c-campo" name="tipo"><option value="compra">Compra</option><option value="venta">Venta</option><option value="dividendo">Dividendo</option></select></label>
+        <label>Fecha<input class="c-campo" type="date" name="fecha" required></label>
+        <label data-no-div>Participaciones<input class="c-campo" name="cantidad" inputmode="decimal" placeholder="3,25" autocomplete="off"></label>
+        <label><span id="l-precio">Precio por participación (€)</span><input class="c-campo" name="precio" inputmode="decimal" required placeholder="118,40" autocomplete="off"></label>
+        <label data-no-div>Comisión (€)<input class="c-campo" name="comision" inputmode="decimal" placeholder="1" autocomplete="off"></label>
+        <label class="ancho">Nota<input class="c-campo" name="nota" maxlength="200" placeholder="Opcional: plan de ahorro, aportación extra…" autocomplete="off"></label>
+        <div class="botones">
+          <button class="c-btn pri" type="submit">Guardar</button>
+          <button class="c-btn" type="button" id="b-op-cancela" hidden>Cancelar</button>
+          <span class="nota-p" id="op-total" style="margin:auto 0"></span>
+        </div>
+      </form>
+    </section>
+
+    <section class="carta c-carta" id="c-activo" hidden>
+      <h2 id="t-activo">Activo nuevo</h2>
+      <form class="rejilla" id="f-activo">
+        <input type="hidden" name="id">
+        <label class="ancho">Busca por ISIN, ticker o nombre<input class="c-campo" name="q" type="search" placeholder="IE00BK5BQT80 · VWCE · Vanguard All-World" autocomplete="off"></label>
+        <div class="cands" id="cands"></div>
+        <label>Símbolo de Yahoo<input class="c-campo" name="simbolo" required placeholder="VWCE.DE" autocomplete="off"></label>
+        <label>Nombre<input class="c-campo" name="nombre" maxlength="120" autocomplete="off"></label>
+        <label>ISIN<input class="c-campo" name="isin" maxlength="12" autocomplete="off"></label>
+        <label>Tipo<select class="c-campo" name="tipo">
+          <option value="etf">ETF</option><option value="fondo">Fondo indexado</option><option value="accion">Acción</option>
+          <option value="cripto">Cripto</option><option value="bono">Renta fija</option><option value="liquidez">Liquidez</option><option value="otro">Otro</option>
+        </select></label>
+        <label>TER (%)<input class="c-campo" name="ter" inputmode="decimal" placeholder="0,22" autocomplete="off"></label>
+        <label class="ancho">Qué papel cumple en tu cartera<input class="c-campo" name="papel" maxlength="200" placeholder="Núcleo global, apuesta por tecnología, liquidez…" autocomplete="off"></label>
+        <div class="botones">
+          <button class="c-btn pri" type="submit">Guardar activo</button>
+          <button class="c-btn" type="button" id="b-activo-cancela">Cancelar</button>
+          <button class="c-btn peligro" type="button" id="b-activo-borra" hidden>Borrar activo</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="carta c-carta">
+      <h2>Historial</h2>
+      <div id="ops"></div>
+    </section>
+  </section>
+
+  <!-- REVIEW -->
+  <section class="vista" id="v-review" hidden>
+    <section class="carta c-carta">
+      <div class="cab"><h2>Review semanal</h2><div class="fechas" id="fechas"></div></div>
+      <article class="md" id="review"></article>
+    </section>
+  </section>
+
+  <!-- PERFIL -->
+  <section class="vista" id="v-perfil" hidden>
+    <section class="carta c-carta">
+      <h2>Tu contexto</h2>
+      <p class="nota-p" style="margin:0 0 12px">Lo lee la review del domingo. Lo que dejes vacío lo supondrá y te lo preguntará.</p>
+      <form class="rejilla" id="f-perfil">
+        <label>Edad<input class="c-campo" name="edad" inputmode="numeric"></label>
+        <label>Aportación mensual (€)<input class="c-campo" name="aportacion" inputmode="decimal"></label>
+        <label>¿Es estable?<select class="c-campo" name="estable"><option value="">Sin decir</option><option value="si">Sí</option><option value="no">No</option></select></label>
+        <label>Horizonte<input class="c-campo" name="horizonte" placeholder="10+ años" autocomplete="off"></label>
+        <label class="ancho">Objetivo<input class="c-campo" name="objetivo" placeholder="Crecimiento a largo plazo, entrada de un piso en 2032…" autocomplete="off"></label>
+        <label>Fondo de emergencia<input class="c-campo" name="emergencia" placeholder="Sí, 6 meses de gastos" autocomplete="off"></label>
+        <label>Tolerancia al riesgo<select class="c-campo" name="tolerancia"><option value="">Sin decir</option><option>baja</option><option>media</option><option>alta</option></select></label>
+        <label>Caída que aguantarías sin vender<input class="c-campo" name="caida" placeholder="-30 %" autocomplete="off"></label>
+        <label>Broker(s)<input class="c-campo" name="broker" autocomplete="off"></label>
+        <label>Referencia para comparar<input class="c-campo" name="referencia" placeholder="VWCE.DE" autocomplete="off"></label>
+        <label class="ancho">Notas para el analista<textarea class="c-campo" name="notas" rows="3" maxlength="1000" placeholder="Cosas que cambian el análisis: un gasto grande previsto, que no quieres cripto…"></textarea></label>
+        <div class="botones"><button class="c-btn pri" type="submit">Guardar</button></div>
+      </form>
+    </section>
+  </section>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const el = (t, cls, txt) => { const e = document.createElement(t); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+let I = null, rango = 0, abierta = null, deshacer = null, reloj, reviewVista = null;
+
+const eur = (n, d = 2) => n == null ? "—" : n.toLocaleString("es-ES", {style: "currency", currency: "EUR", minimumFractionDigits: d, maximumFractionDigits: d});
+const signo = (n, f = eur) => n == null ? "—" : (n > 0 ? "+" : "") + f(n);
+const pct = n => n == null ? "—" : `${n > 0 ? "+" : ""}${n.toLocaleString("es-ES", {maximumFractionDigits: 2})} %`;
+// «1.234,56» y «1234.56» valen igual: con coma, los puntos son de miles
+const num = v => { let s = String(v ?? "").trim().replace(/\s|€/g, ""); if (s.includes(",")) s = s.replace(/\./g, "").replace(",", "."); const n = parseFloat(s); return Number.isFinite(n) ? n : null; };
+const color = n => n == null || n === 0 ? "" : n > 0 ? "sube" : "baja";
+const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+const corta = s => { const [a, m, d] = s.split("-").map(Number); return `${d} ${MESES[m - 1]}${a !== new Date().getFullYear() ? " " + String(a).slice(2) : ""}`; };
+const hoyISO = () => new Date().toLocaleDateString("sv");
+
+function puerta(mostrar, msg) {
+  $("#puerta").toggleAttribute("data-on", mostrar);
+  $("#puerta-msg").textContent = msg || "Contraseña de todo";
+  if (mostrar) $("#puerta input").focus();
+}
+async function api(url, cuerpo) {
+  const r = await fetch(url, cuerpo === undefined ? {} : {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(cuerpo)});
+  if (r.status === 401) { puerta(true); throw new Error("401"); }
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.status);
+  return r.json();
+}
+function toast(txt, fn) {
+  deshacer = fn;
+  $("#toast-txt").textContent = txt;
+  $("#toast-btn").hidden = !fn;
+  $("#toast").toggleAttribute("data-on", true);
+  clearTimeout(reloj);
+  reloj = setTimeout(() => $("#toast").removeAttribute("data-on"), 5000);
+}
+$("#toast-btn").onclick = async () => { $("#toast").removeAttribute("data-on"); if (deshacer) { await deshacer(); cargar(); } };
+
+// ---------- pestañas (la elegida va en el #, así un enlace o recargar vuelve a ella) ----------
+function vista(v) {
+  if (!["cartera", "operaciones", "review", "perfil"].includes(v)) v = "cartera";
+  document.querySelectorAll("#pestanas button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.v === v)));
+  document.querySelectorAll(".vista").forEach(s => s.hidden = s.id !== `v-${v}`);
+  history.replaceState(null, "", `${location.pathname}${location.search}#${v}`);
+  if (I) ({cartera: pintaCartera, operaciones: pintaOps, review: pintaReview, perfil: pintaPerfil})[v]();
+}
+$("#pestanas").onclick = e => { const b = e.target.closest("button"); if (b) vista(b.dataset.v); };
+
+// ---------- gráficas ----------
+const graf = {};
+function tokens() {
+  const s = getComputedStyle(document.documentElement), v = n => s.getPropertyValue(n).trim();
+  return {texto: v("--texto"), suave: v("--suave"), tenue: v("--tenue"), linea: v("--linea"), acento: v("--acento"),
+          peligro: v("--peligro"), carta: v("--carta"), fuente: v("--fuente"), serie: [1, 2, 3, 4, 5, 6, 7, 8].map(i => v(`--serie-${i}`))};
+}
+function base(t, yfmt) {
+  return {
+    responsive: true, maintainAspectRatio: false, interaction: {mode: "index", intersect: false},
+    animation: window.anima ? anima.graficas(200) : false,
+    plugins: {legend: {display: false},
+      tooltip: {backgroundColor: t.texto, titleColor: t.carta, bodyColor: t.carta, padding: 10, cornerRadius: 8, displayColors: false,
+                titleFont: {family: t.fuente, weight: "600"}, bodyFont: {family: t.fuente}}},
+    scales: {
+      x: {grid: {display: false}, border: {color: t.linea}, ticks: {color: t.tenue, font: {family: t.fuente, size: 11}, maxRotation: 0, autoSkipPadding: 16}},
+      y: {grid: {color: t.linea}, border: {display: false}, ticks: {color: t.tenue, font: {family: t.fuente, size: 11}, maxTicksLimit: 5, callback: yfmt}},
+    },
+  };
+}
+function dibuja(lienzo, config) {
+  const id = lienzo.id || lienzo.dataset.k;
+  graf[id]?.destroy();
+  if (window.Chart) graf[id] = new Chart(lienzo, config);
+}
+function leyenda(caja, items) {
+  caja.replaceChildren(...items.map(([txt, c, forma]) => { const s = el("span"), m = el("s", forma || ""); m.style.setProperty("--c", c); s.append(m, document.createTextNode(txt)); return s; }));
+}
+const eurCorto = v => Math.abs(v) >= 1e4 ? `${Math.round(v / 1000)}k €` : `${Math.round(v)} €`;
+
+// ---------- cartera ----------
+function pintaCartera() {
+  const t = I.total, abiertas = I.posiciones.filter(p => p.cantidad > 0);
+  $("#k-valor").textContent = eur(t.valor);
+  $("#k-valor-s").textContent = abiertas.length ? `${abiertas.length} posici${abiertas.length === 1 ? "ón" : "ones"}` : "Sin posiciones";
+  $("#k-lat").textContent = signo(t.latente); $("#k-lat").className = color(t.latente);
+  $("#k-lat-s").textContent = pct(t.rent);
+  $("#k-dia").textContent = signo(t.dia); $("#k-dia").className = color(t.dia);
+  $("#k-dia-s").textContent = t.valor ? pct(t.dia / (t.valor - t.dia) * 100) : "";
+  const metido = I.serie.length ? I.serie.at(-1).metido : 0;
+  $("#k-met").textContent = eur(metido);
+  $("#k-met-s").textContent = [t.realizado ? `vendido ${signo(t.realizado)}` : "", t.dividendos ? `dividendos ${eur(t.dividendos)}` : "", t.comisiones ? `comisiones ${eur(t.comisiones)}` : ""].filter(Boolean).join(" · ") || "coste de lo que tienes";
+
+  document.querySelectorAll("#rangos button").forEach(b => b.setAttribute("aria-selected", String(+b.dataset.r === rango)));
+  serie();
+  posiciones();
+  reparto();
+  const horas = I.posiciones.map(p => p.precio_hora).filter(Boolean).sort();
+  $("#hora-precios").textContent = horas.length ? `Precios de Yahoo, ${horas.at(-1).replace("T", " a las ")}` : "";
+}
+
+function serie() {
+  const t = tokens(), caja = $("#g-serie");
+  let S = I.serie;
+  if (rango) { const desde = new Date(Date.now() - rango * 864e5).toLocaleDateString("sv"); S = S.filter(s => s.dia >= desde); }
+  if (!S.length) { graf["g-serie"]?.destroy(); $("#nota-serie").textContent = "Cuando apuntes tu primera compra, aquí verás cómo evoluciona."; $("#ley-serie").replaceChildren(); return; }
+  const ref = I.referencia.simbolo, u = I.serie.at(-1);
+  const ds = [
+    {label: "Valor", data: S.map(s => s.valor), borderColor: t.acento, backgroundColor: t.acento + "22", fill: "origin", borderWidth: 2, pointRadius: 0, tension: .2},
+    {label: "Metido", data: S.map(s => s.metido), borderColor: t.suave, borderWidth: 1.5, borderDash: [4, 4], pointRadius: 0, stepped: true},
+    {label: `Todo en ${ref}`, data: S.map(s => s.referencia), borderColor: t.serie[0], borderWidth: 1.5, pointRadius: 0, tension: .2},
+  ];
+  const o = base(t, eurCorto);
+  o.plugins.tooltip.callbacks = {title: c => corta(S[c[0].dataIndex].dia), label: c => c.raw == null ? null : `${c.dataset.label}: ${eur(c.raw)}`};
+  dibuja(caja, {type: "line", data: {labels: S.map(s => corta(s.dia)), datasets: ds}, options: o});
+  leyenda($("#ley-serie"), [["Valor", t.acento], ["Lo metido", t.suave, "raya"], [`Si todo hubiera ido a ${ref}`, t.serie[0]]]);
+  $("#nota-serie").textContent = u.referencia
+    ? `Con las mismas compras en ${I.referencia.nombre || ref} tendrías ${eur(u.referencia)} (${signo(u.valor - u.referencia)} para ti). Es la forma honesta de saber si elegir valores te está saliendo a cuenta.`
+    : "";
+}
+$("#rangos").onclick = e => { const b = e.target.closest("button"); if (b) { rango = +b.dataset.r; pintaCartera(); } };
+
+function posiciones() {
+  const t = tokens(), caja = $("#posiciones");
+  const lista = I.posiciones.filter(p => p.cantidad > 0).sort((a, b) => (b.valor || 0) - (a.valor || 0));
+  if (!lista.length) {
+    caja.replaceChildren(el("p", "vacio", I.activos.length ? "Ahora mismo no tienes nada abierto." : "Aún no hay nada. Ve a Operaciones y apunta tu primera compra."));
+    return;
+  }
+  caja.replaceChildren();
+  lista.forEach((p, i) => {
+    const f = el("div", "pos"), c = t.serie[i % 8];
+    f.setAttribute("role", "button"); f.tabIndex = 0;
+    f.setAttribute("aria-expanded", String(abierta === p.id));
+    const peso = el("div", "peso"), barra = el("i");
+    barra.style.setProperty("--p", `${p.peso}%`); barra.style.setProperty("--c", c); peso.append(barra);
+    const r = el("span", `r ${color(p.rent)}`, `${pct(p.rent)}`);
+    if (p.dia != null) { const h = el("span", color(p.dia), ` · hoy ${pct(p.dia)}`); r.append(h); }
+    f.append(el("span", "n", p.nombre), el("span", "v", eur(p.valor)),
+             el("small", null, `${p.simbolo} · ${String(p.cantidad).replace(".", ",")} part. · ${p.peso.toLocaleString("es-ES")} %`), r, peso);
+    f.onclick = f.onkeydown = e => { if (e.type === "keydown" && e.key !== "Enter") return; abierta = abierta === p.id ? null : p.id; posiciones(); };
+    caja.append(f);
+    if (abierta === p.id) caja.append(detalle(p, c));
+  });
+}
+
+function detalle(p, c) {
+  const t = tokens(), d = el("div", "detalle"), datos = el("div", "datos");
+  const par = (k, v) => { const x = el("div"); x.append(el("span", null, k), el("b", null, v)); return x; };
+  datos.append(par("Precio", eur(p.precio, p.precio < 10 ? 4 : 2)), par("Coste medio (FIFO)", eur(p.coste_medio, 2)), par("Invertido", eur(p.coste)),
+               par("Ganancia", `${signo(p.latente)} (${pct(p.rent)})`), par("TER", p.ter == null ? "sin apuntar" : `${String(p.ter).replace(".", ",")} %`),
+               par("ISIN", p.isin || "—"));
+  if (p.realizado) datos.append(par("Ya vendido", signo(p.realizado)));
+  if (p.dividendos) datos.append(par("Dividendos", eur(p.dividendos)));
+  if (p.papel) datos.append(par("Papel", p.papel));
+  const hist = Object.entries(I.historicos[p.simbolo] || {}).filter(([dia]) => dia >= new Date(Date.now() - 3 * 365 * 864e5).toLocaleDateString("sv"));
+  const lz = el("div", "lienzo bajo"), cv = el("canvas"); cv.dataset.k = "g-det"; cv.setAttribute("role", "img"); cv.setAttribute("aria-label", `Precio de ${p.nombre}`);
+  lz.append(cv);
+  const botones = el("div", "botones"), edita = el("button", "c-btn mini", "Editar activo"), compra = el("button", "c-btn mini", "Apuntar operación");
+  edita.onclick = e => { e.stopPropagation(); abreActivo(p); vista("operaciones"); };
+  compra.onclick = e => { e.stopPropagation(); vista("operaciones"); $("#f-op").activo.value = p.id; $("#f-op").cantidad.focus(); };
+  botones.append(compra, edita);
+  d.append(datos, lz, el("div", "ley"), botones);
+  requestAnimationFrame(() => {
+    if (!hist.length) return;
+    const compras = Object.fromEntries(I.operaciones.filter(o => o.activo === p.id && o.tipo !== "dividendo").map(o => [o.fecha, o]));
+    const etiquetas = hist.map(([dia]) => dia);
+    // cada compra o venta se pinta en el primer día con precio en o después de su fecha
+    const marcas = etiquetas.map(() => null);
+    Object.values(compras).forEach(o => { const i = etiquetas.findIndex(x => x >= o.fecha); if (i >= 0) marcas[i] = o.precio; });
+    const o = base(t, v => eur(v, v < 10 ? 2 : 0));
+    o.plugins.tooltip.callbacks = {title: c => corta(etiquetas[c[0].dataIndex]), label: c => c.raw == null ? null : `${c.dataset.label}: ${eur(c.raw, 2)}`};
+    dibuja(cv, {type: "line", data: {labels: etiquetas.map(corta), datasets: [
+      {label: "Precio", data: hist.map(([, v]) => v), borderColor: c, borderWidth: 1.8, pointRadius: 0, tension: .15},
+      {label: "Tu coste medio", data: hist.map(() => p.coste_medio), borderColor: t.suave, borderDash: [4, 4], borderWidth: 1.2, pointRadius: 0},
+      {label: "Tus operaciones", data: marcas, showLine: false, pointRadius: 5, pointBackgroundColor: t.texto, pointBorderColor: t.carta, pointBorderWidth: 2},
+    ]}, options: o});
+    leyenda(d.querySelector(".ley"), [["Precio", c], ["Tu coste medio", t.suave, "raya"], ["Tus compras y ventas", t.texto]]);
+  });
+  return d;
+}
+
+function reparto() {
+  const t = tokens(), lista = I.posiciones.filter(p => p.valor > 0).sort((a, b) => b.valor - a.valor);
+  if (!lista.length) { graf["g-reparto"]?.destroy(); $("#ley-reparto").replaceChildren(); return; }
+  const cols = lista.map((_, i) => t.serie[i % 8]);
+  dibuja($("#g-reparto"), {type: "doughnut", data: {labels: lista.map(p => p.nombre), datasets: [{data: lista.map(p => p.valor), backgroundColor: cols, borderColor: t.carta, borderWidth: 2}]},
+    options: {responsive: true, maintainAspectRatio: false, cutout: "62%", animation: window.anima?.mov ? {duration: 500} : false,
+              plugins: {legend: {display: false}, tooltip: {...base(t).plugins.tooltip, callbacks: {label: c => `${c.label}: ${eur(c.raw)} · ${lista[c.dataIndex].peso.toLocaleString("es-ES")} %`}}}}});
+  const tipos = Object.entries(I.reparto).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${NOMBRE_TIPO[k] || k} ${v.toLocaleString("es-ES")} %`).join(" · ");
+  leyenda($("#ley-reparto"), lista.map((p, i) => [`${p.nombre} ${p.peso.toLocaleString("es-ES")} %`, cols[i]]));
+  $("#ley-reparto").append(el("span", null, tipos));
+}
+const NOMBRE_TIPO = {etf: "ETF", fondo: "Fondos", accion: "Acciones", cripto: "Cripto", bono: "Renta fija", liquidez: "Liquidez", otro: "Otro"};
+
+$("#b-precios").onclick = async e => {
+  e.target.disabled = true; e.target.textContent = "Actualizando…";
+  try { const r = await api("/api/inversiones/precios", {}); if (r.fallos.length) toast(`No se pudo con: ${r.fallos.map(f => f.split(":")[0]).join(", ")}`); await cargar(); }
+  catch (err) { toast(`No se pudo: ${err.message}`); }
+  e.target.disabled = false; e.target.textContent = "Actualizar precios";
+};
+
+// ---------- operaciones ----------
+function pintaOps() {
+  const f = $("#f-op"), sel = f.activo, antes = sel.value;
+  sel.replaceChildren(...I.activos.map(a => Object.assign(el("option", null, `${a.nombre} (${a.simbolo})`), {value: a.id})),
+                      Object.assign(el("option", null, "+ Activo nuevo…"), {value: "__nuevo"}));
+  sel.value = I.activos.some(a => a.id === antes) ? antes : (I.activos[0]?.id || "__nuevo");
+  if (!f.fecha.value) f.fecha.value = hoyISO();
+  if (sel.value === "__nuevo" && !I.activos.length) abreActivo();
+  tipoOp();
+  const caja = $("#ops"), nombre = Object.fromEntries(I.activos.map(a => [a.id, a.nombre]));
+  const ops = [...I.operaciones].reverse();
+  if (!ops.length) { caja.replaceChildren(el("p", "vacio", "Sin operaciones todavía.")); return; }
+  caja.replaceChildren(...ops.map(o => {
+    const fila = el("div", "op"), total = o.tipo === "dividendo" ? o.precio : o.cantidad * o.precio + (o.tipo === "compra" ? o.comision : -o.comision);
+    const txt = o.tipo === "dividendo" ? `Dividendo · ${nombre[o.activo]}` : `${o.tipo === "compra" ? "Compra" : "Venta"} · ${nombre[o.activo]} · ${String(o.cantidad).replace(".", ",")} × ${eur(o.precio, o.precio < 10 ? 4 : 2)}`;
+    const s = el("span", null, txt); s.title = o.nota || txt;
+    const acc = el("span", "acc"), ed = el("button", "c-btn mini", "Editar"), bo = el("button", "c-btn mini peligro", "Borrar");
+    ed.onclick = () => editaOp(o);
+    bo.onclick = async () => {
+      try { const v = await api("/api/inversiones/operacion/borra", {id: o.id}); toast("Operación borrada", () => api("/api/inversiones/operacion", v)); cargar(); }
+      catch (e) { toast(`No se pudo: ${e.message}`); }
+    };
+    acc.append(ed, bo);
+    fila.append(el("time", null, corta(o.fecha)), s, el("b", o.tipo === "venta" || o.tipo === "dividendo" ? "sube" : "", (o.tipo === "compra" ? "−" : "+") + eur(total)), acc);
+    return fila;
+  }));
+}
+function tipoOp() {
+  const f = $("#f-op"), div = f.tipo.value === "dividendo";
+  f.querySelectorAll("[data-no-div]").forEach(l => l.hidden = div);
+  $("#l-precio").textContent = div ? "Importe neto cobrado (€)" : "Precio por participación (€)";
+  totalOp();
+}
+function totalOp() {
+  const f = $("#f-op"), c = num(f.cantidad.value), p = num(f.precio.value), k = num(f.comision.value) || 0;
+  $("#op-total").textContent = f.tipo.value !== "dividendo" && c && p ? `Total ${eur(c * p + (f.tipo.value === "compra" ? k : -k))}` : "";
+}
+$("#f-op").tipo.onchange = tipoOp;
+$("#f-op").oninput = totalOp;
+$("#f-op").activo.onchange = e => { if (e.target.value === "__nuevo") abreActivo(); };
+function editaOp(o) {
+  const f = $("#f-op");
+  for (const k of ["id", "activo", "tipo", "fecha", "nota"]) f[k].value = o[k] ?? "";
+  for (const k of ["cantidad", "precio", "comision"]) f[k].value = o[k] ? String(o[k]).replace(".", ",") : "";
+  $("#t-op").textContent = "Editar operación"; $("#b-op-cancela").hidden = false;
+  tipoOp(); f.scrollIntoView({behavior: "smooth", block: "center"});
+}
+function limpiaOp() {
+  const f = $("#f-op"), activo = f.activo.value;
+  f.reset(); f.activo.value = activo; f.fecha.value = hoyISO(); f.id.value = "";
+  $("#t-op").textContent = "Apuntar operación"; $("#b-op-cancela").hidden = true; tipoOp();
+}
+$("#b-op-cancela").onclick = limpiaOp;
+$("#f-op").onsubmit = async e => {
+  e.preventDefault();
+  const f = e.target;
+  if (f.activo.value === "__nuevo") { abreActivo(); return; }
+  const o = {id: f.id.value || undefined, activo: f.activo.value, tipo: f.tipo.value, fecha: f.fecha.value,
+             cantidad: num(f.cantidad.value), precio: num(f.precio.value), comision: num(f.comision.value) || 0, nota: f.nota.value};
+  if (o.tipo !== "dividendo" && !o.cantidad) { toast("Faltan las participaciones"); return; }
+  try { await api("/api/inversiones/operacion", o); toast(f.id.value ? "Operación cambiada" : "Apuntada"); limpiaOp(); cargar(); }
+  catch (err) { toast(`No se guardó: ${err.message}`); }
+};
+
+// activo nuevo o editar uno
+function abreActivo(a) {
+  const f = $("#f-activo");
+  f.reset(); $("#cands").replaceChildren();
+  for (const k of ["id", "simbolo", "nombre", "isin", "tipo", "papel"]) if (a) f[k].value = a[k] ?? "";
+  if (a) f.ter.value = a.ter == null ? "" : String(a.ter).replace(".", ",");
+  $("#t-activo").textContent = a ? `Editar ${a.nombre}` : "Activo nuevo";
+  $("#b-activo-borra").hidden = !a;
+  $("#c-activo").hidden = false;
+  (a ? f.papel : f.q).focus();
+}
+let busqueda;
+$("#f-activo").q.oninput = e => {
+  clearTimeout(busqueda);
+  const q = e.target.value.trim();
+  if (q.length < 2) { $("#cands").replaceChildren(); return; }
+  busqueda = setTimeout(async () => {
+    try {
+      const r = await api(`/api/inversiones/busca?q=${encodeURIComponent(q)}`);
+      if (e.target.value.trim() !== q) return;
+      $("#cands").replaceChildren(...(r.candidatos.length ? r.candidatos.map(c => {
+        const b = el("button", "c-btn"), s = el("small", null, `${c.bolsa}${/\.(DE|F|AS|PA|MI|MC|SG|MU|BE)$/.test(c.simbolo) ? " · EUR" : ""}`);
+        b.type = "button"; b.append(document.createTextNode(`${c.simbolo} — ${c.nombre}`), s);
+        b.onclick = () => {
+          const f = $("#f-activo");
+          f.simbolo.value = c.simbolo; f.nombre.value = c.nombre;
+          if (/^[A-Z]{2}[A-Z0-9]{9}\d$/i.test(q)) f.isin.value = q.toUpperCase();
+          f.tipo.value = {ETF: "etf", EQUITY: "accion", MUTUALFUND: "fondo", CRYPTOCURRENCY: "cripto"}[c.clase] || f.tipo.value;
+          $("#cands").replaceChildren(); f.ter.focus();
+        };
+        return b;
+      }) : [el("p", "vacio", "Yahoo no encuentra nada con eso.")]));
+    } catch (err) { $("#cands").replaceChildren(el("p", "vacio", `Sin búsqueda: ${err.message}`)); }
+  }, 450);
+};
+$("#b-activo-cancela").onclick = () => { $("#c-activo").hidden = true; if ($("#f-op").activo.value === "__nuevo") $("#f-op").activo.value = I.activos[0]?.id || "__nuevo"; };
+$("#b-activo-borra").onclick = async () => {
+  try { await api("/api/inversiones/activo/borra", {id: $("#f-activo").id.value}); $("#c-activo").hidden = true; toast("Activo borrado"); cargar(); }
+  catch (e) { toast(e.message); }
+};
+$("#f-activo").onsubmit = async e => {
+  e.preventDefault();
+  const f = e.target, boton = f.querySelector("[type=submit]");
+  const a = {id: f.id.value || undefined, simbolo: f.simbolo.value.trim(), nombre: f.nombre.value, isin: f.isin.value, tipo: f.tipo.value, ter: num(f.ter.value), papel: f.papel.value};
+  boton.disabled = true; boton.textContent = "Bajando precios…";
+  try {
+    const r = await api("/api/inversiones/activo", a);
+    if (r.fallos.length) toast(`Guardado, pero Yahoo no da precios de ${a.simbolo}: revisa el símbolo`);
+    else toast("Activo guardado");
+    $("#c-activo").hidden = true;
+    await cargar();
+    $("#f-op").activo.value = r.id; $("#f-op").cantidad.focus();
+  } catch (err) { toast(`No se guardó: ${err.message}`); }
+  boton.disabled = false; boton.textContent = "Guardar activo";
+};
+
+// ---------- review ----------
+function proximoDomingo() {
+  const d = new Date(); d.setDate(d.getDate() + ((7 - d.getDay()) % 7 || (d.getHours() >= 11 ? 7 : 0)));
+  return `${d.getDate()} ${MESES[d.getMonth()]}`;
+}
+async function pintaReview() {
+  const fechas = I.reviews;
+  const pedida = new URLSearchParams(location.search).get("review");
+  if (!reviewVista || !fechas.includes(reviewVista)) reviewVista = fechas.includes(pedida) ? pedida : fechas[0];
+  $("#fechas").replaceChildren(...fechas.slice(0, 12).map(f => {
+    const b = el("button", "c-btn mini", corta(f)); b.setAttribute("aria-pressed", String(f === reviewVista));
+    if (f === reviewVista) b.classList.add("pri");
+    b.onclick = () => { reviewVista = f; pintaReview(); };
+    return b;
+  }));
+  const caja = $("#review");
+  if (!reviewVista) {
+    caja.replaceChildren(el("p", null, `Cada domingo a las 10:00 Claude analiza tu cartera: qué sobra, qué falta, riesgos, proyecciones y un plan de acción, comparando con las semanas anteriores. Te llega el resumen por Telegram y aquí la tienes entera.`),
+      el("p", "vacio", I.posiciones.some(p => p.cantidad > 0) ? `La primera: el domingo ${proximoDomingo()}. Rellena antes tu Perfil: con más contexto acierta más.` : "Apunta antes tus posiciones y rellena el Perfil."));
+    return;
+  }
+  caja.replaceChildren(el("p", "vacio", "Cargando…"));
+  try {
+    const r = await api(`/api/inversiones/review/${reviewVista}`);
+    md(caja, r.texto);
+  } catch (e) { caja.replaceChildren(el("p", "vacio", `No se pudo cargar: ${e.message}`)); }
+}
+
+// Markdown mínimo: lo que escribe la review (encabezados, tablas, listas, negrita, bloques ```grafica)
+function md(caja, texto) {
+  const esc = s => s.replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
+  const linea = s => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+    .replace(/(^|[^*\w])\*([^*\n]+)\*(?!\w)/g, "$1<i>$2</i>")
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  const L = texto.replace(/\r/g, "").split("\n"), out = [], graficas = [];
+  let i = 0;
+  while (i < L.length) {
+    const l = L[i];
+    if (/^```/.test(l)) {
+      const lang = l.slice(3).trim(), cuerpo = [];
+      for (i++; i < L.length && !/^```/.test(L[i]); i++) cuerpo.push(L[i]);
+      i++;
+      if (lang === "grafica") {
+        try { graficas.push(JSON.parse(cuerpo.join(" "))); out.push(`<div class="graf" data-g="${graficas.length - 1}"></div>`); }
+        catch { out.push(`<pre>${esc(cuerpo.join("\n"))}</pre>`); }
+      } else out.push(`<pre>${esc(cuerpo.join("\n"))}</pre>`);
+      continue;
+    }
+    let m;
+    if ((m = l.match(/^(#{1,4})\s+(.*)/))) { const n = Math.min(4, Math.max(2, m[1].length)); out.push(`<h${n}>${linea(m[2])}</h${n}>`); i++; continue; }
+    if (/^\s*(-{3,}|\*{3,})\s*$/.test(l)) { out.push("<hr>"); i++; continue; }
+    if (/^\s*\|/.test(l) && i + 1 < L.length && /^\s*\|?\s*:?-{2,}/.test(L[i + 1])) {
+      const celdas = s => s.trim().replace(/^\||\|$/g, "").split("|").map(c => linea(c.trim()));
+      let h = `<div class="tabla"><table><tr>${celdas(l).map(c => `<th>${c}</th>`).join("")}</tr>`;
+      for (i += 2; i < L.length && /^\s*\|/.test(L[i]); i++) h += `<tr>${celdas(L[i]).map(c => `<td>${c}</td>`).join("")}</tr>`;
+      out.push(h + "</table></div>");
+      continue;
+    }
+    if (/^\s*([-*+]|\d+[.)])\s+/.test(l)) {
+      const ord = /^\s*\d/.test(l), items = [];
+      while (i < L.length && /^\s*([-*+]|\d+[.)])\s+/.test(L[i])) {
+        let it = L[i].replace(/^\s*([-*+]|\d+[.)])\s+/, "");
+        for (i++; i < L.length && /^\s{2,}\S/.test(L[i]) && !/^\s*([-*+]|\d+[.)])\s+/.test(L[i]); i++) it += " " + L[i].trim();
+        items.push(`<li>${linea(it)}</li>`);
+      }
+      out.push(`<${ord ? "ol" : "ul"}>${items.join("")}</${ord ? "ol" : "ul"}>`);
+      continue;
+    }
+    if (!l.trim()) { i++; continue; }
+    const p = [];
+    while (i < L.length && L[i].trim() && !/^(#{1,4}\s|```|\s*\||\s*([-*+]|\d+[.)])\s+)/.test(L[i])) p.push(L[i++]);
+    out.push(`<p>${linea(p.join(" "))}</p>`);
+  }
+  caja.innerHTML = out.join("");
+  const t = tokens();
+  caja.querySelectorAll(".graf").forEach(div => {
+    const g = graficas[+div.dataset.g], lz = el("div", "lienzo"), cv = el("canvas");
+    cv.dataset.k = `md-${div.dataset.g}`; cv.setAttribute("role", "img"); cv.setAttribute("aria-label", g.titulo || "Gráfico");
+    lz.append(cv); div.append(el("b", null, g.titulo || ""), lz);
+    const series = (g.series || []).filter(s => Array.isArray(s.datos));
+    if (!series.length || !Array.isArray(g.etiquetas)) return;
+    if (g.tipo === "tarta") {
+      const cols = g.etiquetas.map((_, k) => t.serie[k % 8]);
+      dibuja(cv, {type: "doughnut", data: {labels: g.etiquetas, datasets: [{data: series[0].datos, backgroundColor: cols, borderColor: t.carta, borderWidth: 2}]},
+        options: {responsive: true, maintainAspectRatio: false, cutout: "58%", animation: false,
+                  plugins: {legend: {position: innerWidth < 640 ? "bottom" : "right", labels: {color: t.suave, boxWidth: 10, font: {family: t.fuente, size: 11}}}, tooltip: base(t).plugins.tooltip}}});
+      return;
+    }
+    const lineas = g.tipo === "lineas", o = base(t, v => v.toLocaleString("es-ES"));
+    o.animation = false;
+    o.plugins.legend = {display: series.length > 1, labels: {color: t.suave, boxWidth: 10, font: {family: t.fuente, size: 11}}};
+    o.plugins.tooltip = {...o.plugins.tooltip, displayColors: series.length > 1};
+    dibuja(cv, {type: lineas ? "line" : "bar", data: {labels: g.etiquetas, datasets: series.map((s, k) => ({
+      label: s.nombre || "", data: s.datos, borderColor: s.nombre === "Lo aportado" ? t.suave : t.serie[k % 8], backgroundColor: t.serie[k % 8],
+      borderWidth: lineas ? 2 : 0, borderDash: s.nombre === "Lo aportado" ? [4, 4] : [], pointRadius: 0, borderRadius: 4, tension: .2}))}, options: o});
+  });
+}
+
+// ---------- perfil ----------
+function pintaPerfil() {
+  const f = $("#f-perfil"), p = I.perfil;
+  for (const k of ["edad", "horizonte", "objetivo", "emergencia", "tolerancia", "caida", "broker", "referencia", "notas"]) f[k].value = p[k] ?? "";
+  f.aportacion.value = p.aportacion ? String(p.aportacion).replace(".", ",") : "";
+  f.estable.value = p.estable === true ? "si" : p.estable === false ? "no" : "";
+}
+$("#f-perfil").onsubmit = async e => {
+  e.preventDefault();
+  const f = e.target, p = Object.fromEntries(["edad", "horizonte", "objetivo", "emergencia", "tolerancia", "caida", "broker", "referencia", "notas"].map(k => [k, f[k].value]));
+  p.aportacion = num(f.aportacion.value) || 0;
+  p.estable = f.estable.value === "si" ? true : f.estable.value === "no" ? false : null;
+  try {
+    const cambiaRef = p.referencia.trim().toUpperCase() !== I.perfil.referencia;
+    await api("/api/inversiones/perfil", p);
+    if (cambiaRef) await api("/api/inversiones/precios", {});
+    toast("Perfil guardado"); cargar();
+  } catch (err) { toast(`No se guardó: ${err.message}`); }
+};
+
+// ---------- carga ----------
+async function cargar() {
+  try {
+    I = await api("/api/inversiones");
+    puerta(false);
+    $("#estado").textContent = I.total.valor ? eur(I.total.valor) : "";
+    vista(location.hash.slice(1) || (new URLSearchParams(location.search).has("review") ? "review" : "cartera"));
+  } catch (e) {
+    if (e.message !== "401") $("#estado").textContent = "Sin conexión";
+  }
+}
+$("#f-clave").onsubmit = async e => {
+  e.preventDefault();
+  const inp = e.target.pass;
+  const r = await fetch("/api/login", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({pass: inp.value})}).catch(() => null);
+  if (r && r.ok) { inp.value = ""; await cargar(); }
+  else puerta(true, r && r.status === 401 ? "Contraseña incorrecta" : "No se pudo conectar");
+};
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => I && vista(location.hash.slice(1)));
+cargar();
+</script>
+</body>
+</html>

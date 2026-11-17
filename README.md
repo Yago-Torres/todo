@@ -41,6 +41,9 @@ Y de escritorio para Windows y Linux (Omarchy), con bandeja, atajo global para a
 - **Salud** — fases de la noche, nota de 0 a 100, pasos, peso con su media de 7 días y composición
   de la báscula, con los datos de Salud del iPhone.
 - **Pendientes** — tareas guardadas como Markdown en un vault de Obsidian (formato del plugin Tasks).
+- **Inversiones** — cartera apuntada a mano (sin API del broker), precios diarios de Yahoo Finance pasados a euros,
+  plusvalías con FIFO, evolución frente a un ETF de referencia y una review semanal que escribe Claude con búsqueda
+  web (`inversiones.py --review`, con su timer de systemd). Apagada por defecto en Ajustes.
 - **Ajustes** — nombre, qué secciones están activas, cuáles salen en la barra de abajo y la mascota, la apariencia
   (tema, colores, letra) y el **aparato**, la carcasa entera: Calma, juno1980 (sintetizador de los 80, con
   vúmetros y LCD), Solarpunk (fotos de arquitectura con plantas; créditos en `static/fotos/CREDITOS.md`),

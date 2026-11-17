@@ -1062,6 +1062,43 @@ def test_escalada():
     assert main.lee_previa("20261111-183000", None, "Bearer x")   # la previa sigue ahí, por si se quiere
 
 
+def test_inversiones():
+    """FIFO como Hacienda, limpieza que tira lo roto, serie con la referencia y proyección. Sin red: precios a mano."""
+    import tempfile
+    from pathlib import Path
+    import inversiones as inv
+    d = Path(tempfile.mkdtemp())
+    inv.DATOS, inv.PRECIOS, inv.REVIEWS, inv.VAULT_REVIEWS = d / "i.json", d / "p.json", d / "r", d / "v"
+    datos = inv.guarda({"activos": [{"id": "A", "simbolo": "aaa.de", "tipo": "etf"}, {"id": "b", "simbolo": ""}],
+                        "operaciones": [
+                            {"id": "1", "fecha": "2026-01-05", "activo": "a", "tipo": "compra", "cantidad": "10", "precio": "10", "comision": 1},
+                            {"id": "2", "fecha": "2026-02-02", "activo": "a", "tipo": "compra", "cantidad": 10, "precio": 20, "comision": 1},
+                            {"id": "3", "fecha": "2026-03-02", "activo": "a", "tipo": "venta", "cantidad": 15, "precio": 30, "comision": 1},
+                            {"id": "4", "fecha": "2026-03-03", "activo": "a", "tipo": "dividendo", "precio": 2},
+                            {"id": "5", "fecha": "mal", "activo": "a", "tipo": "compra", "cantidad": 1, "precio": 1},
+                            {"id": "6", "fecha": "2026-03-03", "activo": "zzz", "tipo": "compra", "cantidad": 1, "precio": 1},
+                            {"id": "7", "fecha": "2026-03-03", "activo": "a", "tipo": "compra", "cantidad": 0, "precio": 1}]})
+    assert [a["id"] for a in datos["activos"]] == ["a"] and datos["activos"][0]["simbolo"] == "AAA.DE"   # sin símbolo, fuera
+    assert [o["id"] for o in datos["operaciones"]] == ["1", "2", "3", "4"]
+    assert inv.limpia(datos) == datos   # idempotente
+    precios = {"AAA.DE": {"dias": {"2026-01-05": 10, "2026-02-02": 20, "2026-03-02": 30, "2026-03-06": 40}, "ultimo": 40},
+               "REF": {"dias": {"2026-01-05": 5, "2026-03-06": 10}}}
+    p, = inv.posiciones(datos["operaciones"], datos["activos"], precios, date(2026, 3, 7))
+    # FIFO: se venden los 10 a 10,1 y 5 de los de 20,1; quedan 5 a 20,1
+    assert p["cantidad"] == 5 and p["coste"] == 100.5 and p["valor"] == 200 and p["latente"] == 99.5
+    assert p["realizado"] == round(15 * 30 - 1 - (101 + 5 * 20.1), 2) and p["dividendos"] == 2 and p["comisiones"] == 3
+    assert p["dia"] == round((40 / 40 - 1) * 100, 2) and p["peso"] == 100
+    s = inv.serie_cartera(datos["operaciones"], datos["activos"], precios, "REF", date(2026, 3, 7))
+    assert s[0] == {"dia": "2026-01-05", "valor": 100, "metido": 101, "referencia": 101}
+    assert s[-1]["dia"] == "2026-03-07" and s[-1]["valor"] == 200 and s[-1]["metido"] == round(101 + 201 - 449, 2)
+    pr = inv.proyeccion(1000, 100, 2, {"cero": 0})
+    assert pr["cero"]["anios"] == [1000, 2200, 3400] and pr["aportado"]["anios"] == [1000, 2200, 3400]
+    assert inv.review("../etc") is None and inv.reviews() == []
+    inv.guarda_review("2026-03-08", "## 1. Resumen\nTodo bien")
+    assert inv.reviews() == ["2026-03-08"] and "Todo bien" in inv.review("2026-03-08")
+    assert (d / "v" / "Review inversiones 2026-03-08.md").exists()
+
+
 if __name__ == "__main__":
     test_movimiento()
     test_sueno()
@@ -1087,4 +1124,5 @@ if __name__ == "__main__":
     test_descansos_api()
     test_escalada()
     test_aparato()
+    test_inversiones()
     print("ok")

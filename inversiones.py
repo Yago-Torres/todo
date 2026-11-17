@@ -1,0 +1,569 @@
+"""Inversiones: cartera a mano, precios de Yahoo y la review del domingo.
+
+Las operaciones se apuntan a mano (Trade Republic no tiene API y Yago no quiere guardar su PIN en la Pi).
+Todo en euros: lo que pagaste por participación, con la comisión aparte. Los precios de lo que cotiza en otra
+divisa se pasan a euros con el cambio del mismo día al bajarlos, así el cálculo no tiene que saber de divisas.
+
+- `inversiones.json` (junto a data.json): perfil, activos y operaciones. Fuera de data.json: clean() se lo comería.
+- `precios.json`: cierres diarios en euros por símbolo de Yahoo. Se puede borrar: se vuelve a bajar.
+- `reviews-inversiones/AAAA-MM-DD.md`: las reviews (y una copia en el vault, `Areas/Finanzas/Reviews/`).
+
+    python3 inversiones.py --precios        # lo que lanza inversiones-precios.timer
+    python3 inversiones.py --review         # lo que lanza inversiones-review.timer (domingos)
+    python3 inversiones.py --review --ver   # la review sin guardarla ni mandarla
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+import urllib.parse
+import urllib.request
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
+
+HERE = Path(__file__).parent
+DATOS = Path(os.getenv("TODO_DB", HERE / "data.json")).with_name("inversiones.json")
+PRECIOS = DATOS.with_name("precios.json")
+REVIEWS = DATOS.with_name("reviews-inversiones")
+VAULT_REVIEWS = Path(os.getenv("VAULT", "/srv/obsidian/Yago_obsidian_vault")) / "Areas/Finanzas/Reviews"
+AGENTE = "Mozilla/5.0 (X11; Linux aarch64)"   # sin navegador de verdad, Yahoo responde 429
+TIPOS = ("etf", "fondo", "accion", "cripto", "bono", "liquidez", "otro")
+OPERACIONES = ("compra", "venta", "dividendo")
+# Bolsas en euros, por orden: Trade Republic opera en Xetra/LS Exchange, así que .DE es lo más parecido a su precio
+EUROPA = (".DE", ".F", ".AS", ".PA", ".MI", ".MC", ".SG", ".MU", ".BE")
+PERFIL = {"edad": None, "horizonte": "", "objetivo": "", "aportacion": 0, "estable": None, "emergencia": "",
+          "tolerancia": "", "caida": "", "broker": "Trade Republic", "referencia": "VWCE.DE", "notas": ""}
+VACIO = {"perfil": PERFIL, "activos": [], "operaciones": []}
+
+
+# ---------- limpieza (como clean() de main.py: lo que no está aquí no se guarda) ----------
+def _num(v, lo=0.0, hi=1e9):
+    try:
+        n = float(str(v).replace(",", "."))
+    except (TypeError, ValueError):
+        return None
+    return n if lo <= n <= hi and n == n else None
+
+
+def _txt(v, n=120):
+    return " ".join(str(v or "").split())[:n]
+
+
+def _id(v):
+    return re.sub(r"[^a-z0-9-]", "", str(v or "").lower().replace(" ", "-"))[:40]
+
+
+def limpia(d):
+    d = d if isinstance(d, dict) else {}
+    p = d.get("perfil") if isinstance(d.get("perfil"), dict) else {}
+    perfil = {
+        "edad": int(e) if (e := _num(p.get("edad"), 14, 100)) else None,
+        "horizonte": _txt(p.get("horizonte")), "objetivo": _txt(p.get("objetivo"), 300),
+        "aportacion": _num(p.get("aportacion"), 0, 1e6) or 0,
+        "estable": p.get("estable") if isinstance(p.get("estable"), bool) else None,
+        "emergencia": _txt(p.get("emergencia")), "tolerancia": _txt(p.get("tolerancia"), 40),
+        "caida": _txt(p.get("caida"), 40), "broker": _txt(p.get("broker")) or PERFIL["broker"],
+        "referencia": _txt(p.get("referencia"), 20).upper() or PERFIL["referencia"],
+        "notas": _txt(p.get("notas"), 1000),
+    }
+    activos, vistos = [], set()
+    for a in d.get("activos") or []:
+        if not isinstance(a, dict) or not (i := _id(a.get("id"))) or i in vistos or not _txt(a.get("simbolo")):
+            continue
+        vistos.add(i)
+        activos.append({"id": i, "nombre": _txt(a.get("nombre")) or a["simbolo"], "isin": _txt(a.get("isin"), 12).upper(),
+                        "simbolo": _txt(a.get("simbolo"), 20).upper(), "tipo": a.get("tipo") if a.get("tipo") in TIPOS else "otro",
+                        "divisa": _txt(a.get("divisa"), 3).upper() or "EUR", "ter": _num(a.get("ter"), 0, 10),
+                        "papel": _txt(a.get("papel"), 200)})
+    ops = []
+    for o in d.get("operaciones") or []:
+        if not isinstance(o, dict) or o.get("activo") not in vistos or o.get("tipo") not in OPERACIONES:
+            continue
+        try:
+            dia = date.fromisoformat(str(o.get("fecha"))[:10]).isoformat()
+        except ValueError:
+            continue
+        cant, precio = _num(o.get("cantidad"), 0, 1e9) or 0, _num(o.get("precio"), 0, 1e9) or 0
+        if o["tipo"] != "dividendo" and not (cant and precio):
+            continue
+        if o["tipo"] == "dividendo" and not precio:
+            continue
+        ops.append({"id": _id(o.get("id")) or f"op{len(ops)}", "fecha": dia, "activo": o["activo"], "tipo": o["tipo"],
+                    # dividendo: precio = importe neto cobrado, cantidad 0
+                    "cantidad": cant if o["tipo"] != "dividendo" else 0, "precio": precio,
+                    "comision": _num(o.get("comision"), 0, 1e6) or 0, "nota": _txt(o.get("nota"), 200)})
+    ops.sort(key=lambda o: (o["fecha"], o["tipo"] != "compra"))
+    return {"perfil": perfil, "activos": activos, "operaciones": ops}
+
+
+def lee():
+    return limpia(json.loads(DATOS.read_text("utf-8"))) if DATOS.exists() else limpia(VACIO)
+
+
+def _escribe(p, cosa):
+    tmp = p.with_name(f".{p.name}.tmp")
+    tmp.write_text(json.dumps(cosa, ensure_ascii=False, indent=1), "utf-8")
+    tmp.replace(p)
+
+
+def guarda(d):
+    d = limpia(d)
+    _escribe(DATOS, d)
+    return d
+
+
+def lee_precios():
+    try:
+        return json.loads(PRECIOS.read_text("utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+# ---------- Yahoo ----------
+def _yahoo(url):
+    req = urllib.request.Request(url, headers={"User-Agent": AGENTE})
+    with urllib.request.urlopen(req, timeout=20) as r:
+        return json.loads(r.read())
+
+
+def busca(q):
+    """ISIN, ticker o nombre → candidatos de Yahoo, primero los que cotizan en euros (Xetra antes que nada)."""
+    q = _txt(q, 60)
+    if not q:
+        return []
+    url = "https://query2.finance.yahoo.com/v1/finance/search?" + urllib.parse.urlencode({"q": q, "quotesCount": 10, "newsCount": 0})
+    cands = [{"simbolo": x["symbol"], "nombre": x.get("longname") or x.get("shortname") or x["symbol"],
+              "bolsa": x.get("exchDisp") or x.get("exchange") or "", "clase": x.get("quoteType") or ""}
+             for x in _yahoo(url).get("quotes", []) if x.get("symbol")]
+    # Buscar por ISIN suele dar solo Londres o Stuttgart (y en Xetra el ticker puede ser otro: VWRA.L es VWCE.DE);
+    # buscando por el nombre largo sí aparece Xetra
+    if re.fullmatch(r"[A-Z]{2}[A-Z0-9]{9}\d", q.upper()) and not any(c["simbolo"].endswith(".DE") for c in cands):
+        nombre = next((c["nombre"] for c in cands if c["nombre"] != c["simbolo"]), "")
+        if nombre:
+            url = "https://query2.finance.yahoo.com/v1/finance/search?" + urllib.parse.urlencode({"q": nombre, "quotesCount": 10, "newsCount": 0})
+            cands += [{"simbolo": x["symbol"], "nombre": x.get("longname") or x.get("shortname") or x["symbol"],
+                       "bolsa": x.get("exchDisp") or x.get("exchange") or "", "clase": x.get("quoteType") or ""}
+                      for x in _yahoo(url).get("quotes", []) if (x.get("longname") or "") == nombre]
+    unicos = list({c["simbolo"]: c for c in cands}.values())
+    orden = lambda c: next((i for i, s in enumerate(EUROPA) if c["simbolo"].endswith(s)), len(EUROPA) + (c["simbolo"].startswith(q.upper())))
+    return sorted(unicos, key=orden)
+
+
+def _serie(simbolo, rango):
+    """Cierres diarios {dia: precio} en la divisa de cotización, la divisa y el último precio."""
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(simbolo)}?range={rango}&interval=1d"
+    r = _yahoo(url)["chart"]["result"][0]
+    m, cierres = r["meta"], r["indicators"]["quote"][0].get("close") or []
+    divisa, k = m.get("currency") or "EUR", 1
+    if divisa in ("GBp", "GBX", "ILA", "ZAc"):     # peniques y centavos: Yahoo da el precio en céntimos
+        divisa, k = {"GBp": "GBP", "GBX": "GBP", "ILA": "ILS", "ZAc": "ZAR"}[divisa], 100
+    dias = {datetime.fromtimestamp(t + (m.get("gmtoffset") or 0), timezone.utc).date().isoformat(): round(c / k, 6)
+            for t, c in zip(r.get("timestamp") or [], cierres) if c}
+    ultimo = m.get("regularMarketPrice")
+    return dias, divisa.upper(), (round(ultimo / k, 6) if ultimo else None), m
+
+
+def _a_euros(dias, cambio):
+    """Pasa cada cierre a euros con el cambio de ese día (o el último conocido antes)."""
+    if cambio is None:
+        return dias
+    claves, out, ult = sorted(cambio), {}, None
+    j = 0
+    for d in sorted(dias):
+        while j < len(claves) and claves[j] <= d:
+            ult = cambio[claves[j]]
+            j += 1
+        if ult := ult or (cambio[claves[0]] if claves else None):
+            out[d] = round(dias[d] / ult, 6)
+    return out
+
+
+def actualiza(simbolos=None, rango=None):
+    """Baja precios de los símbolos (por defecto, los de la cartera y la referencia). Devuelve los que fallaron."""
+    d, p = lee(), lee_precios()
+    simbolos = simbolos or sorted({a["simbolo"] for a in d["activos"]} | {d["perfil"]["referencia"]})
+    cambios, fallos = {}, []
+    for s in simbolos:
+        try:
+            r = rango or ("1mo" if s in p and p[s].get("dias") else "10y")
+            dias, divisa, ultimo, meta = _serie(s, r)
+            if divisa != "EUR":
+                if divisa not in cambios:
+                    # EURUSD=X es cuántos dólares vale un euro: precio en euros = precio / cambio
+                    cambios[divisa] = _serie(f"EUR{divisa}=X", r)[0]
+                ult_cambio = cambios[divisa][max(cambios[divisa])] if cambios[divisa] else None
+                dias = _a_euros(dias, cambios[divisa])
+                ultimo = round(ultimo / ult_cambio, 6) if ultimo and ult_cambio else None
+            viejo = p.get(s, {})
+            p[s] = {"divisa": divisa, "nombre": meta.get("longName") or meta.get("shortName") or viejo.get("nombre") or s,
+                    "dias": {**viejo.get("dias", {}), **dias}, "ultimo": ultimo, "hora": datetime.now().isoformat(timespec="minutes")}
+        except Exception as e:   # un símbolo que falla no tumba los demás
+            fallos.append(f"{s}: {e}")
+        time.sleep(.3)
+    _escribe(PRECIOS, p)
+    return fallos
+
+
+# ---------- cálculo ----------
+def _precio_en(serie, dia):
+    """Último cierre en o antes de `dia` (fines de semana y festivos arrastran el viernes)."""
+    ant = [d for d in serie if d <= dia]
+    return serie[max(ant)] if ant else None
+
+
+def posiciones(ops, activos, precios, hoy=None):
+    """FIFO por activo, como Hacienda: las primeras que compraste son las primeras que vendes."""
+    hoy = (hoy or date.today()).isoformat()
+    por = {a["id"]: {"lotes": [], "realizado": 0.0, "dividendos": 0.0, "comisiones": 0.0, "aportado": 0.0, "retirado": 0.0}
+           for a in activos}
+    for o in ops:
+        x = por.get(o["activo"])
+        if x is None or o["fecha"] > hoy:
+            continue
+        x["comisiones"] += o["comision"]
+        if o["tipo"] == "compra":
+            coste = o["cantidad"] * o["precio"] + o["comision"]
+            x["lotes"].append([o["cantidad"], coste / o["cantidad"]])
+            x["aportado"] += coste
+        elif o["tipo"] == "venta":
+            falta, coste = o["cantidad"], 0.0
+            while falta > 1e-9 and x["lotes"]:
+                n = min(falta, x["lotes"][0][0])
+                coste += n * x["lotes"][0][1]
+                x["lotes"][0][0] -= n
+                falta -= n
+                if x["lotes"][0][0] <= 1e-9:
+                    x["lotes"].pop(0)
+            ingreso = (o["cantidad"] - falta) * o["precio"] - o["comision"]
+            x["realizado"] += ingreso - coste
+            x["retirado"] += ingreso
+        else:
+            x["dividendos"] += o["precio"]
+    salida = []
+    for a in activos:
+        x, serie = por[a["id"]], precios.get(a["simbolo"], {})
+        cant = sum(n for n, _ in x["lotes"])
+        coste = sum(n * c for n, c in x["lotes"])
+        precio = serie.get("ultimo") or _precio_en(serie.get("dias", {}), hoy)
+        dias = sorted(serie.get("dias", {}))
+        ayer = serie["dias"][dias[-2]] if len(dias) >= 2 else None
+        if serie.get("dias") and dias[-1] < hoy:   # el último cierre no es de hoy: «ayer» es ese cierre
+            ayer = serie["dias"][dias[-1]]
+        valor = cant * precio if precio is not None else None
+        salida.append({**a, "cantidad": round(cant, 8), "coste": round(coste, 2), "coste_medio": round(coste / cant, 4) if cant else None,
+                       "precio": precio, "valor": round(valor, 2) if valor is not None else None,
+                       "latente": round(valor - coste, 2) if valor is not None else None,
+                       "rent": round((valor / coste - 1) * 100, 2) if valor is not None and coste else None,
+                       "dia": round((precio / ayer - 1) * 100, 2) if precio and ayer else None,
+                       "realizado": round(x["realizado"], 2), "dividendos": round(x["dividendos"], 2),
+                       "comisiones": round(x["comisiones"], 2), "aportado": round(x["aportado"], 2), "retirado": round(x["retirado"], 2),
+                       "precio_hora": serie.get("hora")})
+    total = sum(p["valor"] or 0 for p in salida)
+    for p in salida:
+        p["peso"] = round((p["valor"] or 0) / total * 100, 2) if total else 0
+    return salida
+
+
+def serie_cartera(ops, activos, precios, referencia, hoy=None):
+    """Día a día: valor, dinero metido (neto de ventas) y lo que tendrías si cada euro hubiera ido a la referencia."""
+    hoy = hoy or date.today()
+    if not ops:
+        return []
+    simbolo = {a["id"]: a["simbolo"] for a in activos}
+    ref = precios.get(referencia, {}).get("dias", {})
+    d, fin, i = date.fromisoformat(ops[0]["fecha"]), hoy, 0
+    cant, metido, ref_cant, out = {}, 0.0, 0.0, []
+    cache = {s: sorted(precios.get(s, {}).get("dias", {}).items()) for s in set(simbolo.values())}
+    ult = {}
+    while d <= fin:
+        dia = d.isoformat()
+        for s, filas in cache.items():   # arrastra el último cierre conocido
+            while filas and filas[0][0] <= dia:
+                ult[s] = filas.pop(0)[1]
+        ref_hoy = _precio_en(ref, dia)
+        while i < len(ops) and ops[i]["fecha"] <= dia:
+            o = ops[i]
+            i += 1
+            if o["tipo"] == "dividendo":
+                continue
+            signo = 1 if o["tipo"] == "compra" else -1
+            cant[o["activo"]] = cant.get(o["activo"], 0) + signo * o["cantidad"]
+            dinero = o["cantidad"] * o["precio"] + signo * o["comision"]
+            metido += signo * dinero
+            if ref_hoy:
+                ref_cant += signo * dinero / ref_hoy
+        if d.weekday() < 5 or d == fin:
+            valor = sum(c * ult.get(simbolo[a], 0) for a, c in cant.items() if c > 1e-9)
+            out.append({"dia": dia, "valor": round(valor, 2), "metido": round(metido, 2),
+                        "referencia": round(ref_cant * ref_hoy, 2) if ref_hoy and ref_cant else None})
+        d += timedelta(days=1)
+    return out
+
+
+def proyeccion(valor, mensual, anios=20, escenarios=None):
+    """Interés compuesto mensual con aportación fija. Tasas nominales anuales, explícitas a propósito."""
+    escenarios = escenarios or {"pesimista": 3.0, "base": 6.0, "optimista": 8.5}
+    out = {}
+    for nombre, tasa in escenarios.items():
+        r, v, fila = (1 + tasa / 100) ** (1 / 12) - 1, valor, [round(valor)]
+        for _ in range(anios):
+            for _ in range(12):
+                v = v * (1 + r) + mensual
+            fila.append(round(v))
+        out[nombre] = {"tasa": tasa, "anios": fila}
+    out["aportado"] = {"anios": [round(valor + mensual * 12 * n) for n in range(anios + 1)]}
+    return out
+
+
+# Caídas de pico a valle aproximadas, en euros. Supuestos para el stress test, no datos exactos.
+CRISIS = {
+    "2008 (crisis financiera)": {"etf": -50, "fondo": -50, "accion": -55, "cripto": -80, "bono": 5, "liquidez": 0, "otro": -40},
+    "2020 (covid)": {"etf": -33, "fondo": -33, "accion": -38, "cripto": -50, "bono": -3, "liquidez": 0, "otro": -25},
+    "2022 (tipos e inflación)": {"etf": -16, "fondo": -16, "accion": -25, "cripto": -75, "bono": -17, "liquidez": 0, "otro": -15},
+}
+
+
+def stress(pos):
+    return {nombre: round(sum((p["valor"] or 0) * caida.get(p["tipo"], -40) / 100 for p in pos), 2) for nombre, caida in CRISIS.items()}
+
+
+def informe(hoy=None):
+    d, p = lee(), lee_precios()
+    pos = posiciones(d["operaciones"], d["activos"], p, hoy)
+    valor = round(sum(x["valor"] or 0 for x in pos), 2)
+    coste = round(sum(x["coste"] for x in pos), 2)
+    serie = serie_cartera(d["operaciones"], d["activos"], p, d["perfil"]["referencia"], hoy)
+    reparto = {}
+    for x in pos:
+        if x["valor"]:
+            reparto[x["tipo"]] = round(reparto.get(x["tipo"], 0) + x["peso"], 2)
+    ter = sum((x["ter"] or 0) * x["peso"] for x in pos if x["ter"] is not None) / 100
+    return {
+        "perfil": d["perfil"], "activos": d["activos"], "operaciones": d["operaciones"], "posiciones": pos,
+        "total": {"valor": valor, "coste": coste, "latente": round(valor - coste, 2),
+                  "rent": round((valor / coste - 1) * 100, 2) if coste else None,
+                  "realizado": round(sum(x["realizado"] for x in pos), 2), "dividendos": round(sum(x["dividendos"] for x in pos), 2),
+                  "comisiones": round(sum(x["comisiones"] for x in pos), 2), "ter_medio": round(ter, 3),
+                  "dia": round(sum((x["valor"] or 0) * (x["dia"] or 0) / (100 + (x["dia"] or 0)) for x in pos), 2)},
+        "reparto": reparto, "serie": serie,
+        "historicos": {a["simbolo"]: dict(sorted(p.get(a["simbolo"], {}).get("dias", {}).items())[-1300:]) for a in d["activos"]},
+        "referencia": {"simbolo": d["perfil"]["referencia"], "nombre": p.get(d["perfil"]["referencia"], {}).get("nombre")},
+        "proyeccion": proyeccion(valor, d["perfil"]["aportacion"]), "stress": stress(pos),
+        "reviews": reviews(),
+    }
+
+
+# ---------- reviews ----------
+def reviews():
+    return sorted((f.stem for f in REVIEWS.glob("*.md")), reverse=True) if REVIEWS.exists() else []
+
+
+def review(fecha):
+    f = REVIEWS / f"{fecha}.md"
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", fecha) or not f.exists():
+        return None
+    return f.read_text("utf-8")
+
+
+def _md_cartera(inf):
+    filas = ["| Activo | Ticker / ISIN | Tipo | Participaciones | Invertido (coste FIFO) | Valor | Rentab. | Peso | TER | Primera compra | Papel que le doy |",
+             "|---|---|---|---|---|---|---|---|---|---|---|"]
+    for x in inf["posiciones"]:
+        if not x["cantidad"]:
+            continue
+        primera = next((o["fecha"] for o in inf["operaciones"] if o["activo"] == x["id"] and o["tipo"] == "compra"), "")
+        filas.append(f"| {x['nombre']} | {x['simbolo']} / {x['isin'] or '?'} | {x['tipo']} | {x['cantidad']:g} | {x['coste']:.2f} € | "
+                     f"{(x['valor'] or 0):.2f} € | {x['rent'] if x['rent'] is not None else '?'} % | {x['peso']} % | "
+                     f"{x['ter'] if x['ter'] is not None else '?'} | {primera} | {x['papel'] or '?'} |")
+    return "\n".join(filas)
+
+
+def prompt_review(inf, hoy):
+    p, t = inf["perfil"], inf["total"]
+    sn = lambda v: "sí" if v is True else "no" if v is False else "?"
+    previas = []
+    for f in inf["reviews"][:4]:
+        texto = review(f) or ""
+        # las dos últimas enteras; las de antes, solo el resumen y el plan de acción
+        if len(previas) >= 2:
+            trozos = re.findall(r"(?ms)^#{2,3} *(?:1\.|9\.).*?(?=^#{2,3} *\d+\.|\Z)", texto)
+            texto = "\n".join(trozos) or texto[:3000]
+        previas.append(f"#### Review del {f}\n\n{texto}")
+    proy = inf["proyeccion"]
+    proy_txt = "\n".join(f"- {k} ({v['tasa']} % anual nominal): 5 años {v['anios'][5]:,} €, 10 años {v['anios'][10]:,} €, 20 años {v['anios'][20]:,} €"
+                         for k, v in proy.items() if "tasa" in v)
+    stress_txt = "\n".join(f"- {k}: {v:,.2f} €" for k, v in inf["stress"].items())
+    serie = inf["serie"]
+    ref = serie[-1] if serie else {}
+    ops = "\n".join(f"- {o['fecha']} {o['tipo']} {o['activo']} {o['cantidad']:g} × {o['precio']:.4f} € (comisión {o['comision']:.2f} €)"
+                    for o in inf["operaciones"][-40:]) or "(ninguna)"
+    return f"""Actúa como analista de inversiones independiente y riguroso. Quiero un análisis profundo, honesto y visual de mi portfolio. No me des la razón por defecto: si algo está mal planteado, dilo claramente y explica por qué.
+
+Hoy es {hoy.isoformat()} (domingo). Esta es la review semanal automática de mi app.
+
+## Mi contexto
+- Edad: {p['edad'] or '?'}
+- Horizonte de inversión: {p['horizonte'] or '?'}
+- Objetivo: {p['objetivo'] or '?'}
+- Aportación mensual: {p['aportacion']:g} €/mes — ¿estable? {sn(p['estable'])}
+- Fondo de emergencia aparte: {p['emergencia'] or '?'}
+- Tolerancia al riesgo: {p['tolerancia'] or '?'} — ¿cuánto aguantaría ver caer el portfolio sin vender? {p['caida'] or '?'}
+- País de residencia fiscal: España (ten en cuenta la fiscalidad española: traspasos entre fondos sin tributar, que los ETFs no tienen ese beneficio, retenciones en dividendos extranjeros, etc.)
+- Broker(s): {p['broker']}
+- Notas mías: {p['notas'] or '(ninguna)'}
+(Un «?» es un dato que aún no he rellenado: trabaja con un supuesto explícito y pregúntamelo en la sección 10.)
+
+## Datos
+### Posiciones actuales (calculadas por la app con FIFO, precios de Yahoo Finance pasados a euros)
+{_md_cartera(inf)}
+
+Totales: valor {t['valor']:.2f} €, coste {t['coste']:.2f} €, plusvalía latente {t['latente']:.2f} € ({t['rent'] if t['rent'] is not None else '?'} %), realizado {t['realizado']:.2f} €, dividendos {t['dividendos']:.2f} €, comisiones pagadas {t['comisiones']:.2f} €, TER medio ponderado {t['ter_medio']} % (solo de los que tienen TER apuntado).
+Comparación: si cada euro que he metido hubiera ido al mismo tiempo a {inf['referencia']['simbolo']} ({inf['referencia']['nombre'] or '?'}), hoy tendría {ref.get('referencia') or '?'} € frente a {ref.get('valor') or '?'} €.
+
+### Últimas operaciones
+{ops}
+
+### Cálculos ya hechos con código (úsalos, no los rehagas a ojo; si cambias un supuesto, dilo)
+Proyección con la cartera actual y {p['aportacion']:g} €/mes, interés compuesto mensual:
+{proy_txt}
+Stress test con caídas de pico a valle supuestas por tipo de activo ({json.dumps(CRISIS, ensure_ascii=False)}):
+{stress_txt}
+Para la cartera propuesta, calcula el stress con las mismas caídas por tipo y di el resultado en €.
+
+### Reviews de semanas anteriores
+{chr(10).join(previas) or '(Es la primera review: no hay anteriores.)'}
+
+## Cómo quiero el análisis
+
+Antes de empezar, busca en la web los datos actuales que necesites (precios, TER, composición de los ETFs/fondos, noticias relevantes de las empresas o sectores). No inventes cifras: si no encuentras un dato, dilo y trabaja con un supuesto explícito.
+
+Estructúralo así (encabezados `## 1. …` a `## 10. …`, exactamente con esos números):
+
+## 1. Resumen ejecutivo (máx. 5 líneas)
+La foto general en lenguaje claro: cómo está el portfolio, el mayor problema y la acción más importante que debería hacer.
+
+## 2. Radiografía del portfolio
+- Tabla con cada posición: invertido, peso (%), rentabilidad, TER/comisiones, y qué papel cumple en la cartera.
+- Gráficos de la distribución por: tipo de activo, geografía, sector, divisa y tamaño de empresa. **Mira dentro de los ETFs/fondos** (look-through), no solo la etiqueta.
+- Solapamientos: qué posiciones están comprando en realidad lo mismo y la exposición real resultante a las 10 empresas más grandes.
+
+## 3. Qué sobra
+Posiciones redundantes, demasiado pequeñas para importar, demasiado caras en comisiones o que no encajan con mi objetivo. Para cada una: por qué y qué haría con ella.
+
+## 4. Qué falta
+Exposiciones o piezas ausentes según mi perfil y horizonte. Distingue entre "falta de verdad" y "opcional".
+
+## 5. Qué cambiaría
+Una propuesta concreta de cartera objetivo con pesos (%), y una tabla comparando "actual vs. propuesta". Explica cómo llegar ahí de forma eficiente: con aportaciones nuevas en lugar de vender cuando sea posible, priorizando traspasos sin coste fiscal y minimizando comisiones e impuestos.
+
+## 6. Riesgos que estoy asumiendo (y por qué)
+Para cada riesgo: qué es, cuánto me afecta en mi caso concreto, si lo estoy asumiendo conscientemente o por accidente, y cómo mitigarlo. Como mínimo: concentración, divisa (USD/EUR), valoración, liquidez, comportamiento (vender en pánico), producto (sintéticos, apalancados, cripto, domicilio) y fiscal.
+
+## 7. Previsión a futuro
+- Proyección a 5, 10 y 20 años en tres escenarios con las rentabilidades supuestas explícitas (tienes los cálculos arriba; la app dibuja sola el gráfico de líneas de la proyección, no lo repitas).
+- Stress test: cuánto perdería en € con mi cartera actual en un escenario tipo 2008, 2020 y 2022, y cuánto con la propuesta.
+- Deja claro que son escenarios ilustrativos, no predicciones.
+
+## 8. Evolución respecto a reviews anteriores
+Qué ha cambiado, qué recomendaciones anteriores he seguido o ignorado (compáralo con las operaciones), si estoy derivando de mi estrategia y si alguna conclusión anterior ya no se sostiene.
+
+## 9. Plan de acción
+Lista priorizada de 3 a 7 acciones concretas, cada una con: qué hacer, por qué, urgencia (ya / este mes / cuando toque) e impacto esperado.
+
+## 10. Preguntas para mí
+Si te falta información que cambiaría las conclusiones, las preguntas clave (máx. 5).
+
+## Formato de salida (importante: lo lee una página web, no un chat)
+- Responde SOLO con el informe en Markdown: sin saludo, sin «aquí tienes», sin comentar tu proceso de búsqueda.
+- Tablas en Markdown normal. Nada de HTML.
+- Para cada gráfico, un bloque de código con lenguaje `grafica` y dentro un JSON en UNA línea, así:
+```grafica
+{{"tipo": "tarta", "titulo": "Geografía (look-through)", "etiquetas": ["EE. UU.", "Europa", "Emergentes"], "series": [{{"nombre": "%", "datos": [62, 16, 10]}}]}}
+```
+  `tipo` es `tarta`, `barras` o `lineas`; en `barras` puedes poner varias series (p. ej. actual y propuesta). Los datos, números sin unidades.
+- Separa con etiquetas en negrita **Hecho:**, **Supuesto:** y **Opinión:** cuando mezcles las tres cosas.
+- Sé directo y específico, con números en €. Un aviso legal breve al final, una sola vez.
+"""
+
+
+def grafica_proyeccion(inf):
+    pr = inf["proyeccion"]
+    hoy = date.today().year
+    return ("```grafica\n" + json.dumps({
+        "tipo": "lineas", "titulo": f"Proyección con {inf['perfil']['aportacion']:g} €/mes (ilustrativa)",
+        "etiquetas": [str(hoy + n) for n in range(len(pr["aportado"]["anios"]))],
+        "series": [{"nombre": f"{k} ({v['tasa']} %)", "datos": v["anios"]} for k, v in pr.items() if "tasa" in v]
+                  + [{"nombre": "Lo aportado", "datos": pr["aportado"]["anios"]}]}, ensure_ascii=False) + "\n```")
+
+
+def guarda_review(fecha, texto):
+    REVIEWS.mkdir(exist_ok=True)
+    (REVIEWS / f"{fecha}.md").write_text(texto, "utf-8")
+    try:   # la copia del vault es para leerla en Obsidian; si falla, la de la app vale
+        VAULT_REVIEWS.mkdir(parents=True, exist_ok=True)
+        f = VAULT_REVIEWS / f"Review inversiones {fecha}.md"
+        tmp = f.with_name(f".{f.name}.tmp")
+        tmp.write_text(f"---\nfecha: {fecha}\ntipo: review-inversiones\n---\n\n{texto}", "utf-8")
+        tmp.replace(f)
+    except OSError as e:
+        print("vault:", e, file=sys.stderr)
+
+
+def hacer_review(ver=False):
+    hoy = date.today()
+    fallos = actualiza()
+    if fallos:
+        print("precios:", fallos, file=sys.stderr)
+    inf = informe()
+    if not any(x["cantidad"] for x in inf["posiciones"]):
+        print("Sin posiciones: no hay nada que revisar.")
+        return
+    claude = os.environ.get("CLAUDE_BIN", str(Path.home() / ".local/bin/claude"))
+    r = subprocess.run([claude, "-p", "--model", os.environ.get("REVIEW_MODEL", "opus"),
+                        "--tools", "WebSearch,WebFetch", "--allowedTools", "WebSearch,WebFetch",
+                        "--strict-mcp-config", "--no-session-persistence"],
+                       input=prompt_review(inf, hoy), capture_output=True, text=True, timeout=45 * 60)
+    if r.returncode or not r.stdout.strip():
+        raise SystemExit(f"claude falló ({r.returncode}): {r.stderr[-1000:]}")
+    texto = r.stdout.strip()
+    texto = texto[texto.find("## 1."):] if "## 1." in texto else texto   # fuera cualquier preámbulo
+    # el gráfico de la proyección lo pone la app (con sus números), justo debajo del encabezado 7
+    texto = re.sub(r"(?m)^(## 7\..*)$", lambda m: m.group(1) + "\n\n" + grafica_proyeccion(inf), texto, count=1)
+    if ver:
+        print(texto)
+        return
+    guarda_review(hoy.isoformat(), texto)
+    avisa(hoy, texto, inf)
+
+
+def avisa(hoy, texto, inf):
+    import html
+    resumen = re.search(r"(?ms)^## 1\..*?\n(.*?)(?=^## 2\.|\Z)", texto)
+    cuerpo = re.sub(r"\*\*(.+?)\*\*", r"\1", (resumen.group(1) if resumen else texto[:800]).strip())
+    t = inf["total"]
+    msg = (f"<b>Review de inversiones · {hoy.day}/{hoy.month}</b>\n"
+           f"Cartera: {t['valor']:,.2f} € ({t['latente']:+,.2f} €)\n\n{html.escape(cuerpo[:3000])}\n\n"
+           f"Entera, con gráficas: https://todo.yagotg.dev/inversiones.html?review={hoy.isoformat()}")
+    if not os.environ.get("TELEGRAM_TOKEN"):
+        print(msg)
+        return
+    req = urllib.request.Request(
+        f"https://api.telegram.org/bot{os.environ['TELEGRAM_TOKEN']}/sendMessage",
+        json.dumps({"chat_id": int(os.environ["TELEGRAM_USER_ID"]), "text": msg[:4096], "parse_mode": "HTML",
+                    "link_preview_options": {"is_disabled": True}}).encode(), {"Content-Type": "application/json"})
+    urllib.request.urlopen(req, timeout=30).close()
+
+
+if __name__ == "__main__":
+    if "--precios" in sys.argv:
+        f = actualiza()
+        print("\n".join(f) or "ok")
+        sys.exit(1 if f and len(f) == len(lee()["activos"]) + 1 else 0)
+    elif "--review" in sys.argv:
+        hacer_review(ver="--ver" in sys.argv)
+    elif "--prompt" in sys.argv:
+        print(prompt_review(informe(), date.today()))
+    else:
+        print(__doc__)

@@ -18,6 +18,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 import carrera
+import inversiones
 import agenda
 import vault
 
@@ -353,7 +354,9 @@ def logout(response: Response):
 # ---------- ajustes de cada usuario (ajustes.json, junto a su data.json) ----------
 # Fuera de data.json a propósito: las páginas guardan el estado entero y aquí no tienen nada que pisar.
 AJUSTES = DB.with_name("ajustes.json")
-MODULOS = ("habitos", "pendientes", "entreno", "salud", "gastos", "documentos")
+MODULOS = ("habitos", "pendientes", "entreno", "salud", "gastos", "documentos", "inversiones")
+# los que llegaron después: apagados hasta que cada uno los encienda (a Aitana no le sale Inversiones vacía)
+APAGADOS = {"inversiones"}
 # minutos al día por app (Ajustes los cambia): al abrirla dice cuánto queda y al pasarse avisa por Telegram
 LIMITES = {"Instagram": 30, "YouTube": 45, "TikTok": 30, "Reddit": 20, "BrawlStars": 30}
 MASCOTA = {"semilla": (1, 9999, 14), "grumos": (0, .5, .2), "pera": (0, 1, .35), "cola": (-24, 24, -12), "flecos": (2, 6, 4),
@@ -370,7 +373,8 @@ def limpia_ajustes(v):
     v, mods, mas = dct(v), dct(dct(v).get("modulos")), dct(dct(v).get("mascota"))
     color = str(mas.get("color") or "")
     return {"nombre": " ".join(str(v.get("nombre") or "").split())[:30],
-            "modulos": {m: {c: conectada(m) and dct(mods.get(m)).get(c) is not False for c in ("activo", "barra")} for m in MODULOS},
+            "modulos": {m: {c: conectada(m) and (dct(mods.get(m)).get(c) is True if m in APAGADOS else dct(mods.get(m)).get(c) is not False)
+                         for c in ("activo", "barra")} for m in MODULOS},
             "mascota": {**{k: d if (n := real(mas.get(k), lo, hi)) is None else n for k, (lo, hi, d) in MASCOTA.items()},
                         "tipo": "flor" if mas.get("tipo") == "flor" else "fantasma",
                         "color": color if re.fullmatch(r"#[0-9a-fA-F]{6}", color) else "#CDE77F",
@@ -2404,6 +2408,118 @@ async def otra_app(ruta: str, request: Request, todo_sesion: str = Cookie(None),
     if estado == 401:   # que la página no pida la contraseña de todo en bucle
         raise HTTPException(502, f"{nombre} no acepta la clave que tiene todo: ~/bin/claves.sh")
     return Response(cuerpo, status_code=estado, media_type="application/json")
+
+
+# ---------- inversiones (inversiones.py; fuera de data.json) ----------
+cerrojo_inv = threading.Lock()
+
+
+def _inv_cambia(fn):
+    with cerrojo_inv:
+        d = inversiones.lee()
+        r = fn(d)
+        inversiones.guarda(d)
+    return r
+
+
+@app.get("/api/inversiones")
+def inv_informe(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    return inversiones.informe()
+
+
+@app.get("/api/inversiones/busca")
+def inv_busca(q: str = "", todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    try:
+        return {"candidatos": inversiones.busca(q)[:8]}
+    except Exception as e:
+        raise HTTPException(502, f"Yahoo no responde: {e}")
+
+
+@app.post("/api/inversiones/activo")
+def inv_activo(a: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    a = dct(a)
+    a["id"] = inversiones._id(a.get("id") or a.get("simbolo", "").split(".")[0])
+    if not a["id"] or not str(a.get("simbolo") or "").strip():
+        raise HTTPException(400, "Falta el símbolo")
+
+    def pon(d):
+        d["activos"] = [x for x in d["activos"] if x["id"] != a["id"]] + [a]
+    _inv_cambia(pon)
+    if a["id"] not in {x["id"] for x in inversiones.lee()["activos"]}:
+        raise HTTPException(400, "Activo no válido")
+    ref = inversiones.lee()["perfil"]["referencia"]   # la primera vez, también la referencia: sin ella no hay comparación
+    fallos = inversiones.actualiza([a["simbolo"].upper()] + ([ref] if ref not in inversiones.lee_precios() else []))
+    return {"id": a["id"], "fallos": fallos}
+
+
+@app.post("/api/inversiones/activo/borra")
+def inv_borra_activo(a: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    i = str(dct(a).get("id") or "")
+
+    def quita(d):
+        if any(o["activo"] == i for o in d["operaciones"]):
+            raise HTTPException(409, "Tiene operaciones: bórralas antes")
+        d["activos"] = [x for x in d["activos"] if x["id"] != i]
+    _inv_cambia(quita)
+    return {"ok": True}
+
+
+@app.post("/api/inversiones/operacion")
+def inv_operacion(o: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    o = dct(o)
+    o["id"] = inversiones._id(o.get("id")) or f"op{int(time.time() * 1000)}"
+
+    def pon(d):
+        d["operaciones"] = [x for x in d["operaciones"] if x["id"] != o["id"]] + [o]
+    _inv_cambia(pon)
+    if o["id"] not in {x["id"] for x in inversiones.lee()["operaciones"]}:
+        raise HTTPException(400, "Operación no válida: revisa fecha, cantidad y precio")
+    return {"id": o["id"]}
+
+
+@app.post("/api/inversiones/operacion/borra")
+def inv_borra_operacion(o: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    i = str(dct(o).get("id") or "")
+
+    def quita(d):
+        viejas = [x for x in d["operaciones"] if x["id"] == i]
+        d["operaciones"] = [x for x in d["operaciones"] if x["id"] != i]
+        return viejas[0] if viejas else None
+    vieja = _inv_cambia(quita)
+    if not vieja:
+        raise HTTPException(404, "No existe")
+    return vieja   # para deshacer: se vuelve a mandar a /api/inversiones/operacion
+
+
+@app.post("/api/inversiones/perfil")
+def inv_perfil(p: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+
+    def pon(d):
+        d["perfil"] = {**d["perfil"], **dct(p)}
+    _inv_cambia(pon)
+    return inversiones.lee()["perfil"]
+
+
+@app.post("/api/inversiones/precios")
+def inv_precios(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    return {"fallos": inversiones.actualiza()}
+
+
+@app.get("/api/inversiones/review/{fecha}")
+def inv_review(fecha: str, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    texto = inversiones.review(fecha)
+    if texto is None:
+        raise HTTPException(404, "No hay review de ese día")
+    return {"fecha": fecha, "texto": texto}
 
 
 # La portada es Hoy: es lo primero que se abre (el icono del iPhone arranca en /). Hábitos, que

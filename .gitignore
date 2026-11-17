@@ -20,3 +20,8 @@ leer_cola.json
 __pycache__/
 *.py[oc]
 .claude/
+
+# inversiones: cartera, precios y reviews son datos
+inversiones.json
+precios.json
+reviews-inversiones/
