@@ -2,7 +2,7 @@ import Foundation
 import Combine
 
 /// Lo que se apunta en la caja rápida (Hoy/Nativo/Notas/HojaApuntar.swift): una nota rápida o un pendiente.
-enum TipoApunte: String, CaseIterable, Identifiable {
+enum TipoCaptura: String, CaseIterable, Identifiable {
     case nota, tarea
     var id: String { rawValue }
 }
@@ -26,7 +26,7 @@ final class Navegador: ObservableObject {
     /// «/pendientes.html?nueva=1» (el control «Apuntar una tarea»): Pendientes enfoca el campo de apuntar.
     @Published var apuntarTarea = false
     /// La caja rápida de apuntar, encima de todo (el widget «Apuntar», hoy://apuntar?tipo=nota|tarea, el control).
-    @Published var apuntar: TipoApunte?
+    @Published var apuntar: TipoCaptura?
     /// «/notas.html» (o el botón de Pendientes): la hoja de Notas rápidas sobre Pendientes.
     @Published var verNotas = false
 
@@ -79,7 +79,7 @@ final class Navegador: ObservableObject {
 
     /// Como abreVoz: el botón del widget o del control puede correr en su proceso, así que también deja una marca
     /// en el app group («nota 1731840000») que la app recoge al activarse.
-    func abreApuntar(_ tipo: TipoApunte) {
+    func abreApuntar(_ tipo: TipoCaptura) {
         apuntar = tipo
         Almacen.defaults.set("\(tipo.rawValue) \(Date().timeIntervalSince1970)", forKey: Self.claveApuntar)
     }
@@ -89,7 +89,7 @@ final class Navegador: ObservableObject {
         guard let marca = Almacen.defaults.string(forKey: Self.claveApuntar) else { return }
         Almacen.defaults.removeObject(forKey: Self.claveApuntar)
         let partes = marca.split(separator: " ")
-        guard partes.count == 2, let tipo = TipoApunte(rawValue: String(partes[0])),
+        guard partes.count == 2, let tipo = TipoCaptura(rawValue: String(partes[0])),
               let cuando = Double(partes[1]), Date().timeIntervalSince1970 - cuando < 60 else { return }
         apuntar = tipo
     }

@@ -43,7 +43,7 @@ struct HoyApp: App {
         guard url.scheme == "hoy" else { return }
         if url.host == "apuntar" {
             let tipo = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "tipo" }?.value
-            Navegador.shared.apuntar = TipoApunte(rawValue: tipo ?? "") ?? .nota
+            Navegador.shared.apuntar = TipoCaptura(rawValue: tipo ?? "") ?? .nota
             return
         }
         if url.host == "voz" {
@@ -95,7 +95,7 @@ struct Raiz: View {
     }
 
     /// La caja rápida de apuntar, tampoco por encima del bloqueo.
-    private var apuntarVisible: Binding<TipoApunte?> {
+    private var apuntarVisible: Binding<TipoCaptura?> {
         Binding(get: { estado.bloqueado ? nil : navegador.apuntar },
                 set: { navegador.apuntar = $0 })
     }

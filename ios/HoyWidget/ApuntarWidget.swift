@@ -6,7 +6,7 @@ import AppIntents
 // Un widget no puede pedir texto: el botón corre AbreApuntarIntent (abre la app y deja la marca en el app group) y,
 // fuera de los botones, el toque va a hoy://apuntar?tipo=nota. No lee datos: su línea de tiempo es una sola entrada.
 
-func apuntarURL(_ tipo: TipoApunte) -> URL {
+func apuntarURL(_ tipo: TipoCaptura) -> URL {
     URL(string: "hoy://apuntar?tipo=\(tipo.rawValue)") ?? URL(string: "hoy://apuntar")!
 }
 
@@ -65,7 +65,7 @@ struct ApuntarVista: View {
         }
     }
 
-    private func boton(_ tipo: TipoApunte, _ titulo: String, _ simbolo: String, detalle: String?, t: Tinta) -> some View {
+    private func boton(_ tipo: TipoCaptura, _ titulo: String, _ simbolo: String, detalle: String?, t: Tinta) -> some View {
         Button(intent: AbreApuntarIntent(tipo: tipo)) {
             VStack(alignment: .leading, spacing: 4) {
                 Image(systemName: simbolo)
@@ -86,7 +86,7 @@ struct ApuntarVista: View {
         .accessibilityLabel(tipo == .nota ? "Apuntar una nota rápida" : "Apuntar un pendiente")
     }
 
-    private func botonAccesorio(_ tipo: TipoApunte, _ titulo: String, _ simbolo: String) -> some View {
+    private func botonAccesorio(_ tipo: TipoCaptura, _ titulo: String, _ simbolo: String) -> some View {
         Button(intent: AbreApuntarIntent(tipo: tipo)) {
             VStack(spacing: 2) {
                 Image(systemName: simbolo).font(.system(size: 15, weight: .semibold)).widgetAccentable()

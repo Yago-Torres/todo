@@ -140,11 +140,11 @@ struct AbreApuntarIntent: AppIntent {
 
     init() {}
 
-    init(tipo: TipoApunte) { self.tipo = tipo.rawValue }
+    init(tipo: TipoCaptura) { self.tipo = tipo.rawValue }
 
     @MainActor
     func perform() async throws -> some IntentResult {
-        Navegador.shared.abreApuntar(TipoApunte(rawValue: tipo) ?? .nota)
+        Navegador.shared.abreApuntar(TipoCaptura(rawValue: tipo) ?? .nota)
         return .result()
     }
 }

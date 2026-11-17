@@ -5,7 +5,7 @@ import WidgetKit
 /// hoy). Sale encima de todo desde el widget «Apuntar», hoy://apuntar?tipo=nota|tarea o el control del centro de
 /// control. El teclado sale ya; Intro guarda y se cierra. Sin red, a la cola (se manda al volver).
 struct HojaApuntar: View {
-    @State private var tipo: TipoApunte
+    @State private var tipo: TipoCaptura
     @State private var texto = ""
     @State private var paraHoy = false
     @State private var enviando = false
@@ -14,7 +14,7 @@ struct HojaApuntar: View {
     @FocusState private var escribiendo: Bool
     @Environment(\.dismiss) private var cierra
 
-    init(tipo: TipoApunte) {
+    init(tipo: TipoCaptura) {
         _tipo = State(initialValue: tipo)
     }
 
@@ -23,7 +23,7 @@ struct HojaApuntar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Tema.Espacio.m) {
             HStack {
-                SelectorPildoras(opciones: [(TipoApunte.nota, "Nota rápida"), (TipoApunte.tarea, "Pendiente")],
+                SelectorPildoras(opciones: [(TipoCaptura.nota, "Nota rápida"), (TipoCaptura.tarea, "Pendiente")],
                                  seleccion: $tipo)
                 Spacer(minLength: 0)
             }
