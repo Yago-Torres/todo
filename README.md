@@ -7,6 +7,8 @@ instalable en el iPhone, con un fantasma que reacciona a lo que haces. Corre en 
 
 También como app nativa de iPhone, **Tom**, con Siri y modo voz, gratis con SideStore: ver ios/README.md ([Tom.ipa](https://github.com/Yago-Torres/todo/releases/download/ios/Tom.ipa))
 
+Y de escritorio para Windows y Linux (Omarchy), con bandeja, atajo global para apuntar notas rápidas, tareas y gastos, avisos y módulo de Waybar: ver escritorio/README.md.
+
 ![Hoy, Hábitos, Entreno y el modo entreno](docs/capturas.png)
 ![Músculos de la semana, Salud y Pendientes](docs/capturas-2.png)
 
