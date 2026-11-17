@@ -9,7 +9,8 @@ tareas del vault (vault.py) y la página las enseña en su día.
   ("ok", "pendiente", "error: …", "sin configurar"). Lo que falla se reintenta cada 10 minutos.
 - Google: la cuenta de servicio del bot (~/bots/todo-bot/google.json y su calendario.py, que se carga por ruta).
 - iCloud: CalDAV con el Apple ID y una contraseña específica de app (ICLOUD_USER e ICLOUD_PASS en el .env).
-  Cada calendario de todo va al de iCloud con el mismo nombre; si no hay, al primero (o ICLOUD_CALENDARIO).
+  Cada calendario va al de iCloud que se llame igual (o empiece igual), si no ALIAS_ICLOUD, si no "calendar".
+  ICLOUD_MAPA="cal=nombre,..." en el .env lo fuerza.
 """
 import base64
 import importlib.util
@@ -376,12 +377,27 @@ def icloud_calendarios():
     return cals
 
 
+ALIAS_ICLOUD = {"universidad": "estudio"}
+
+
 def icloud_destino(cal):
     cals = icloud_calendarios()
     if not cals:
         raise RuntimeError("no encuentro calendarios en iCloud")
-    defecto = os.getenv("ICLOUD_CALENDARIO", "").lower()
-    for nombre in (cal.lower(), CALENDARIOS[cal][0].lower(), defecto):
+    # ICLOUD_MAPA="universidad=estudio,musica=ocio !!" manda; luego el mismo nombre (sin guiones ni
+    # espacios, y vale que el de iCloud lo contenga: day-to-day -> «daytoday yago»), luego un alias,
+    # luego ICLOUD_CALENDARIO y por último el calendario por defecto de iCloud («calendar»).
+    mapa = dict(par.split("=", 1) for par in os.getenv("ICLOUD_MAPA", "").split(",") if "=" in par)
+    if mapa.get(cal, "").strip().lower() in cals:
+        return cals[mapa[cal].strip().lower()]
+    plano = lambda s: re.sub(r"[^a-z0-9áéíóúñ]", "", s.lower())
+    for nombre in (cal, CALENDARIOS[cal][0], ALIAS_ICLOUD.get(cal, "")):
+        if not plano(nombre):
+            continue
+        for suyo, url in cals.items():
+            if plano(suyo) == plano(nombre) or plano(suyo).startswith(plano(nombre)):
+                return url
+    for nombre in (os.getenv("ICLOUD_CALENDARIO", "").lower(), "calendar", "calendario"):
         if nombre and nombre in cals:
             return cals[nombre]
     return next(iter(cals.values()))
