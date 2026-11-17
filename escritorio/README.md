@@ -7,6 +7,8 @@ La web de todo.yagotg.dev dentro de una ventana propia, con lo que el navegador 
   **nota rápida**, una **tarea** (va a Pendientes) o un **gasto** («12,50 comida»). Intro guarda, Esc cierra.
 - **Mini widget** siempre encima (bandeja › «Mini widget», o `--mini`; en Omarchy, Super+Alt+M): una ventanita
   que no se cierra al guardar, para ir apuntando notas y tareas, con lo último debajo. Si lo dejas abierto, vuelve al arrancar.
+- **Calendario** en la bandeja (y `--calendario`, que abre la ficha de un evento nuevo): la sección de la web, que copia
+  los eventos a Google y a iCloud.
 - **Avisos del sistema** a la hora de las tareas de hoy que llevan ⏰.
 - **Arranque al encender** (en Windows se activa la primera vez y se quita en la bandeja; en Omarchy va por `exec-once`).
 - **Sin red**: enseña lo último que llegó y los hábitos marcados se mandan al volver (eso ya lo hace la web, con `sinred.js`).

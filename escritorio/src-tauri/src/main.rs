@@ -4,7 +4,7 @@
 //! copia para cuando no hay red y el módulo de Waybar (`--waybar`).
 //!
 //! Argumentos: `--oculta` (arranca en la bandeja), `--apuntar` (abre la caja de apuntar; si la app ya
-//! está abierta se lo dice a esa), `--notas`, `--mini` (el mini widget siempre encima), `--waybar`.
+//! está abierta se lo dice a esa), `--notas`, `--calendario` (abre la ficha de un evento nuevo), `--mini` (el mini widget siempre encima), `--waybar`.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod claves;
@@ -126,6 +126,7 @@ fn bandeja(app: &AppHandle) -> tauri::Result<()> {
             &MenuItem::with_id(app, "abrir", "Abrir todo", true, None::<&str>)?,
             &MenuItem::with_id(app, "apuntar", "Apuntar…", true, None::<&str>)?,
             &MenuItem::with_id(app, "notas", "Notas rápidas", true, None::<&str>)?,
+            &MenuItem::with_id(app, "calendario", "Calendario", true, None::<&str>)?,
             &MenuItem::with_id(app, "mini", "Mini widget (siempre encima)", true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,
             &CheckMenuItem::with_id(app, "arranque", "Abrir al encender", true, arranque, None::<&str>)?,
@@ -144,6 +145,7 @@ fn bandeja(app: &AppHandle) -> tauri::Result<()> {
             "abrir" => principal(app, None, true),
             "apuntar" => apuntar(app),
             "notas" => principal(app, Some("/notas.html"), true),
+            "calendario" => principal(app, Some("/calendario.html"), true),
             "claves" => principal(app, Some("/_escritorio/configurar"), true),
             "mini" => mini(app, true),
             "arranque" => {
@@ -235,6 +237,8 @@ fn main() {
         .plugin(tauri_plugin_single_instance::init(|app, argv, _| {
             if argv.iter().any(|a| a == "--apuntar") {
                 apuntar(app)
+            } else if argv.iter().any(|a| a == "--calendario") {
+                principal(app, Some("/calendario.html?nuevo=1"), true)
             } else if argv.iter().any(|a| a == "--mini") {
                 mini(app, true)
             } else if argv.iter().any(|a| a == "--notas") {

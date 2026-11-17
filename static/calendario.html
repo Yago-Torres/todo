@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="es" data-vt>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#F2F2F2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)">
+<title>Calendario</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.json" crossorigin="use-credentials">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Calendario">
+<link rel="preload" href="/fuentes/instrument-sans-normal-latin.woff2?v=1" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/calma.css?v=d4d8370e">
+<script src="/calma.js?v=d4d8370e"></script>
+<style>
+  @view-transition { navigation: auto; }
+  @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }
+  /* Calendario: eventos (agenda.py, se copian a Google e iCloud) y tareas con fecha del vault. Tokens en /calma.css. */
+  body { padding: 16px; padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px)); }
+  .app { max-width: 1240px; margin: 0 auto; display: grid; gap: 12px; }
+  .top { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 4px 2px 0; }
+  h1 { margin: 0; font-size: var(--t-titulo); font-weight: 700; letter-spacing: -.02em; }
+  .top nav { margin-left: auto; display: flex; gap: 6px; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .top nav a { text-decoration: none; }
+  .barra { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .barra h2 { margin: 0 6px; font-size: 18px; font-weight: 600; min-width: 9ch; }
+  .barra .c-seg { margin-left: auto; min-width: 230px; }
+  .barra .flecha { width: 34px; padding: 0; justify-content: center; }
+  #estado { font-size: var(--t-pequeno); color: var(--suave); }
+  .carta { padding: 10px; min-width: 0; }
+
+  /* ---------- mes ---------- */
+  .mes { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px; background: var(--linea); border-radius: var(--r-s); overflow: hidden; }
+  .mes .cab { background: var(--carta); text-align: center; font-size: 12px; font-weight: 600; color: var(--suave); padding: 6px 0; }
+  .celda { background: var(--carta); min-height: 104px; padding: 4px; display: flex; flex-direction: column; gap: 2px; min-width: 0; cursor: pointer; }
+  .celda.fuera { background: var(--carta-2); }
+  .celda.fuera .num { color: var(--tenue); }
+  .celda.encima { box-shadow: inset 0 0 0 2px var(--acento); }
+  .num { font-size: 12px; font-weight: 600; align-self: flex-start; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; }
+  .celda.hoy .num { background: var(--acento); color: var(--acento-texto, #fff); }
+  .chip { display: flex; align-items: center; gap: 4px; font-size: 12px; line-height: 1.25; padding: 1px 5px; border-radius: 5px;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; cursor: pointer; }
+  .chip.ev { background: color-mix(in srgb, var(--c) 18%, transparent); border-left: 3px solid var(--c); }
+  .chip.ev.todo-dia { background: var(--c); color: #fff; border-left: 0; }
+  .chip .h { font-variant-numeric: tabular-nums; color: var(--suave); flex: none; }
+  .chip.todo-dia .h { color: inherit; }
+  .chip.tarea { color: var(--texto); }
+  .chip.tarea.hecha { color: var(--tenue); text-decoration: line-through; }
+  .chip span:last-child { overflow: hidden; text-overflow: ellipsis; }
+  .caja { flex: none; width: 11px; height: 11px; border: 1.5px solid var(--suave); border-radius: 3px; display: inline-grid; place-items: center; font-size: 9px; }
+  .hecha .caja { background: var(--suave); color: var(--carta); }
+  .mas-n { font-size: 11px; color: var(--suave); padding-left: 4px; }
+  .chip.arrastrando { opacity: .4; }
+
+  /* ---------- semana ---------- */
+  .semana { display: grid; grid-template-columns: 44px repeat(7, minmax(0, 1fr)); }
+  .semana .cab { text-align: center; font-size: 12px; color: var(--suave); padding: 4px 0 6px; }
+  .semana .cab b { display: block; font-size: 18px; color: var(--texto); }
+  .semana .cab.hoy b { color: var(--acento); }
+  .semana .todo-dia-fila { grid-column: 2 / -1; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; border-bottom: 1px solid var(--linea); padding-bottom: 4px; min-height: 22px; }
+  .semana .todo-dia-fila > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .rejilla { grid-column: 1 / -1; display: grid; grid-template-columns: 44px repeat(7, minmax(0, 1fr)); height: 62vh; overflow-y: auto; position: relative; }
+  .horas { position: relative; }
+  .horas span { position: absolute; right: 6px; font-size: 11px; color: var(--tenue); transform: translateY(-50%); }
+  .col-dia { position: relative; border-left: 1px solid var(--linea); cursor: pointer;
+             background: repeating-linear-gradient(to bottom, transparent 0 calc(var(--hh) - 1px), var(--linea) calc(var(--hh) - 1px) var(--hh)); }
+  .col-dia.hoy { background-color: color-mix(in srgb, var(--acento) 5%, transparent); }
+  .ahora { position: absolute; left: 0; right: 0; height: 2px; background: var(--peligro); z-index: 3; pointer-events: none; }
+  .bloque { position: absolute; left: 2px; right: 2px; border-radius: 6px; padding: 2px 5px; font-size: 12px; line-height: 1.25; overflow: hidden;
+            background: color-mix(in srgb, var(--c) 22%, var(--carta)); border-left: 3px solid var(--c); cursor: grab; touch-action: none; z-index: 2; }
+  .bloque b { display: block; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bloque small { color: var(--suave); font-variant-numeric: tabular-nums; }
+  .bloque .tirador { position: absolute; left: 0; right: 0; bottom: 0; height: 7px; cursor: ns-resize; }
+  .bloque.moviendo { opacity: .85; box-shadow: var(--sombra); z-index: 5; cursor: grabbing; }
+
+  /* ---------- agenda ---------- */
+  .agenda .dia-ag { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 10px; padding: 10px 4px; border-top: 1px solid var(--linea); }
+  .agenda .dia-ag:first-child { border-top: 0; }
+  .agenda .fecha { font-size: 13px; color: var(--suave); }
+  .agenda .fecha b { display: block; font-size: 20px; color: var(--texto); }
+  .agenda .hoy .fecha b { color: var(--acento); }
+  .agenda .lista { display: grid; gap: 4px; }
+  .agenda .chip { font-size: 14px; padding: 5px 8px; white-space: normal; }
+  .vacio { margin: 8px 4px; color: var(--suave); }
+
+  /* ---------- ficha ---------- */
+  dialog.ficha { border: 0; padding: 0; border-radius: 16px; background: var(--carta); color: var(--texto); width: min(520px, calc(100vw - 32px)); box-shadow: var(--sombra); }
+  dialog.ficha::backdrop { background: rgba(0, 0, 0, .4); }
+  .ficha form { padding: 18px; display: grid; gap: 10px; }
+  .ficha h3 { margin: 0; font-size: 18px; }
+  .ficha label { display: grid; gap: 4px; font-size: 13px; color: var(--suave); }
+  .ficha .fila { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .ficha .check { display: flex; align-items: center; gap: 8px; color: var(--texto); font-size: 14px; }
+  .ficha .acciones { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+  .ficha .acciones .pri { margin-left: auto; }
+  .ficha .sincro { font-size: 12px; color: var(--suave); }
+  .ficha .sincro .mal { color: var(--peligro); }
+  .ficha [hidden] { display: none !important; }
+  .punto { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--c); margin-right: 6px; }
+  .puerta input, .puerta button { width: 100%; }
+
+  @media (max-width: 700px) {
+    .celda { min-height: 64px; }
+    .celda .chip span:last-child { display: none; }
+    .celda .chip { padding: 0; height: 6px; border-radius: 3px; }
+    .celda .chip .h, .celda .chip .caja { display: none; }
+    .celda .chip.tarea { background: var(--suave); }
+    .barra .c-seg { min-width: 0; width: 100%; order: 9; }
+  }
+</style>
+<body>
+<div class="c-toast" id="toast" role="status"><b id="toast-txt"></b><button id="toast-btn">Deshacer</button></div>
+
+<div class="puerta c-puerta" id="puerta">
+  <form id="f-clave">
+    <h2>Calendario</h2>
+    <p id="puerta-msg">Contraseña de todo</p>
+    <input class="c-campo" type="password" name="pass" required autocomplete="current-password" aria-label="Contraseña">
+    <button class="c-btn pri" type="submit">Entrar</button>
+  </form>
+</div>
+
+<div class="app">
+  <header class="top">
+    <h1>Calendario</h1>
+    <span id="estado">Cargando…</span>
+    <nav><a class="c-btn mini" href="/">Hoy</a><a class="c-btn mini" href="/habitos.html">Hábitos</a><a class="c-btn mini" href="/pendientes.html">Pendientes</a><a class="c-btn mini" href="/entreno.html">Entreno</a><a class="c-btn mini" href="/salud.html">Salud</a><a class="c-btn mini" href="/gastos.html">Gastos</a></nav>
+  </header>
+
+  <div class="barra">
+    <button class="c-btn mini" type="button" id="b-hoy" title="Ir a hoy (T)">Hoy</button>
+    <button class="c-btn mini flecha" type="button" id="b-ant" aria-label="Anterior">‹</button>
+    <button class="c-btn mini flecha" type="button" id="b-sig" aria-label="Siguiente">›</button>
+    <h2 id="titulo"></h2>
+    <div class="c-seg" id="vistas" role="group" aria-label="Vista">
+      <button type="button" data-v="mes">Mes</button><button type="button" data-v="semana">Semana</button><button type="button" data-v="agenda">Agenda</button>
+    </div>
+    <button class="c-btn pri" type="button" id="b-nuevo" title="Nuevo (N)">+ Nuevo</button>
+  </div>
+
+  <section class="carta c-carta" id="lienzo" aria-live="polite"></section>
+</div>
+
+<dialog class="ficha" id="ficha">
+  <form method="dialog" id="f-ficha">
+    <h3 id="f-titulo">Nuevo</h3>
+    <div class="c-seg" id="f-tipo" role="group" aria-label="Tipo">
+      <button type="button" data-t="evento">Evento</button><button type="button" data-t="tarea">Tarea</button><button type="button" data-t="recordatorio">Recordatorio</button>
+    </div>
+    <input class="c-campo" name="t" maxlength="200" required placeholder="Título" aria-label="Título">
+    <label class="check solo-ev"><input type="checkbox" name="tododia"> Todo el día</label>
+    <div class="fila">
+      <label>Día <input class="c-campo" type="date" name="dia" required></label>
+      <label class="con-hora">Hora <input class="c-campo" type="time" name="inicio" step="300"></label>
+    </div>
+    <div class="fila solo-ev">
+      <label>Hasta el día <input class="c-campo" type="date" name="fin_dia"></label>
+      <label class="con-hora">Hasta las <input class="c-campo" type="time" name="fin" step="300"></label>
+    </div>
+    <div class="fila solo-ev">
+      <label>Calendario <select class="c-campo" name="cal"></select></label>
+      <label>Aviso <select class="c-campo" name="aviso">
+        <option value="-1">Sin aviso</option><option value="0">A la hora</option><option value="5">5 min antes</option>
+        <option value="10">10 min antes</option><option value="15">15 min antes</option><option value="30">30 min antes</option>
+        <option value="60">1 hora antes</option><option value="120">2 horas antes</option><option value="1440">1 día antes</option>
+        <option value="2880">2 días antes</option><option value="10080">1 semana antes</option></select></label>
+    </div>
+    <div class="fila solo-ev">
+      <label>Se repite <select class="c-campo" name="repite">
+        <option value="">No</option><option value="diario">Cada día</option><option value="semanal">Cada semana</option>
+        <option value="mensual">Cada mes</option><option value="anual">Cada año</option></select></label>
+      <label class="con-rep">Hasta <input class="c-campo" type="date" name="hasta"></label>
+    </div>
+    <input class="c-campo solo-ev" name="lugar" maxlength="200" placeholder="Lugar" aria-label="Lugar">
+    <textarea class="c-campo solo-ev" name="nota" rows="2" maxlength="2000" placeholder="Nota" aria-label="Nota"></textarea>
+    <p class="pista solo-tarea c-muted" style="margin:0;font-size:13px"></p>
+    <label class="check solo-hecha"><input type="checkbox" name="hecha"> Hecha</label>
+    <div class="sincro solo-ev" id="f-sincro"></div>
+    <div class="acciones">
+      <button class="c-btn peligro" type="button" id="f-borra" hidden>Borrar</button>
+      <button class="c-btn peligro" type="button" id="f-borra-uno" hidden>Borrar solo este día</button>
+      <button class="c-btn" type="button" id="f-cancela">Cancelar</button>
+      <button class="c-btn pri" type="submit">Guardar</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+const $ = s => document.querySelector(s);
+const el = (t, cls, txt) => { const e = document.createElement(t); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+const DSEM = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"];
+const pad = n => String(n).padStart(2, "0");
+const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const fecha = s => { const [a, m, d] = s.split("-").map(Number); return new Date(a, m - 1, d); };
+const mas = (s, n) => { const d = fecha(s); d.setDate(d.getDate() + n); return iso(d); };
+const entre = (a, b) => Math.round((fecha(b) - fecha(a)) / 864e5);
+const lunes = s => { const d = fecha(s); return mas(s, -((d.getDay() + 6) % 7)); };
+const minutos = h => h ? +h.slice(0, 2) * 60 + +h.slice(3) : 0;
+const hhmm = m => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
+const lee = k => { try { return localStorage.getItem(k); } catch { return null; } };
+const apunta = (k, v) => { try { localStorage.setItem(k, v); } catch { /* sin almacenamiento */ } };
+const HH = 44;   // px por hora en la semana
+document.documentElement.style.setProperty("--hh", HH + "px");
+
+let C = null, HOY = iso(new Date()), ref = HOY;
+let vista = lee("cal-vista") || (matchMedia("(max-width: 700px)").matches ? "agenda" : "mes");
+let deshacer = null, reloj;
+
+function puerta(mostrar, msg) {
+  $("#puerta").toggleAttribute("data-on", mostrar);
+  $("#puerta-msg").textContent = msg || "Contraseña de todo";
+  if (mostrar) $("#puerta input").focus();
+}
+async function api(url, cuerpo) {
+  const r = await fetch(url, cuerpo === undefined ? {} : {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(cuerpo)});
+  if (r.status === 401) { puerta(true); throw new Error("401"); }
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.status);
+  return r.json();
+}
+function toast(txt, fn) {
+  deshacer = fn;
+  $("#toast-txt").textContent = txt;
+  $("#toast-btn").hidden = !fn;
+  $("#toast").toggleAttribute("data-on", true);
+  clearTimeout(reloj);
+  reloj = setTimeout(() => $("#toast").removeAttribute("data-on"), 6000);
+}
+$("#toast-btn").onclick = async () => { $("#toast").removeAttribute("data-on"); if (deshacer) { try { await deshacer(); } catch (e) { toast(`No se pudo: ${e.message}`); } cargar(); } };
+const intenta = async (fn, ok) => { try { const r = await fn(); if (ok) ok(r); await cargar(); return r; } catch (e) { if (e.message !== "401") toast(`No se ha podido: ${e.message}`); } };
+
+// ---------- datos ----------
+function rangoVista() {
+  if (vista === "mes") { const p = lunes(ref.slice(0, 8) + "01"); return [p, mas(p, 41)]; }
+  if (vista === "semana") { const p = lunes(ref); return [p, mas(p, 6)]; }
+  return [ref, mas(ref, 59)];
+}
+async function cargar() {
+  const [d, h] = rangoVista();
+  try {
+    C = await api(`/api/calendario?desde=${d}&hasta=${h}`);
+    HOY = C.hoy;
+    puerta(false);
+    const malos = C.eventos.filter(e => Object.values(e.sincro || {}).some(v => v.startsWith("error")));
+    $("#estado").textContent = malos.length ? `${malos.length} sin copiar a Google o iCloud` : "";
+    pinta();
+  } catch (e) {
+    if (e.message !== "401") $("#estado").textContent = "Sin conexión";
+  }
+}
+const color = id => (C.calendarios.find(c => c.id === id) || C.calendarios[0]).color;
+const del_dia = d => [
+  ...C.eventos.filter(e => e.dia <= d && d <= e.fin_dia).sort((a, b) => (!!a.inicio - !!b.inicio) || (a.inicio || "").localeCompare(b.inicio || "")),
+  ...C.tareas.filter(t => t.due === d).map(t => ({...t, tarea: true})).sort((a, b) => (a.hora || "99").localeCompare(b.hora || "99")),
+];
+
+// ---------- piezas ----------
+function chip(x, d) {
+  const c = el("div", "chip");
+  if (x.tarea) {
+    c.classList.add("tarea");
+    c.classList.toggle("hecha", x.hecha);
+    const caja = el("span", "caja", x.hecha ? "✓" : "");
+    caja.onclick = ev => { ev.stopPropagation(); marca(x); };
+    c.append(caja);
+    if (x.hora) c.append(el("span", "h", x.hora));
+    c.title = `${x.hora ? "Recordatorio" : "Tarea"}: ${x.t}`;
+  } else {
+    c.classList.add("ev");
+    c.style.setProperty("--c", color(x.cal));
+    if (!x.inicio) c.classList.add("todo-dia");
+    else if (d === x.dia) c.append(el("span", "h", x.inicio));
+    c.title = x.t + (x.lugar ? ` · ${x.lugar}` : "");
+  }
+  c.append(el("span", null, x.t));
+  c.onclick = ev => { ev.stopPropagation(); ficha(x); };
+  c.draggable = true;
+  c.ondragstart = ev => { arrastre = {x, desde: d}; ev.dataTransfer.effectAllowed = "move"; ev.dataTransfer.setData("text/plain", x.id); c.classList.add("arrastrando"); };
+  c.ondragend = () => { c.classList.remove("arrastrando"); arrastre = null; };
+  return c;
+}
+let arrastre = null;
+
+// mover algo de un día a otro (arrastrando en el mes o en la agenda); la hora no cambia
+async function mueveDias(x, n, hora) {
+  if (!n && hora === undefined) return;
+  if (x.tarea) {
+    const due = mas(x.due, n);
+    return intenta(() => api("/api/tarea/edita", {id: x.id, t: x.t, due, hora: hora ?? x.hora}),
+                   r => toast(`Movida al ${corta(due)}`, () => api("/api/tarea/edita", {id: r.id, t: r.t, due: x.due, hora: x.hora})));
+  }
+  if (x.repite && !confirm("Es un evento que se repite: se mueve la serie entera. ¿Seguro?")) return;
+  const antes = {dia: x.origen, fin_dia: mas(x.origen, entre(x.dia, x.fin_dia)), inicio: x.inicio, fin: x.fin};
+  const cambios = {id: x.id, dia: mas(x.origen, n), fin_dia: mas(antes.fin_dia, n)};
+  if (hora) Object.assign(cambios, hora);
+  return intenta(() => api("/api/evento/edita", cambios), () => toast("Movido", () => api("/api/evento/edita", {id: x.id, ...antes})));
+}
+const corta = s => `${fecha(s).getDate()} ${MESES[fecha(s).getMonth()].slice(0, 3)}`;
+
+function soltar(zona, d) {
+  zona.ondragover = ev => { if (arrastre) { ev.preventDefault(); zona.classList.add("encima"); } };
+  zona.ondragleave = ev => { if (!zona.contains(ev.relatedTarget)) zona.classList.remove("encima"); };
+  zona.ondrop = ev => {
+    ev.preventDefault();
+    zona.classList.remove("encima");
+    const a = arrastre;
+    arrastre = null;
+    if (a) mueveDias(a.x, entre(a.desde, d));
+  };
+}
+
+// ---------- vistas ----------
+function pinta() {
+  document.querySelectorAll("#vistas button").forEach(b => b.setAttribute("aria-current", String(b.dataset.v === vista)));
+  const f = fecha(ref);
+  $("#titulo").textContent = vista === "semana"
+    ? (() => { const a = lunes(ref), b = mas(a, 6); return `${fecha(a).getDate()}–${fecha(b).getDate()} ${MESES[fecha(b).getMonth()]} ${fecha(b).getFullYear()}`; })()
+    : vista === "mes" ? `${MESES[f.getMonth()][0].toUpperCase()}${MESES[f.getMonth()].slice(1)} ${f.getFullYear()}` : "Lo que viene";
+  ({mes: pintaMes, semana: pintaSemana, agenda: pintaAgenda})[vista]();
+}
+
+function pintaMes() {
+  const g = el("div", "mes"), p = lunes(ref.slice(0, 8) + "01"), mesRef = ref.slice(0, 7);
+  DSEM.forEach(x => g.append(el("div", "cab", x)));
+  const max = matchMedia("(max-width: 700px)").matches ? 4 : 3;
+  for (let i = 0; i < 42; i++) {
+    const d = mas(p, i), c = el("div", "celda");
+    c.classList.toggle("fuera", d.slice(0, 7) !== mesRef);
+    c.classList.toggle("hoy", d === HOY);
+    c.append(el("span", "num", String(fecha(d).getDate())));
+    const xs = del_dia(d);
+    xs.slice(0, max).forEach(x => c.append(chip(x, d)));
+    if (xs.length > max) c.append(el("span", "mas-n", `+${xs.length - max} más`));
+    c.onclick = () => ficha({nuevo: true, dia: d});
+    soltar(c, d);
+    g.append(c);
+  }
+  $("#lienzo").replaceChildren(g);
+}
+
+function pintaAgenda() {
+  const caja = el("div", "agenda"), [d0] = rangoVista();
+  let hay = 0;
+  for (let i = 0; i < 60; i++) {
+    const d = mas(d0, i), xs = del_dia(d);
+    if (!xs.length && d !== d0) continue;
+    hay += xs.length;
+    const fila = el("div", `dia-ag${d === HOY ? " hoy" : ""}`), f = el("div", "fecha"), l = el("div", "lista");
+    f.append(el("b", null, String(fecha(d).getDate())), document.createTextNode(`${DSEM[(fecha(d).getDay() + 6) % 7]} · ${MESES[fecha(d).getMonth()].slice(0, 3)}`));
+    if (!xs.length) l.append(el("p", "vacio", "Nada este día. Toca para apuntar algo."));
+    xs.forEach(x => l.append(chip(x, d)));
+    fila.append(f, l);
+    fila.onclick = () => ficha({nuevo: true, dia: d});
+    soltar(fila, d);
+    caja.append(fila);
+  }
+  if (!hay) caja.append(el("p", "vacio", "Nada en los próximos dos meses."));
+  $("#lienzo").replaceChildren(caja);
+}
+
+function pintaSemana() {
+  const g = el("div", "semana"), p = lunes(ref);
+  g.append(el("div"));
+  for (let i = 0; i < 7; i++) {
+    const d = mas(p, i), cab = el("div", `cab${d === HOY ? " hoy" : ""}`);
+    cab.append(document.createTextNode(DSEM[i]), el("b", null, String(fecha(d).getDate())));
+    cab.onclick = () => { ref = d; vista = "agenda"; apunta("cal-vista", vista); cargar(); };
+    g.append(cab);
+  }
+  // fila de todo el día (y tareas sin hora)
+  g.append(el("div"));
+  const tdf = el("div", "todo-dia-fila");
+  for (let i = 0; i < 7; i++) {
+    const d = mas(p, i), c = el("div");
+    del_dia(d).filter(x => x.tarea ? !x.hora : !x.inicio || x.dia !== x.fin_dia).forEach(x => c.append(chip(x, d)));
+    soltar(c, d);
+    tdf.append(c);
+  }
+  g.append(tdf);
+  // la rejilla de horas
+  const rej = el("div", "rejilla"), horas = el("div", "horas");
+  horas.style.height = `${24 * HH}px`;
+  for (let h = 1; h < 24; h++) { const s = el("span", null, `${pad(h)}:00`); s.style.top = `${h * HH}px`; horas.append(s); }
+  rej.append(horas);
+  const cols = [];
+  for (let i = 0; i < 7; i++) {
+    const d = mas(p, i), col = el("div", `col-dia${d === HOY ? " hoy" : ""}`);
+    col.style.height = `${24 * HH}px`;
+    col.dataset.dia = d;
+    col.onclick = ev => {
+      if (ev.target !== col) return;
+      const m = Math.floor((ev.offsetY / HH) * 4) * 15;
+      ficha({nuevo: true, dia: d, inicio: hhmm(Math.min(m, 23 * 60)), fin: hhmm(Math.min(m + 60, 23 * 60 + 59))});
+    };
+    if (d === HOY) { const a = el("div", "ahora"), n = new Date(); a.style.top = `${(n.getHours() + n.getMinutes() / 60) * HH}px`; col.append(a); }
+    // bloques con hora; los que se pisan, en carriles
+    const xs = del_dia(d).filter(x => x.tarea ? x.hora : x.inicio && x.dia === x.fin_dia);
+    const carriles = [];
+    xs.forEach(x => {
+      const ini = minutos(x.tarea ? x.hora : x.inicio), fin = x.tarea ? ini + 30 : (x.fin ? minutos(x.fin) : ini + 60);
+      let k = carriles.findIndex(f => f <= ini);
+      if (k < 0) { k = carriles.length; carriles.push(0); }
+      carriles[k] = fin;
+      x._pos = {ini, fin, k};
+    });
+    xs.forEach(x => col.append(bloque(x, d, carriles.length)));
+    cols.push(col);
+    rej.append(col);
+  }
+  g.append(rej);
+  $("#lienzo").replaceChildren(g);
+  rej.scrollTop = 7.5 * HH;
+  semanaCols = cols;
+}
+let semanaCols = [];
+
+function bloque(x, d, n) {
+  const b = el("div", "bloque"), {ini, fin, k} = x._pos;
+  b.style.setProperty("--c", x.tarea ? "var(--suave)" : color(x.cal));
+  b.style.top = `${ini / 60 * HH}px`;
+  b.style.height = `${Math.max(18, (fin - ini) / 60 * HH - 2)}px`;
+  b.style.left = `calc(${k * 100 / n}% + 2px)`;
+  b.style.width = `calc(${100 / n}% - 4px)`;
+  b.append(el("b", null, (x.tarea ? "☐ " : "") + x.t), el("small", null, x.tarea ? x.hora : `${x.inicio}${x.fin ? "–" + x.fin : ""}`));
+  const t = el("div", "tirador");
+  if (!x.tarea) b.append(t);
+  // arrastrar: mover (día y hora) o, desde el tirador de abajo, cambiar cuándo acaba. Pasos de 15 min.
+  b.onpointerdown = ev => {
+    if (ev.button !== 0) return;
+    const estira = ev.target === t, y0 = ev.clientY, x0 = ev.clientX;
+    let movido = false, dDia = 0, dMin = 0;
+    b.setPointerCapture(ev.pointerId);
+    b.onpointermove = e => {
+      dMin = Math.round((e.clientY - y0) / HH * 4) * 15;
+      const col = semanaCols.find(c => { const r = c.getBoundingClientRect(); return e.clientX >= r.left && e.clientX < r.right; });
+      dDia = estira || !col ? 0 : entre(d, col.dataset.dia);
+      if (Math.abs(e.clientY - y0) + Math.abs(e.clientX - x0) > 4) movido = true;
+      if (!movido) return;
+      b.classList.add("moviendo");
+      if (estira) b.style.height = `${Math.max(18, (fin - ini + dMin) / 60 * HH - 2)}px`;
+      else b.style.transform = `translate(${dDia * b.parentElement.getBoundingClientRect().width}px, ${dMin / 60 * HH}px)`;
+    };
+    b.onpointerup = async () => {
+      b.onpointermove = b.onpointerup = null;
+      if (!movido) return ficha(x);
+      const nIni = Math.max(0, Math.min(ini + (estira ? 0 : dMin), 23 * 60 + 45));
+      const nFin = Math.max(nIni + 15, Math.min(fin + dMin, 23 * 60 + 59));
+      if (x.tarea) return mueveDias(x, dDia, hhmm(nIni));
+      await mueveDias(x, dDia, {inicio: hhmm(nIni), fin: hhmm(nFin)});
+    };
+  };
+  return b;
+}
+
+// ---------- tareas ----------
+async function marca(x) {
+  await intenta(() => api("/api/tarea/hecha", {id: x.id, hecha: !x.hecha}),
+                r => toast(x.hecha ? "Desmarcada" : `Hecha: ${x.t}`, () => api("/api/tarea/hecha", {id: r.id, hecha: x.hecha})));
+}
+
+// ---------- la ficha ----------
+let F = null, tipo = "evento";
+const f = $("#f-ficha");
+f.cal.replaceChildren();
+function ponTipo(t) {
+  tipo = t;
+  document.querySelectorAll("#f-tipo button").forEach(b => b.setAttribute("aria-current", String(b.dataset.t === t)));
+  const ev = t === "evento";
+  f.querySelectorAll(".solo-ev").forEach(x => x.hidden = !ev);
+  f.querySelector(".solo-tarea").hidden = ev;
+  f.querySelector(".solo-tarea").textContent = t === "recordatorio" ? "Va a Pendientes con su hora: el bot te avisa por Telegram a esa hora."
+                                                                     : "Va a Pendientes con esta fecha.";
+  f.querySelectorAll(".con-hora").forEach(x => x.hidden = t === "tarea" || (ev && f.tododia.checked));
+  f.inicio.required = t === "recordatorio";
+  f.querySelector(".con-rep").hidden = !ev || !f.repite.value;
+  f.querySelector(".solo-hecha").hidden = ev || !F || F.nuevo;
+}
+document.querySelectorAll("#f-tipo button").forEach(b => b.onclick = () => ponTipo(b.dataset.t));
+f.tododia.onchange = () => ponTipo(tipo);
+f.repite.onchange = () => ponTipo(tipo);
+f.dia.onchange = () => { if (!f.fin_dia.value || f.fin_dia.value < f.dia.value) f.fin_dia.value = f.dia.value; };
+
+function ficha(x) {
+  F = x;
+  if (!f.cal.options.length) C.calendarios.forEach(c => f.cal.append(Object.assign(document.createElement("option"), {value: c.id, textContent: c.n})));
+  f.reset();
+  const nuevo = !!x.nuevo;
+  $("#f-tipo").hidden = !nuevo;
+  $("#f-titulo").textContent = nuevo ? "Nuevo" : x.tarea ? (x.hora ? "Recordatorio" : "Tarea") : "Evento";
+  if (x.tarea) {
+    f.t.value = x.t; f.dia.value = x.due; f.inicio.value = x.hora || ""; f.hecha.checked = x.hecha;
+    ponTipo(x.hora ? "recordatorio" : "tarea");
+  } else {
+    const e = nuevo ? {dia: x.dia, fin_dia: x.dia, inicio: x.inicio || "", fin: x.fin || "", cal: lee("cal-ultimo") || C.calendarios[0].id, aviso: x.inicio ? 10 : -1, repite: ""} : x;
+    // de un evento que se repite se edita la serie: sus días son los de la primera vez
+    const dia = nuevo ? e.dia : e.origen, fin_dia = nuevo ? e.fin_dia : mas(e.origen, entre(e.dia, e.fin_dia));
+    f.t.value = e.t || ""; f.dia.value = dia; f.fin_dia.value = fin_dia; f.inicio.value = e.inicio; f.fin.value = e.fin;
+    f.tododia.checked = !e.inicio;
+    f.cal.value = e.cal; f.aviso.value = String(e.aviso); f.repite.value = e.repite; f.hasta.value = e.hasta || "";
+    f.lugar.value = e.lugar || ""; f.nota.value = e.nota || "";
+    ponTipo("evento");
+    const s = e.sincro || {}, linea = (n, v) => `<span class="${String(v).startsWith("error") ? "mal" : ""}">${n}: ${v === "ok" ? "copiado ✓" : v}</span>`;
+    $("#f-sincro").innerHTML = nuevo ? "Se copia a Google y a iCloud al guardar." : [linea("Google", s.google || "—"), linea("iCloud", s.icloud || "—")].join(" · ");
+  }
+  $("#f-borra").hidden = nuevo;
+  $("#f-borra").textContent = !nuevo && !x.tarea && x.repite ? "Borrar todos" : "Borrar";
+  $("#f-borra-uno").hidden = nuevo || x.tarea || !x.repite;
+  $("#ficha").showModal();
+  if (nuevo) f.t.focus();
+}
+$("#f-cancela").onclick = () => $("#ficha").close();
+
+f.onsubmit = async ev => {
+  ev.preventDefault();
+  const x = F, t = f.t.value.trim();
+  if (!t) return;
+  $("#ficha").close();
+  if (tipo !== "evento") {
+    const hora = tipo === "recordatorio" ? f.inicio.value : "";
+    if (x.nuevo) return intenta(() => api("/api/tarea", {t, due: f.dia.value, hora}), r => toast(`Apuntada en Pendientes: ${r.t}`, () => api("/api/tarea/borra", {id: r.id})));
+    await intenta(async () => {
+      let r = await api("/api/tarea/edita", {id: x.id, t, due: f.dia.value, hora});
+      if (f.hecha.checked !== x.hecha) r = await api("/api/tarea/hecha", {id: r.id, hecha: f.hecha.checked});
+      return r;
+    }, () => toast("Guardada"));
+    return;
+  }
+  const todo = f.tododia.checked;
+  const e = {t, dia: f.dia.value, fin_dia: f.fin_dia.value || f.dia.value, inicio: todo ? "" : f.inicio.value, fin: todo ? "" : f.fin.value,
+             cal: f.cal.value, aviso: +f.aviso.value, repite: f.repite.value, hasta: f.repite.value ? f.hasta.value : "",
+             lugar: f.lugar.value.trim(), nota: f.nota.value.trim()};
+  apunta("cal-ultimo", e.cal);
+  if (x.nuevo) return intenta(() => api("/api/evento", e), r => toast("Apuntado: se copia a tus calendarios", () => api("/api/evento/borra", {id: r.id})));
+  const antes = {...x, dia: x.origen, fin_dia: mas(x.origen, entre(x.dia, x.fin_dia))};
+  await intenta(() => api("/api/evento/edita", {id: x.id, ...e}), () => toast("Guardado", () => api("/api/evento/edita", antes)));
+};
+
+$("#f-borra").onclick = async () => {
+  const x = F;
+  $("#ficha").close();
+  if (x.tarea) return intenta(() => api("/api/tarea/borra", {id: x.id}), r => toast(`Borrada: ${x.t}`, () => api("/api/tarea/restaura", r)));
+  await intenta(() => api("/api/evento/borra", {id: x.id}), r => toast(`Borrado: ${x.t}`, () => api("/api/evento/restaura", r)));
+};
+$("#f-borra-uno").onclick = async () => {
+  const x = F;
+  $("#ficha").close();
+  await intenta(() => api("/api/evento/borra", {id: x.id, dia: x.dia}), r => toast(`Quitado el ${corta(x.dia)}`, () => api("/api/evento/restaura", r)));
+};
+
+// ---------- navegar ----------
+function paso(n) {
+  if (vista === "mes") { const d = fecha(ref.slice(0, 8) + "01"); d.setMonth(d.getMonth() + n); ref = iso(d); }
+  else ref = mas(ref, n * (vista === "semana" ? 7 : 30));
+  cargar();
+}
+$("#b-ant").onclick = () => paso(-1);
+$("#b-sig").onclick = () => paso(1);
+$("#b-hoy").onclick = () => { ref = HOY; cargar(); };
+$("#b-nuevo").onclick = () => ficha({nuevo: true, dia: ref.slice(0, 7) === HOY.slice(0, 7) || vista === "semana" ? (vista === "semana" ? lunes(ref) <= HOY && HOY <= mas(lunes(ref), 6) ? HOY : lunes(ref) : HOY) : ref});
+document.querySelectorAll("#vistas button").forEach(b => b.onclick = () => { vista = b.dataset.v; apunta("cal-vista", vista); cargar(); });
+addEventListener("keydown", e => {
+  if (e.target.closest("input, textarea, select, dialog") || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === "n") { e.preventDefault(); $("#b-nuevo").click(); }
+  else if (k === "t") $("#b-hoy").click();
+  else if (e.key === "ArrowLeft") paso(-1);
+  else if (e.key === "ArrowRight") paso(1);
+  else if (k === "m" || k === "s" || k === "a") { vista = {m: "mes", s: "semana", a: "agenda"}[k]; apunta("cal-vista", vista); cargar(); }
+});
+$("#f-clave").onsubmit = async e => {
+  e.preventDefault();
+  const inp = e.target.pass;
+  const r = await fetch("/api/login", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({pass: inp.value})}).catch(() => null);
+  if (r && r.ok) { inp.value = ""; await cargar(); }
+  else puerta(true, r && r.status === 401 ? "Contraseña incorrecta" : "No se pudo conectar");
+};
+addEventListener("visibilitychange", () => document.visibilityState === "visible" && C && cargar());
+// ?dia=AAAA-MM-DD abre ese día; ?nuevo=1, la ficha (la app de escritorio)
+const q = new URLSearchParams(location.search);
+if (/^\d{4}-\d{2}-\d{2}$/.test(q.get("dia") || "")) ref = q.get("dia");
+if (["mes", "semana", "agenda"].includes(q.get("vista"))) vista = q.get("vista");
+cargar().then(() => { if (q.has("nuevo") && C) ficha({nuevo: true, dia: ref}); });
+</script>
+</body>
+</html>

@@ -134,6 +134,53 @@ def test_entreno():
     assert len(acts) == 1 and (acts[0]["km"], acts[0]["seg"], acts[0]["src"]) == (6.01, 2100, "salud"), acts
 
 
+def test_agenda():
+    import os, tempfile
+    from datetime import datetime, timezone
+    from pathlib import Path
+    os.environ["AGENDA_SIN_HILO"] = "1"
+    import agenda
+    agenda.FICHERO = Path(tempfile.mkdtemp()) / "calendario.json"
+    agenda.GOOGLE_MODULO = Path("/no/existe/calendario.py")
+    e = agenda.nuevo({"t": "  Dentista  ", "dia": "2026-11-20", "inicio": "10:00", "fin": "09:00", "cal": "nada", "aviso": "15"})
+    assert e["t"] == "Dentista" and e["fin"] == "" and e["cal"] == "day-to-day" and e["aviso"] == 15 and "ext" not in e, e
+    assert e["sincro"]["google"] == "sin configurar"
+    for malo in ({"t": "x"}, {"dia": "2026-11-20"}):
+        try:
+            agenda.nuevo(malo)
+            raise AssertionError("debía fallar")
+        except ValueError:
+            pass
+    # repeticiones: semanal con fin, mensual que se salta los meses sin día 31, excepción
+    s = agenda.nuevo({"t": "Ensayo", "dia": "2026-11-02", "inicio": "19:00", "repite": "semanal", "hasta": "2026-11-23", "cal": "ensayos"})
+    assert agenda.ocurrencias(agenda.todos()[1], "2026-11-01", "2026-12-31") == ["2026-11-02", "2026-11-09", "2026-11-16", "2026-11-23"]
+    m = agenda.limpia({"t": "Pago", "dia": "2026-01-31", "repite": "mensual"})
+    assert agenda.ocurrencias(m, "2026-01-01", "2026-05-31") == ["2026-01-31", "2026-03-31", "2026-05-31"]
+    b = agenda.borra(s["id"], "2026-11-09")
+    assert b["solo"] == "2026-11-09" and b["evento"]["excepciones"] == []
+    assert [x["dia"] for x in agenda.rango("2026-11-01", "2026-11-30") if x["id"] == s["id"]] == ["2026-11-02", "2026-11-16", "2026-11-23"]
+    agenda.restaura(b["evento"])
+    assert len([x for x in agenda.rango("2026-11-01", "2026-11-30") if x["id"] == s["id"]]) == 4
+    # varios días: sale en el rango aunque empiece antes
+    v = agenda.nuevo({"t": "Viaje", "dia": "2026-10-30", "fin_dia": "2026-11-02"})
+    assert any(x["id"] == v["id"] and x["fin_dia"] == "2026-11-02" for x in agenda.rango("2026-11-01", "2026-11-05"))
+    # editar mantiene el id; borrar entero y deshacer
+    ed = agenda.edita(e["id"], {"t": "Dentista (revisión)", "cal": "Deporte"})
+    assert ed["id"] == e["id"] and ed["dia"] == "2026-11-20" and ed["cal"] == "Deporte"
+    assert next(x for x in agenda.todos() if x["id"] == e["id"])["ext"].get("mover_de") == "day-to-day"
+    bb = agenda.borra(e["id"])
+    assert all(x["id"] != e["id"] for x in agenda.todos())
+    agenda.restaura(bb["evento"])
+    assert any(x["id"] == e["id"] for x in agenda.todos())
+    # lo que se manda fuera
+    ics = agenda.a_ics(next(x for x in agenda.todos() if x["id"] == s["id"]), datetime(2026, 11, 17, tzinfo=timezone.utc))
+    assert "RRULE:FREQ=WEEKLY;UNTIL=20261123T225959Z" in ics and "DTSTART;TZID=Europe/Madrid:20261102T190000" in ics and "BEGIN:VTIMEZONE" in ics
+    t = agenda.a_ics(agenda.limpia({"t": "Cumple, de Ana; ya", "dia": "2026-12-01", "aviso": 0}))
+    assert "DTSTART;VALUE=DATE:20261201" in t and "DTEND;VALUE=DATE:20261202" in t and "SUMMARY:Cumple\\, de Ana\\; ya" in t and "TRIGGER:-PT0M" in t
+    g = agenda.a_google(agenda.limpia({"t": "x", "dia": "2026-11-18", "inicio": "18:00", "fin": "19:30", "repite": "semanal", "excepciones": ["2026-11-25"]}))
+    assert g["start"]["dateTime"].startswith("2026-11-18T18:00") and g["recurrence"][1] == "EXDATE;TZID=Europe/Madrid:20261125T180000", g
+
+
 def test_vault():
     import tempfile
     from pathlib import Path
@@ -1023,6 +1070,7 @@ if __name__ == "__main__":
     test_clean()
     test_cookie()
     test_entreno()
+    test_agenda()
     test_vault()
     test_carrera()
     test_portada()

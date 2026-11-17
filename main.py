@@ -18,6 +18,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 import carrera
+import agenda
 import vault
 
 HERE = Path(__file__).parent
@@ -2133,6 +2134,45 @@ def ordena_tareas(o: dict, todo_sesion: str = Cookie(None), authorization: str =
     exige(todo_sesion, authorization)
     ids = o.get("ids") if isinstance(o.get("ids"), list) else []
     return _valida(vault.reordena, ids)
+
+
+# ---------- calendario (agenda.py): eventos propios que se copian a Google e iCloud; las tareas con fecha, del vault ----------
+@app.get("/api/calendario")
+def calendario(desde: str = "", hasta: str = "", todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    hoy = date.today()
+    desde = day(desde) or (hoy - timedelta(days=hoy.day + 7)).isoformat()
+    hasta = day(hasta) or (date.fromisoformat(desde) + timedelta(days=50)).isoformat()
+    if hasta < desde or (date.fromisoformat(hasta) - date.fromisoformat(desde)).days > 400:
+        raise HTTPException(400, "rango de fechas raro")
+    tareas = trozo(lambda: [{k: t[k] for k in ("id", "t", "due", "hora", "hecha", "estado", "nota")}
+                            for t in vault.todas() if t["t"] and t["due"] and desde <= t["due"] <= hasta])
+    return {"hoy": hoy.isoformat(), "calendarios": agenda.calendarios(), "eventos": agenda.rango(desde, hasta),
+            "tareas": tareas if isinstance(tareas, list) else [], "desde": desde, "hasta": hasta}
+
+
+@app.post("/api/evento")
+def evento_nuevo(e: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    return _valida(agenda.nuevo, e)
+
+
+@app.post("/api/evento/edita")
+def evento_edita(e: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    return _valida(agenda.edita, str(e.get("id") or ""), e)
+
+
+@app.post("/api/evento/borra")
+def evento_borra(e: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    return _valida(agenda.borra, str(e.get("id") or ""), day(e.get("dia")) or "")
+
+
+@app.post("/api/evento/restaura")
+def evento_restaura(e: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    return _valida(agenda.restaura, e.get("evento"))
 
 
 @app.post("/api/tarea/edita")
