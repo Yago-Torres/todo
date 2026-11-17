@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="es">
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<title>todo · apuntar</title>
+<style>
+  :root { --fondo: #F2F2F2; --carta: #FFFFFF; --texto: #161616; --suave: #6A6A6A; --linea: #DEDEDE; --acento: #2E8B57; --peligro: #C0392B; }
+  @media (prefers-color-scheme: dark) { :root { --fondo: #111111; --carta: #1B1B1B; --texto: #EDEDED; --suave: #9A9A9A; --linea: #2F2F2F; --acento: #3FA56C; --peligro: #E57368; } }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; padding: 18px; background: var(--fondo); color: var(--texto); font: 15px/1.45 system-ui, sans-serif; display: grid; gap: 12px; align-content: start; overflow: hidden; }
+  .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; background: var(--carta); border: 1px solid var(--linea); border-radius: 12px; padding: 4px; }
+  .seg button { font: inherit; font-size: 14px; border: 0; border-radius: 9px; padding: 7px; background: none; color: var(--suave); cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--acento); color: #fff; font-weight: 600; }
+  .seg kbd { font: 11px ui-monospace, monospace; opacity: .7; margin-left: 4px; }
+  textarea { font: inherit; font-size: 17px; color: var(--texto); background: var(--carta); border: 1px solid var(--linea); border-radius: 12px; padding: 12px 14px; resize: none; height: 110px; }
+  textarea:focus { outline: none; border-color: var(--acento); }
+  #pie { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--suave); }
+  #msg.mal { color: var(--peligro); }
+  #msg.bien { color: var(--acento); font-weight: 600; }
+</style>
+<body>
+<div class="seg" role="group" aria-label="Qué apuntas">
+  <button type="button" data-t="nota" aria-pressed="true">Nota<kbd>Ctrl 1</kbd></button>
+  <button type="button" data-t="tarea" aria-pressed="false">Tarea<kbd>Ctrl 2</kbd></button>
+  <button type="button" data-t="gasto" aria-pressed="false">Gasto<kbd>Ctrl 3</kbd></button>
+</div>
+<textarea id="t" maxlength="1000" aria-label="Texto"></textarea>
+<div id="pie"><span id="msg" role="status"></span><span>Intro guarda · Esc cierra</span></div>
+<script>
+const t = document.getElementById("t"), msg = document.getElementById("msg");
+const AYUDA = {nota: "Una idea suelta: no es una tarea hasta que tú lo digas", tarea: "Va a Pendientes",
+               gasto: "Importe y nota: «12,50 comida con Aitana»"};
+let tipo = "nota", ocupado = false;
+const di = (x, c = "") => { msg.textContent = x; msg.className = c; };
+function pon(x) {
+  tipo = x;
+  document.querySelectorAll(".seg button").forEach(b => b.setAttribute("aria-pressed", b.dataset.t === x));
+  t.placeholder = AYUDA[x];
+  di("");
+  t.focus();
+}
+window.limpia = () => { t.value = ""; ocupado = false; pon("nota"); };
+const cierra = () => fetch("/_escritorio/cerrar", {method: "POST"}).catch(() => {});
+
+async function manda(url, cuerpo) {
+  const r = await fetch(url, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(cuerpo)});
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.detail || `El servidor contesta ${r.status}`);
+  return j;
+}
+
+async function guarda() {
+  const x = t.value.trim();
+  if (!x || ocupado) return;
+  ocupado = true; di("Guardando…");
+  try {
+    let ok = "Apuntada";
+    if (tipo === "nota") await manda("/api/nota", {t: x});
+    else if (tipo === "tarea") await manda("/api/tarea", {t: x.replace(/\s+/g, " ")});
+    else {
+      const m = /^(\d+(?:[.,]\d{1,2})?)\s*€?\s*(.*)$/s.exec(x);
+      if (!m) throw new Error("Empieza por el importe: «12,50 café»");
+      const j = await manda("/api/gastos/gasto", {importe: +m[1].replace(",", "."), nota: m[2].trim() || undefined, src: "web"});
+      ok = j.texto || "Gasto apuntado";
+    }
+    di(ok, "bien");
+    t.value = "";
+    setTimeout(() => { cierra(); window.limpia(); }, tipo === "gasto" ? 2200 : 700);
+  } catch (e) { di(e.message, "mal"); ocupado = false; }
+}
+
+document.querySelectorAll(".seg button").forEach(b => b.onclick = () => pon(b.dataset.t));
+addEventListener("keydown", e => {
+  if (e.key === "Escape") { e.preventDefault(); cierra(); window.limpia(); }
+  else if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); guarda(); }
+  else if (e.ctrlKey && ["1", "2", "3"].includes(e.key)) { e.preventDefault(); pon(["nota", "tarea", "gasto"][+e.key - 1]); }
+});
+addEventListener("focus", () => t.focus());
+pon("nota");
+</script>
+</body>
+</html>

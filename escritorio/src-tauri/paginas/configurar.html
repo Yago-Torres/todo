@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="es">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Claves de todo</title>
+<style>
+  :root { --fondo: #F2F2F2; --carta: #FFFFFF; --texto: #161616; --suave: #6A6A6A; --linea: #DEDEDE; --acento: #2E8B57; --peligro: #C0392B; }
+  @media (prefers-color-scheme: dark) { :root { --fondo: #111111; --carta: #1B1B1B; --texto: #EDEDED; --suave: #9A9A9A; --linea: #2F2F2F; --acento: #3FA56C; --peligro: #E57368; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; background: var(--fondo); color: var(--texto); font: 15px/1.45 system-ui, sans-serif; }
+  form { width: min(460px, 100%); background: var(--carta); border: 1px solid var(--linea); border-radius: 18px; padding: 24px; display: grid; gap: 12px; }
+  h1 { margin: 0; font-size: 24px; letter-spacing: -.02em; }
+  p { margin: 0; color: var(--suave); font-size: 14px; }
+  label { display: grid; gap: 4px; font-size: 13px; color: var(--suave); }
+  input { font: inherit; color: var(--texto); background: var(--fondo); border: 1px solid var(--linea); border-radius: 10px; padding: 10px 12px; }
+  input:focus { outline: none; border-color: var(--acento); }
+  button { font: inherit; font-weight: 600; border: 0; border-radius: 10px; padding: 11px; background: var(--acento); color: #fff; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  code { font-size: 12px; background: var(--fondo); border: 1px solid var(--linea); border-radius: 6px; padding: 6px 8px; display: block; overflow-x: auto; white-space: nowrap; user-select: all; }
+  #msg { min-height: 1.4em; font-size: 14px; }
+  #msg.mal { color: var(--peligro); }
+  details summary { cursor: pointer; color: var(--suave); font-size: 13px; }
+</style>
+<body>
+<form id="f">
+  <h1>Claves de todo</h1>
+  <p>Son las mismas tres que pide Tom en el iPhone. Se guardan en el llavero del sistema y la ventana ya no vuelve a pedir contraseña.</p>
+  <p>Sácalas desde la Pi: <code>sudo cat /etc/cloudflare-access/todo-bot.json</code> y la <code>TODO_PASS</code> del <code>.env</code> de todo.</p>
+  <label>CF-Access-Client-Id <input name="id" required autocomplete="off" spellcheck="false"></label>
+  <label>CF-Access-Client-Secret <input name="secreto" type="password" required autocomplete="off"></label>
+  <label>Contraseña de todo <input name="pass" type="password" required autocomplete="off"></label>
+  <details><summary>Dirección del servidor</summary>
+    <label style="margin-top:8px">Dirección <input name="base" required spellcheck="false"></label>
+  </details>
+  <div id="msg" role="status"></div>
+  <button type="submit">Probar y guardar</button>
+</form>
+<script>
+const f = document.getElementById("f"), msg = document.getElementById("msg");
+const di = (t, mal) => { msg.textContent = t; msg.className = mal ? "mal" : ""; };
+if (new URLSearchParams(location.search).get("error") === "access")
+  di("Cloudflare Access ya no acepta las claves guardadas: pon unas nuevas.", true);
+fetch("/_escritorio/claves").then(r => r.json()).then(c => {
+  f.base.value = c.base;
+  if (c.configurado && !msg.textContent) di("Ya hay claves guardadas. Si pones otras, sustituyen a esas.");
+}).catch(() => { f.base.value = "https://todo.yagotg.dev"; });
+f.onsubmit = async e => {
+  e.preventDefault();
+  const b = f.querySelector("button");
+  b.disabled = true; di("Probando…");
+  try {
+    const r = await fetch("/_escritorio/claves", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({id: f.id.value, secreto: f.secreto.value, pass: f.pass.value, base: f.base.value})});
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.detail || r.status);
+    di(`Guardadas en ${j.donde}.`);
+    setTimeout(() => location.href = "/", 600);
+  } catch (err) { di(err.message, true); b.disabled = false; }
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+# Compila la app de escritorio (escritorio/, Tauri 2) para Windows y Linux y la deja en la release «escritorio».
+# main publica; las ramas escritorio/** solo compilan (para ver si compila sin tocar lo que hay publicado).
+name: Escritorio
+
+on:
+  push:
+    branches: [main, "escritorio/**"]
+    paths: ["escritorio/**", ".github/workflows/escritorio.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  compilar:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            bundles: --bundles nsis
+          - os: ubuntu-22.04   # glibc vieja: el binario vale también en Arch (Omarchy), que va por delante
+            bundles: --no-bundle
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: escritorio
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependencias de Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libdbus-1-dev libxdo-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: escritorio/src-tauri
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Iconos (de icono.png)
+        run: npx --yes @tauri-apps/cli@2 icon icono.png
+
+      - name: Versión
+        run: sed -i 's/"version": "0.1.0"/"version": "1.${{ github.run_number }}.0"/' src-tauri/tauri.conf.json
+
+      - name: Pruebas
+        working-directory: escritorio/src-tauri
+        run: cargo test
+
+      - name: Compilar
+        run: npx --yes @tauri-apps/cli@2 build ${{ matrix.bundles }}
+
+      - name: Reunir
+        run: |
+          mkdir -p ../salida
+          if [ "$RUNNER_OS" = Windows ]; then
+            cp src-tauri/target/release/bundle/nsis/*-setup.exe ../salida/todo-escritorio-instalador.exe
+            cp src-tauri/target/release/todo-escritorio.exe ../salida/todo-escritorio-portable.exe
+          else
+            cp src-tauri/target/release/todo-escritorio ../salida/todo-escritorio-linux-x86_64
+          fi
+          ls -la ../salida
+
+      - name: Publicar en la release «escritorio»
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTAS="todo en el escritorio, versión 1.${{ github.run_number }}. Windows: el instalador (sin permisos de administrador) o el portable. Omarchy: escritorio/omarchy/instalar.sh. Ver escritorio/README.md."
+          # las dos máquinas llegan casi a la vez: si la otra ya la ha creado, el create falla y da igual
+          gh release view escritorio >/dev/null 2>&1 || gh release create escritorio --title "todo para el escritorio" --notes "$NOTAS" --prerelease || true
+          gh release edit escritorio --notes "$NOTAS"
+          gh release upload escritorio ../salida/* --clobber

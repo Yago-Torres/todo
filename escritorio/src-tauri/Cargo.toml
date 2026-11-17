@@ -1,0 +1,30 @@
+[package]
+name = "todo-escritorio"
+version = "0.1.0"
+description = "todo.yagotg.dev en el escritorio (Windows y Omarchy)"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-autostart = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# el proxy local: tiny_http escucha en 127.0.0.1 y ureq reenvía a todo.yagotg.dev con las claves
+tiny_http = "0.12"
+ureq = "2"
+# las claves en el llavero del sistema (Administrador de credenciales en Windows, Secret Service en Linux)
+keyring = { version = "3", features = ["windows-native", "sync-secret-service", "crypto-rust"] }
+getrandom = "0.2"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
