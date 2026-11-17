@@ -39,11 +39,16 @@ struct HoyApp: App {
     /// hoy://voz abre el modo voz.
     /// hoy://configurar abre Configurar (sin claves ya está delante).
     /// hoy://apuntar?tipo=nota|tarea abre la caja rápida de apuntar (el widget «Apuntar»).
+    /// hoy://calendario abre el Calendario.
     private func abre(_ url: URL) {
         guard url.scheme == "hoy" else { return }
         if url.host == "apuntar" {
             let tipo = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "tipo" }?.value
             Navegador.shared.apuntar = TipoCaptura(rawValue: tipo ?? "") ?? .nota
+            return
+        }
+        if url.host == "calendario" {
+            Navegador.shared.abre("/calendario.html")
             return
         }
         if url.host == "voz" {

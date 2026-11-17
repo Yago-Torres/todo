@@ -108,6 +108,39 @@ struct ApuntaTareaIntent: AppIntent {
     }
 }
 
+// MARK: apuntar un evento
+
+/// Para Atajos y Siri: un evento al calendario de todo (la Pi lo copia a Google y a iCloud). Sin hora, de todo el día.
+/// Sin red, a la cola.
+struct ApuntaEventoIntent: AppIntent {
+    static var title: LocalizedStringResource = "Apuntar un evento"
+    static var description = IntentDescription("Añade un evento al calendario de todo, que lo copia a Google y a iCloud.")
+
+    @Parameter(title: "Evento", requestValueDialog: "¿Qué evento?") var texto: String
+    @Parameter(title: "Cuándo", requestValueDialog: "¿Cuándo?") var cuando: Date
+    @Parameter(title: "Todo el día", default: false) var todoElDia: Bool
+    @Parameter(title: "Duración en minutos", default: 60) var minutos: Int
+
+    init() {}
+
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        let limpio = texto.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !limpio.isEmpty else { throw APIError(mensaje: "El evento está vacío") }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = .current
+        f.dateFormat = "yyyy-MM-dd"
+        let fin = cuando.addingTimeInterval(TimeInterval(max(5, minutos) * 60))
+        let dia = f.string(from: cuando), finDia = f.string(from: fin)
+        f.dateFormat = "HH:mm"
+        let json: [String: Any] = ["t": limpio, "dia": dia, "fin_dia": todoElDia ? dia : max(dia, finDia),
+                                   "inicio": todoElDia ? "" : f.string(from: cuando),
+                                   "fin": todoElDia ? "" : f.string(from: fin), "aviso": todoElDia ? -1 : 10]
+        let r = try await API.escribeOEncola("/api/evento", json: json)
+        return .result(dialog: "\(r == nil ? "Evento: \(API.avisoEncolado.lowercased())" : "Evento apuntado")")
+    }
+}
+
 // MARK: apuntar una nota rápida
 
 /// Para Siri y Atajos: una idea suelta a Notas rápidas (no es una tarea). Sin red, a la cola.

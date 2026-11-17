@@ -400,6 +400,24 @@ Las **notas rápidas** son ideas sueltas que no son tareas (viven en `Notas ráp
   estaba. «Apunta una nota en Tom» no tiene frase propia de Siri porque ya hay 10 `AppShortcut` (el máximo de iOS): para
   dársela habría que quitar otra en `Hoy/Atajos.swift`.
 
+## Calendario (`Hoy/Nativo/Calendario/`)
+
+Una sección de la barra (`/calendario.html`, `hoy://calendario`) con lo de la web: eventos propios del calendario de todo,
+y las tareas y recordatorios de Pendientes que tienen fecha. **Tom no usa EventKit**: la Pi copia cada evento a Google
+Calendar y a iCloud (solo de ida); Tom enseña el estado de esa copia.
+- `DatosCalendario`: `GET /api/calendario?desde&hasta` por rangos de unas 13 semanas alrededor del mes (siempre el mismo
+  rango para el mismo mes, así la copia sin red se encuentra). Crear, cambiar y borrar eventos va por la cola
+  (`/api/evento`, `/edita`, `/borra`; deshacer con `/restaura`, solo con red). Tareas y recordatorios, por `/api/tarea`
+  (con hora es un recordatorio: avisa el bot por Telegram) y se tachan con `/api/tarea/hecha`.
+- `PantallaCalendario`: vistas **Mes** (puntos por calendario y la agenda del día tocado), **Semana**, **Día** y **Agenda**
+  (los próximos 60 días). «+» crea un evento en el día elegido; mantenerlo pulsado deja elegir tarea o recordatorio.
+- `RejillaHorasCal`: semana y día por horas. Tocar un hueco crea un evento a esa media hora; mantener pulsado un evento y
+  arrastrarlo lo mueve (de 15 en 15 min, y de día en la semana). Mover o cambiar un evento que se repite cambia la serie.
+- `HojaEventoCal`: evento (todo el día, inicio y fin, varios días, calendario con su color, repetición con fecha de fin,
+  aviso, lugar, nota), tarea con fecha o recordatorio. Si la copia a Google o iCloud falla, sale aquí y con un icono.
+- Atajos: **Apuntar un evento** (`ApuntaEventoIntent`: texto, cuándo, todo el día, duración). Sin frase de Siri propia:
+  ya hay 10 `AppShortcut`.
+
 ## Trabajar en paralelo (ramas nativo/*)
 
 - Cada bloque de trabajo va en su rama `nativo/<tema>`. Un push a `nativo/**` compila en Actions **sin publicar**; si
