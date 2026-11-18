@@ -8,14 +8,25 @@ struct PerfilInversiones: View {
     @State private var edad = ""
     @State private var aportacion = ""
     @State private var perdidas = ""
-    @State private var guardando = false
+    @State private var intereses = ""
 
-    private var cambiado: Bool {
-        var x = p
+    /// La declaración en la que estás: los intereses que se apuntan son de ese año.
+    private var ejercicio: String { String(datos.inf?.declaracion?.ejercicio ?? Calendar.current.component(.year, from: Date())) }
+
+    private func conCampos(_ base: PerfilInv) -> PerfilInv {
+        var x = base
         x.edad = Int(edad.trimmingCharacters(in: .whitespaces))
         x.aportacion = DineroES.numero(aportacion) ?? 0
         x.perdidasPrevias = DineroES.numero(perdidas) ?? 0
-        return x != perfil
+        var i = perfil.intereses ?? [:]
+        if let n = DineroES.numero(intereses), n > 0 { i[ejercicio] = n } else { i[ejercicio] = nil }
+        x.intereses = i
+        return x
+    }
+    @State private var guardando = false
+
+    private var cambiado: Bool {
+        conCampos(p) != perfil
     }
 
     var body: some View {
@@ -43,6 +54,7 @@ struct PerfilInversiones: View {
             grupo("Impuestos") {
                 eleccion("Dónde tributas", [("comun", "Régimen común"), ("foral", "Navarra o País Vasco")],
                          Binding(get: { p.regimen ?? "comun" }, set: { p.regimen = $0 }))
+                campo("Intereses de la cuenta en \(ejercicio) (€)", "0", $intereses, numero: true)
                 campo("Pérdidas de años anteriores (€)", "0", $perdidas, numero: true)
             }
             grupo("Notas para el analista") {
@@ -75,15 +87,13 @@ struct PerfilInversiones: View {
         edad = perfil.edad.map(String.init) ?? ""
         aportacion = DineroES.campo(perfil.aportacion)
         perdidas = (perfil.perdidasPrevias ?? 0) == 0 ? "" : DineroES.campo(perfil.perdidasPrevias)
+        intereses = perfil.intereses?[ejercicio].map { DineroES.campo($0) } ?? ""
     }
 
     private func guarda() {
         guard !guardando else { return }
         guardando = true
-        var x = p
-        x.edad = Int(edad.trimmingCharacters(in: .whitespaces))
-        x.aportacion = DineroES.numero(aportacion) ?? 0
-        x.perdidasPrevias = DineroES.numero(perdidas) ?? 0
+        var x = conCampos(p)
         x.referencia = x.referencia.trimmingCharacters(in: .whitespaces).uppercased()
         Task {
             _ = await datos.guardaPerfil(x)

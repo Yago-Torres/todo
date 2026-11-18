@@ -245,6 +245,14 @@
       <div class="kpi c-carta"><small id="f-renta-t">Renta de este año</small><b id="f-renta">—</b><small id="f-renta-s"></small></div>
       <div class="kpi c-carta"><small>Ganancia limpia</small><b id="f-gan">—</b><small id="f-gan-s"></small></div>
     </div>
+    <section class="carta c-carta" id="c-decl">
+      <h2 id="d-titulo">Tu declaración</h2>
+      <p id="d-estado" style="margin:0"></p>
+      <p class="nota-p" id="d-obligado"></p>
+      <div class="tabla" id="d-lineas-c"><table id="d-lineas"></table></div>
+      <ol class="consejos" id="d-pasos" style="margin-top:12px"></ol>
+      <p class="nota-p" id="d-avisos"></p>
+    </section>
     <section class="carta c-carta" id="c-consejos" hidden>
       <h2>Para pagar menos</h2>
       <ul class="consejos" id="consejos"></ul>
@@ -290,6 +298,7 @@
         <label>Broker(s)<input class="c-campo" name="broker" autocomplete="off"></label>
         <label>Referencia para comparar<input class="c-campo" name="referencia" placeholder="VWCE.DE" autocomplete="off"></label>
         <label>Dónde tributas<select class="c-campo" name="regimen"><option value="comun">Régimen común (todas menos Navarra y País Vasco)</option><option value="foral">Navarra o País Vasco</option></select></label>
+        <label><span id="l-intereses">Intereses de la cuenta (€)</span><input class="c-campo" name="intereses" inputmode="decimal" placeholder="0"></label>
         <label>Pérdidas de años anteriores sin compensar (€)<input class="c-campo" name="perdidas_previas" inputmode="decimal" placeholder="0"></label>
         <label class="ancho">Notas para el analista<textarea class="c-campo" name="notas" rows="3" maxlength="1000" placeholder="Cosas que cambian el análisis: un gasto grande previsto, que no quieres cripto…"></textarea></label>
         <div class="botones"><button class="c-btn pri" type="submit">Guardar</button></div>
@@ -734,6 +743,18 @@ function pintaImpuestos() {
   $("#f-renta-s").textContent = R.base ? `base ${eur(R.base, 0)} · marginal ${R.marginal} %` : "nada vendido ni cobrado aún";
   $("#f-gan").textContent = signo(S.ganancia_neta); $("#f-gan").className = color(S.ganancia_neta);
   $("#f-gan-s").textContent = `${signo(S.latente)} antes de impuestos`;
+  const D = I.declaracion;
+  $("#d-titulo").textContent = `Tu declaración de ${D.ejercicio}`;
+  $("#d-estado").textContent = D.estado;
+  $("#d-obligado").textContent = D.obligado;
+  const dl = $("#d-lineas");
+  dl.replaceChildren(cabecera(["Qué", "Importe", "Dónde va"]));
+  for (const l of D.lineas) { const tr = fila([[l.que], [signo(l.importe), color(l.importe)], [l.donde]]); tr.lastChild.style.whiteSpace = "normal"; tr.lastChild.style.textAlign = "left"; tr.lastChild.style.minWidth = "16em"; dl.append(tr); }
+  dl.append(fila([["Cuota estimada"], [eur(D.cuota)], [D.base ? `base del ahorro ${eur(D.base)}` : ""]], "total"));
+  $("#d-lineas-c").hidden = !D.lineas.length;
+  $("#d-pasos").replaceChildren(...D.pasos.map(p => el("li", null, p)));
+  $("#d-avisos").textContent = D.avisos.join(" ");
+  $("#d-avisos").hidden = !D.avisos.length;
   const cs = F.consejos;
   $("#c-consejos").hidden = !cs.length;
   $("#consejos").replaceChildren(...cs.map(c => el("li", null, c)));
@@ -748,16 +769,17 @@ function pintaImpuestos() {
   if (S.posiciones.length > 1) tp.append(fila([["Todo junto"], [eur(S.valor)], [signo(S.latente), color(S.latente)], [eur(S.impuesto)], [eur(S.neto)]], "total"));
   if (!S.posiciones.length) tp.append(vacia("Sin posiciones abiertas", 5));
 
-  $("#t-ventas").textContent = `Ventas de ${F.anio} para la renta`;
+  const VS = D.ventas || F.ventas, anioV = D.ventas ? D.ejercicio : F.anio;
+  $("#t-ventas").textContent = `Ventas de ${anioV} para la renta`;
   const tv = $("#t-ventas-t");
   tv.replaceChildren(cabecera(["Valor", "Vendido", "Comprado", "Adquisición", "Transmisión", "Resultado"]));
-  for (const v of F.ventas) {
+  for (const v of VS) {
     const comp = v.compra === v.compra_hasta ? fechaCorta(v.compra) : `${fechaCorta(v.compra)} – ${fechaCorta(v.compra_hasta)}`;
     tv.append(fila([[`${v.nombre}${v.isin ? " · " + v.isin : ""}${v.diferida ? " · pérdida aplazada (2 meses)" : ""}`], [fechaCorta(v.fecha)], [comp],
                     [eur(v.adquisicion)], [eur(v.transmision)], [signo(v.resultado), color(v.resultado)]]));
   }
-  if (!F.ventas.length) tv.append(vacia(`Ninguna venta en ${F.anio}: cuando vendas algo, aquí tendrás las cifras que pide la renta.`, 6));
-  $("#ventas-nota").textContent = (F.ventas.length ? "Compara con el informe fiscal de Trade Republic y con los datos fiscales de Hacienda: van en «ganancias y pérdidas por transmisión de acciones admitidas a negociación». Adquisición y transmisión ya llevan las comisiones. " : "")
+  if (!VS.length) tv.append(vacia(`Ninguna venta en ${anioV}: cuando vendas algo, aquí tendrás las cifras que pide la renta.`, 6));
+  $("#ventas-nota").textContent = (VS.length ? "Compara con el informe fiscal de Trade Republic y con los datos fiscales de Hacienda: van en «ganancias y pérdidas por transmisión de acciones admitidas a negociación». Adquisición y transmisión ya llevan las comisiones. " : "")
     + (F.dividendos ? `Dividendos cobrados en ${F.anio}: ${eur(F.dividendos)} (van en rendimientos del capital mobiliario).` : "");
   $("#f-como").textContent = `Base del ahorro del IRPF: 19 % hasta 6.000 €, 21 % hasta 50.000 €, 23 % hasta 200.000 €, 27 % hasta 300.000 € y 30 % por encima. Solo pagas al vender (con FIFO: lo primero que compraste es lo primero que vendes) y por dividendos e intereses cada año. Las pérdidas compensan ganancias del mismo año y hasta el 25 % de los dividendos; lo que sobra vale 4 años (apúntalo en Perfil). Si recompras lo mismo en menos de 2 meses, la pérdida se aplaza. No cuenta los intereses de la cuenta de Trade Republic ni retenciones de dividendos extranjeros. `
     + (F.regimen === "foral" ? "Ojo: tributas en Navarra o País Vasco y sus tramos son otros, así que esta cifra es solo orientativa. " : "")
@@ -769,6 +791,9 @@ function pintaPerfil() {
   const f = $("#f-perfil"), p = I.perfil;
   for (const k of ["edad", "horizonte", "objetivo", "emergencia", "tolerancia", "caida", "broker", "referencia", "notas", "regimen"]) f[k].value = p[k] ?? "";
   f.perdidas_previas.value = p.perdidas_previas ? String(p.perdidas_previas).replace(".", ",") : "";
+  const ej = String(I.declaracion.ejercicio), int = (p.intereses || {})[ej];
+  $("#l-intereses").textContent = `Intereses de la cuenta en ${ej} (€)`;
+  f.intereses.value = int ? String(int).replace(".", ",") : "";
   f.aportacion.value = p.aportacion ? String(p.aportacion).replace(".", ",") : "";
   f.estable.value = p.estable === true ? "si" : p.estable === false ? "no" : "";
 }
@@ -776,6 +801,7 @@ $("#f-perfil").onsubmit = async e => {
   e.preventDefault();
   const f = e.target, p = Object.fromEntries(["edad", "horizonte", "objetivo", "emergencia", "tolerancia", "caida", "broker", "referencia", "notas", "regimen"].map(k => [k, f[k].value]));
   p.perdidas_previas = num(f.perdidas_previas.value) || 0;
+  p.intereses = {...(I.perfil.intereses || {}), [String(I.declaracion.ejercicio)]: num(f.intereses.value) || 0};
   p.aportacion = num(f.aportacion.value) || 0;
   p.estable = f.estable.value === "si" ? true : f.estable.value === "no" ? false : null;
   try {

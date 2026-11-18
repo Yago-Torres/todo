@@ -1111,6 +1111,10 @@ def test_inversiones():
     f = inv.fiscal(dd, pos, hoy)
     assert f["ventas"][0]["resultado"] == -50 and f["ventas"][0]["diferida"] and f["ganancias"] == 0
     assert f["si_vendes"]["latente"] == -40   # quedan +10 € latentes; al venderlo todo vuelve la pérdida aplazada (-50)
+    assert inv.limpia({"perfil": {"intereses": {"2026": "12,5", "x": 3, "2025": 0}}})["perfil"]["intereses"] == {"2026": 12.5}
+    dc = inv.declaracion(dd, inv.fiscal(dd, pos, date(2027, 5, 1)), 300, date(2027, 5, 1))   # en mayo, la del año pasado con sus ventas
+    assert dc["ejercicio"] == 2026 and dc["ventas"] and "pérdidas" in dc["obligado"] and "ya" in dc["estado"]
+    assert inv.declaracion(dd, f, 300, hoy)["ventas"] is None   # en noviembre, la de este año
 
 
 if __name__ == "__main__":

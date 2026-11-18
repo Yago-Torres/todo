@@ -10,9 +10,10 @@ struct ImpuestosInversiones: View {
         if let f = inf.fiscal {
             VStack(alignment: .leading, spacing: Tema.Espacio.l) {
                 cifras(f)
+                if let d = inf.declaracion { declaracion(d) }
                 if !f.consejos.isEmpty { consejos(f.consejos) }
                 posiciones(f.siVendes)
-                ventas(f)
+                ventas(f, inf.declaracion)
                 Text(explicacion(f))
                     .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
                     .fixedSize(horizontal: false, vertical: true)
@@ -53,6 +54,54 @@ struct ImpuestosInversiones: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .carta(relleno: Tema.Espacio.m)
         .accessibilityElement(children: .combine)
+    }
+
+    // MARK: declaración
+
+    private func declaracion(_ d: DeclaracionInv) -> some View {
+        VStack(alignment: .leading, spacing: Tema.Espacio.m) {
+            Text("Tu declaración de \(String(d.ejercicio))").font(Tema.fuente(.seccion)).foregroundStyle(Tema.texto)
+            Text(d.estado).font(Tema.fuente(.texto)).foregroundStyle(Tema.texto).fixedSize(horizontal: false, vertical: true)
+            Text(d.obligado).font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave).fixedSize(horizontal: false, vertical: true)
+            if !d.lineas.isEmpty {
+                VStack(alignment: .leading, spacing: Tema.Espacio.s) {
+                    ForEach(d.lineas, id: \.que) { l in
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text(l.que).font(Tema.fuente(.texto, peso: .semibold)).foregroundStyle(Tema.texto)
+                                Spacer(minLength: Tema.Espacio.s)
+                                Text(DineroES.signo(l.importe)).font(Tema.fuente(.texto, peso: .semibold))
+                                    .foregroundStyle(DineroES.color(l.importe)).monospacedDigit()
+                            }
+                            Text(l.donde).font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Divider().overlay(Tema.linea)
+                    }
+                    HStack {
+                        Text("Cuota estimada").font(Tema.fuente(.texto, peso: .semibold))
+                        Spacer()
+                        Text(DineroES.eur(d.cuota)).font(Tema.fuente(.texto, peso: .semibold)).monospacedDigit()
+                    }
+                    .foregroundStyle(Tema.texto)
+                }
+                .padding(.top, Tema.Espacio.xs)
+            }
+            VStack(alignment: .leading, spacing: Tema.Espacio.s) {
+                ForEach(Array(d.pasos.enumerated()), id: \.offset) { i, p in
+                    HStack(alignment: .firstTextBaseline, spacing: Tema.Espacio.s) {
+                        Text("\(i + 1).").font(Tema.fuente(.pequeno, peso: .semibold)).foregroundStyle(Tema.acento).monospacedDigit()
+                        Text(p).font(Tema.fuente(.pequeno)).foregroundStyle(Tema.texto).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            .padding(.top, Tema.Espacio.xs)
+            ForEach(d.avisos, id: \.self) { a in
+                Text(a).font(Tema.fuente(.pequeno)).foregroundStyle(Tema.aviso).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .carta()
     }
 
     // MARK: consejos
@@ -113,15 +162,18 @@ struct ImpuestosInversiones: View {
 
     // MARK: ventas
 
-    private func ventas(_ f: FiscalInv) -> some View {
-        VStack(alignment: .leading, spacing: Tema.Espacio.m) {
-            Text("Ventas de \(String(f.anio)) para la renta").font(Tema.fuente(.seccion)).foregroundStyle(Tema.texto)
-            if f.ventas.isEmpty {
+    private func ventas(_ f: FiscalInv, _ d: DeclaracionInv?) -> some View {
+        // si la declaración en la que estás es la del año pasado, sus ventas; si no, las de este año
+        let lista = d?.ventas ?? f.ventas
+        let anio = d?.ventas != nil ? d!.ejercicio : f.anio
+        return VStack(alignment: .leading, spacing: Tema.Espacio.m) {
+            Text("Ventas de \(String(anio)) para la renta").font(Tema.fuente(.seccion)).foregroundStyle(Tema.texto)
+            if lista.isEmpty {
                 Text("Ninguna venta este año: cuando vendas algo, aquí tendrás las cifras que pide la renta.")
                     .font(Tema.fuente(.texto)).foregroundStyle(Tema.suave)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            ForEach(Array(f.ventas.enumerated()), id: \.offset) { i, v in
+            ForEach(Array(lista.enumerated()), id: \.offset) { i, v in
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(alignment: .firstTextBaseline) {
                         Text(v.nombre).font(Tema.fuente(.texto, peso: .semibold)).foregroundStyle(Tema.texto).lineLimit(1)
@@ -137,13 +189,13 @@ struct ImpuestosInversiones: View {
                     }
                 }
                 .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
-                if i < f.ventas.count - 1 { Divider().overlay(Tema.linea) }
+                if i < lista.count - 1 { Divider().overlay(Tema.linea) }
             }
             if f.dividendos != 0 {
                 Text("Dividendos cobrados en \(String(f.anio)): \(DineroES.eur(f.dividendos)) (rendimientos del capital mobiliario).")
                     .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
             }
-            if !f.ventas.isEmpty {
+            if !lista.isEmpty {
                 Text("Compáralo con el informe fiscal de Trade Republic. Va en «ganancias y pérdidas por transmisión de acciones admitidas a negociación»; las comisiones ya están dentro.")
                     .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.tenue)
                     .fixedSize(horizontal: false, vertical: true)

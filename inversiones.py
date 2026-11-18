@@ -35,7 +35,7 @@ OPERACIONES = ("compra", "venta", "dividendo")
 EUROPA = (".DE", ".F", ".AS", ".PA", ".MI", ".MC", ".SG", ".MU", ".BE")
 PERFIL = {"edad": None, "horizonte": "", "objetivo": "", "aportacion": 0, "estable": None, "emergencia": "",
           "tolerancia": "", "caida": "", "broker": "Trade Republic", "referencia": "VWCE.DE", "notas": "",
-          "regimen": "comun", "perdidas_previas": 0}
+          "regimen": "comun", "perdidas_previas": 0, "intereses": {}}
 VACIO = {"perfil": PERFIL, "activos": [], "operaciones": []}
 
 
@@ -70,6 +70,9 @@ def limpia(d):
         "notas": _txt(p.get("notas"), 1000),
         "regimen": p.get("regimen") if p.get("regimen") in ("comun", "foral") else "comun",
         "perdidas_previas": _num(p.get("perdidas_previas"), 0, 1e8) or 0,
+        # intereses de la cuenta del broker por año ({"2026": 31.2}): rendimientos del capital mobiliario
+        "intereses": {k: n for k, v in (p.get("intereses") if isinstance(p.get("intereses"), dict) else {}).items()
+                      if re.fullmatch(r"20\d\d", str(k)) and (n := _num(v, 0, 1e7))},
     }
     activos, vistos = [], set()
     for a in d.get("activos") or []:
@@ -393,6 +396,7 @@ def informe(hoy=None):
         if x["valor"]:
             reparto[x["tipo"]] = round(reparto.get(x["tipo"], 0) + x["peso"], 2)
     ter = sum((x["ter"] or 0) * x["peso"] for x in pos if x["ter"] is not None) / 100
+    fz = fiscal(d, pos, hoy)
     return {
         "perfil": d["perfil"], "activos": d["activos"], "operaciones": d["operaciones"], "posiciones": pos,
         "total": {"valor": valor, "coste": coste, "latente": round(valor - coste, 2),
@@ -403,7 +407,7 @@ def informe(hoy=None):
         "reparto": reparto, "serie": serie,
         "historicos": {a["simbolo"]: dict(sorted(p.get(a["simbolo"], {}).get("dias", {}).items())[-1300:]) for a in d["activos"]},
         "referencia": {"simbolo": d["perfil"]["referencia"], "nombre": p.get(d["perfil"]["referencia"], {}).get("nombre")},
-        "proyeccion": proyeccion(valor, d["perfil"]["aportacion"]), "stress": stress(pos), "fiscal": fiscal(d, pos, hoy),
+        "proyeccion": proyeccion(valor, d["perfil"]["aportacion"]), "stress": stress(pos), "fiscal": fz, "declaracion": declaracion(d, fz, valor, hoy),
         "reviews": reviews(),
     }
 
@@ -489,6 +493,7 @@ def fiscal(d, pos, hoy=None):
             ventas.append(v)
         elif o["fecha"][:4] == str(anio):
             divid += o["precio"]
+    intereses = d["perfil"].get("intereses", {}).get(str(anio), 0)
     # Pérdida aplazada: compraste lo mismo 2 meses antes o después de vender (sin contar los títulos que vendiste)
     # y aún tienes títulos. Se mira al final para ver también las compras posteriores a la venta.
     quedan = {k: sum(n for n, *_ in v) for k, v in lotes.items()}
@@ -498,7 +503,7 @@ def fiscal(d, pos, hoy=None):
         v["diferida"] = bool(v["resultado"] < 0 and ventana and quedan.get(v["activo"], 0) > 1e-9)
     g = sum(v["resultado"] for v in ventas if not v["diferida"])
     previas = d["perfil"].get("perdidas_previas") or 0
-    ahora = liquida(g, divid, previas)
+    ahora = liquida(g, divid + intereses, previas)
     # si vendieras hoy: cada posición sola y todas juntas, sobre lo que ya llevas este año
     # (una pérdida aplazada se recupera al vender los títulos que la aplazaron: va con su posición)
     aplazada = {}
@@ -510,14 +515,14 @@ def fiscal(d, pos, hoy=None):
         if not p["cantidad"] or p["valor"] is None:
             continue
         lat = p["latente"] + aplazada.get(p["id"], 0)
-        extra = round(liquida(g + lat, divid, previas)["cuota"] - ahora["cuota"], 2)
+        extra = round(liquida(g + lat, divid + intereses, previas)["cuota"] - ahora["cuota"], 2)
         recientes = [f for *_, f in lotes.get(p["id"], []) if (hoy - date.fromisoformat(f)).days <= DOS_MESES]
         filas.append({"id": p["id"], "nombre": p["nombre"], "valor": p["valor"], "latente": p["latente"], "impuesto": extra,
                       "neto": round(p["valor"] - extra, 2), "reciente": bool(recientes),
                       "antiguedad": min((f for *_, f in lotes.get(p["id"], [])), default=None)})
         total_lat += lat
         total_val += p["valor"]
-    todo = liquida(g + total_lat, divid, previas)
+    todo = liquida(g + total_lat, divid + intereses, previas)
     imp_todo = round(todo["cuota"] - ahora["cuota"], 2)
     consejos = []
     regimen = d["perfil"].get("regimen", "comun")
@@ -542,7 +547,7 @@ def fiscal(d, pos, hoy=None):
                         "se aplaza hasta que vendas esos títulos.")
     return {
         "anio": anio, "regimen": regimen, "tramos": TRAMOS_AHORRO,
-        "ventas": ventas, "ganancias": round(g, 2), "dividendos": round(divid, 2), "previas": previas,
+        "ventas": ventas, "ganancias": round(g, 2), "dividendos": round(divid, 2), "intereses": round(intereses, 2), "previas": previas,
         "renta": {**ahora, "tipo_medio": round(ahora["cuota"] / ahora["base"] * 100, 2) if ahora["base"] else 0,
                   "marginal": tipo_marginal(ahora["base"])},
         "si_vendes": {"posiciones": filas, "valor": round(total_val, 2), "latente": round(total_lat, 2), "impuesto": imp_todo,
@@ -550,6 +555,81 @@ def fiscal(d, pos, hoy=None):
                       "tipo": round(imp_todo / total_lat * 100, 2) if total_lat > 0 else 0, "pendientes": todo["pendientes"]},
         "consejos": consejos,
     }
+
+
+def declaracion(d, f_actual, valor, hoy=None):
+    """La declaración en la que hay que estar: de enero a junio la del año pasado (la que se presenta ahora),
+    de julio a diciembre la de este año (la que se va formando). Qué meter, dónde y con qué cifras."""
+    hoy = hoy or date.today()
+    ej = hoy.year - 1 if hoy.month <= 6 else hoy.year
+    f = f_actual if ej == f_actual["anio"] else fiscal(d, [], date(ej, 12, 31))
+    plazo = f"del 1 de abril al 30 de junio de {ej + 1} (las fechas exactas las fija Hacienda cada año)"
+    if hoy.year > ej and hoy.month >= 4:
+        estado = f"Toca presentarla ya: el plazo acaba el 30 de junio."
+    elif hoy.year > ej:
+        estado = f"Se presenta {plazo}. Ya puedes ir juntando los papeles."
+    else:
+        estado = f"Se va formando con lo que hagas hasta el 31 de diciembre. Se presenta {plazo}."
+    g, rc = f["ganancias"], f["dividendos"] + f["intereses"]
+    if f["ventas"] and g > 0:
+        obligado = ("Sí, casi seguro. Vender con ganancias en Trade Republic no lleva retención en España, y eso obliga a declarar "
+                    "salvo que todo lo que ganaste en el año junto (sueldo incluido) no llegue a 1.000 €.")
+    elif f["ventas"]:
+        obligado = ("Por las inversiones no estás obligado (vendiste con pérdidas), pero te conviene presentarla: "
+                    "así la pérdida queda apuntada y compensa ganancias de los 4 años siguientes.")
+    elif rc:
+        obligado = ("Por dividendos e intereses solos, normalmente no (hasta 1.600 € al año con retención). "
+                    "Si no te retuvieron nada en España, o tu sueldo pasa de 22.000 € de un solo pagador, sí.")
+    else:
+        obligado = "Por inversiones no: no vendiste ni cobraste nada. Depende de tu sueldo (más de 22.000 € de un pagador obliga)."
+    lineas = []
+    if f["ventas"]:
+        lineas.append({"que": f"Ventas ({len(f['ventas'])})", "importe": g,
+                       "donde": "Ganancias y pérdidas patrimoniales → transmisión de acciones y ETFs admitidos a negociación. "
+                                "Una entrada por venta, con las cifras de la tabla de ventas."})
+    if f["dividendos"]:
+        lineas.append({"que": "Dividendos", "importe": f["dividendos"],
+                       "donde": "Capital mobiliario → dividendos. Mete el bruto y la retención del otro país (vienen en el informe "
+                                "de Trade Republic); la deducción por doble imposición te devuelve hasta el 15 %."})
+    if f["intereses"]:
+        lineas.append({"que": "Intereses de la cuenta", "importe": f["intereses"],
+                       "donde": "Capital mobiliario → intereses de cuentas y depósitos."})
+    pasos = [
+        "Descarga el informe fiscal anual de Trade Republic (en la app, Perfil → Documentos; suele salir entre febrero y marzo).",
+        f"Apunta en Perfil los intereses de la cuenta de {ej} que diga ese informe, para que esta cuenta salga entera.",
+        "Abre el borrador en Renta WEB y mira si las ventas de Trade Republic ya vienen. Si no, añádelas a mano con la tabla de ventas.",
+        "Compara lo que vaya a pagar o devolver el borrador con la cuota estimada de aquí. Si se parecen, vas bien.",
+    ]
+    if f["previas"] or f["renta"]["pendientes"]:
+        pasos.append("Comprueba que el borrador recoge tus pérdidas de años anteriores; si no, añádelas en «saldos pendientes».")
+    avisos = []
+    if valor > 40000:
+        avisos.append("Pasas de 40.000 € en Trade Republic. Si a 31 de diciembre tus valores fuera de España pasan de 50.000 €, "
+                      "toca el modelo 720 (informativo) antes del 31 de marzo. Mira si la custodia de tu cuenta está en Alemania.")
+    return {"ejercicio": ej, "estado": estado, "obligado": obligado, "lineas": lineas, "pasos": pasos, "avisos": avisos,
+            "cuota": f["renta"]["cuota"], "base": f["renta"]["base"], "ventas": f["ventas"] if ej != f_actual["anio"] else None,
+            "intereses": f["intereses"]}
+
+
+def aviso_renta(hoy=None):
+    """Telegram en las fechas clave (inversiones-renta.timer): 1/12 cierre del año, 2/4 empieza la renta, 15/6 quedan 2 semanas."""
+    hoy = hoy or date.today()
+    inf = informe(hoy)
+    f, dc = inf["fiscal"], inf["declaracion"]
+    if hoy.month == 12:
+        s = f["si_vendes"]
+        msg = (f"<b>Cierre de {f['anio']}: impuestos de las inversiones</b>\n"
+               f"Lo vendido este año: {_e(f['ganancias'])} de resultado · cuota estimada {_e(f['renta']['cuota'])}.\n"
+               f"Si vendieras todo hoy pagarías {_e(s['impuesto'])} más.\n\n"
+               + ("\n".join(f"• {c}" for c in f["consejos"]) or "Nada que optimizar antes del 31: no has vendido con ganancias.")
+               + "\n\nLo que vendas a partir del 1 de enero cuenta para el año que viene.")
+    else:
+        msg = (f"<b>Renta {dc['ejercicio']}</b>\n{dc['estado']}\n\n{dc['obligado']}\n\n"
+               + "".join(f"• {l['que']}: {_e(l['importe'])}\n" for l in dc["lineas"])
+               + f"Cuota estimada por inversiones: {_e(dc['cuota'])}\n\n"
+               + "\n".join(f"{i}. {p}" for i, p in enumerate(dc["pasos"], 1)))
+    msg += "\n\nTodo, con la tabla de ventas: https://todo.yagotg.dev/inversiones.html#impuestos"
+    _telegram(msg)
 
 
 # ---------- reviews ----------
@@ -746,6 +826,10 @@ def avisa(hoy, texto, inf):
     msg = (f"<b>Review de inversiones · {hoy.day}/{hoy.month}</b>\n"
            f"Cartera: {t['valor']:,.2f} € ({t['latente']:+,.2f} €)\n\n{html.escape(cuerpo[:3000])}\n\n"
            f"Entera, con gráficas: https://todo.yagotg.dev/inversiones.html?review={hoy.isoformat()}")
+    _telegram(msg)
+
+
+def _telegram(msg):
     if not os.environ.get("TELEGRAM_TOKEN"):
         print(msg)
         return
@@ -763,6 +847,8 @@ if __name__ == "__main__":
         sys.exit(1 if f and len(f) == len(lee()["activos"]) + 1 else 0)
     elif "--review" in sys.argv:
         hacer_review(ver="--ver" in sys.argv)
+    elif "--aviso-renta" in sys.argv:
+        aviso_renta()
     elif "--prompt" in sys.argv:
         print(prompt_review(informe(), date.today()))
     else:

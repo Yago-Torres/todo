@@ -22,9 +22,10 @@ struct PerfilInv: Codable, Equatable {
     var notas = ""
     var regimen: String? = "comun"          // comun | foral (Navarra o País Vasco)
     var perdidasPrevias: Double?            // pérdidas de años anteriores sin compensar
+    var intereses: [String: Double]?        // intereses de la cuenta por año («2026»: 31,2)
 
     enum CodingKeys: String, CodingKey {
-        case edad, horizonte, objetivo, aportacion, estable, emergencia, tolerancia, caida, broker, referencia, notas, regimen
+        case edad, horizonte, objetivo, aportacion, estable, emergencia, tolerancia, caida, broker, referencia, notas, regimen, intereses
         case perdidasPrevias = "perdidas_previas"
     }
 }
@@ -192,6 +193,25 @@ struct FiscalInv: Decodable, Hashable {
     }
 }
 
+struct LineaDeclaracionInv: Decodable, Hashable {
+    var que: String
+    var importe: Double
+    var donde: String
+}
+
+/// La declaración en la que hay que estar (enero-junio, la del año pasado; julio-diciembre, la de este).
+struct DeclaracionInv: Decodable, Hashable {
+    var ejercicio: Int
+    var estado: String
+    var obligado: String
+    var lineas: [LineaDeclaracionInv]
+    var pasos: [String]
+    var avisos: [String]
+    var cuota: Double
+    var base: Double
+    var ventas: [VentaFiscalInv]?           // solo si es la del año pasado (las de este año están en fiscal)
+}
+
 struct InformeInv: Decodable {
     var perfil: PerfilInv
     var activos: [ActivoInv]
@@ -206,6 +226,7 @@ struct InformeInv: Decodable {
     var stress: [String: Double]
     var reviews: [String]
     var fiscal: FiscalInv?
+    var declaracion: DeclaracionInv?
 
     /// Lo que tienes ahora, de más a menos valor.
     var abiertas: [PosicionInv] {
@@ -454,7 +475,7 @@ final class DatosInversiones {
             "edad": p.edad.map { $0 as Any } ?? NSNull(), "horizonte": p.horizonte, "objetivo": p.objetivo,
             "aportacion": p.aportacion, "estable": p.estable.map { $0 as Any } ?? NSNull(), "emergencia": p.emergencia,
             "tolerancia": p.tolerancia, "caida": p.caida, "broker": p.broker, "referencia": p.referencia, "notas": p.notas,
-            "regimen": p.regimen ?? "comun", "perdidas_previas": p.perdidasPrevias ?? 0,
+            "regimen": p.regimen ?? "comun", "perdidas_previas": p.perdidasPrevias ?? 0, "intereses": p.intereses ?? [:],
         ]
         let cambiaReferencia = p.referencia.uppercased() != inf?.perfil.referencia
         do {
