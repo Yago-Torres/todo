@@ -180,11 +180,40 @@ def _a_euros(dias, cambio):
     return out
 
 
+LS = "https://www.ls-tc.de/_rpc/json/instrument"
+
+
+def _ls_json(url):
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return json.load(r)
+
+
+def precio_ls(isin, ls_id=None):
+    """Precio en vivo de Lang & Schwarz (de donde saca el suyo Trade Republic; cotiza de 7:30 a 23:00) por ISIN.
+    Devuelve (id, último, cierre anterior, día del último) o None. Las horas de L&S vienen en hora alemana como si fueran UTC."""
+    if not ls_id:
+        res = _ls_json(f"https://www.ls-tc.de/_rpc/json/.lstc/instrument/search/main?q={urllib.parse.quote(isin)}&localeId=2")
+        res = [x for x in res if x.get("isin") == isin]
+        if not res:
+            return None
+        ls_id = res[0]["instrumentId"]
+    j = _ls_json(f"{LS}/chart/dataForInstrument?instrumentId={int(ls_id)}")
+    datos = (j.get("series", {}).get("intraday") or {}).get("data") or []
+    if not datos:
+        return None
+    ms, ultimo = datos[-1]
+    dia = datetime.fromtimestamp(ms / 1000, timezone.utc).date().isoformat()
+    previo = next((x["value"] for x in j.get("info", {}).get("plotlines", []) if x.get("id") == "previousDay"), None)
+    return ls_id, float(ultimo), previo, dia
+
+
 def actualiza(simbolos=None, rango=None):
     """Baja precios de los símbolos (por defecto, los de la cartera y la referencia). Devuelve los que fallaron."""
     d, p = lee(), lee_precios()
     simbolos = simbolos or sorted({a["simbolo"] for a in d["activos"]} | {d["perfil"]["referencia"]})
     cambios, fallos = {}, []
+    isines = {a["simbolo"]: a["isin"] for a in d["activos"] if a.get("isin")}
     for s in simbolos:
         try:
             r = rango or ("1mo" if s in p and p[s].get("dias") else "10y")
@@ -199,6 +228,16 @@ def actualiza(simbolos=None, rango=None):
             viejo = p.get(s, {})
             p[s] = {"divisa": divisa, "nombre": meta.get("longName") or meta.get("shortName") or viejo.get("nombre") or s,
                     "dias": {**viejo.get("dias", {}), **dias}, "ultimo": ultimo, "hora": datetime.now().isoformat(timespec="minutes")}
+            isin = isines.get(s)
+            if isin:   # con ISIN, el precio de ahora es el de L&S (el que ves en Trade Republic); Yahoo queda para el histórico
+                try:
+                    ls = precio_ls(isin, viejo.get("ls_id") if viejo.get("isin") == isin else None)
+                    if ls:
+                        hoy = date.today().isoformat()
+                        p[s].update({"isin": isin, "ls_id": ls[0], "ultimo": ls[1], "fuente": "L&S",
+                                     "ayer": (ls[2] if ls[3] == hoy else ls[1]) if ls[2] else None})
+                except Exception as e:
+                    fallos.append(f"{s} (L&S): {e}")
         except Exception as e:   # un símbolo que falla no tumba los demás
             fallos.append(f"{s}: {e}")
         time.sleep(.3)
@@ -254,6 +293,8 @@ def posiciones(ops, activos, precios, hoy=None):
         ayer = serie["dias"][dias[-2]] if len(dias) >= 2 else None
         if serie.get("dias") and dias[-1] < hoy:   # el último cierre no es de hoy: «ayer» es ese cierre
             ayer = serie["dias"][dias[-1]]
+        if serie.get("ayer"):   # con L&S, «hoy» va contra su cierre de ayer, como en Trade Republic
+            ayer = serie["ayer"]
         valor = cant * precio if precio is not None else None
         n_hoy = min(x["hoy_n"], cant)
         base = (cant - n_hoy) * ayer + (x["hoy_eur"] * n_hoy / x["hoy_n"] if n_hoy else 0) if ayer or n_hoy else None
