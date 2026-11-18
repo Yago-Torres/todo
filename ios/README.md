@@ -415,7 +415,9 @@ proyección): Tom solo pinta `GET /api/inversiones`, así que la web y el iPhone
   `HojaOperacionInv` y `HojaActivoInv` (busca en Yahoo al dejar de escribir; primero lo que cotiza en euros).
 - `ReviewInversiones`: el Markdown de la review partido en bloques (`LectorMD`): encabezados, párrafos, listas,
   tablas que se desplazan de lado y los bloques ```grafica (tarta, barras o líneas) con Swift Charts.
-- `PerfilInversiones`: el contexto que lee la review.
+- `ImpuestosInversiones`: lo que te quedaría si vendes hoy, la renta del año, consejos y las ventas para la declaración
+  (todo de `informe.fiscal`, calculado en el servidor).
+- `PerfilInversiones`: el contexto que lee la review (y dónde tributas y las pérdidas de años anteriores).
 - `/inversiones.html?review=fecha` (el enlace del aviso del domingo) abre esa review (`Navegador.reviewInversiones`).
 
 ## Calendario (`Hoy/Nativo/Calendario/`)

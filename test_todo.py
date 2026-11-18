@@ -1097,6 +1097,20 @@ def test_inversiones():
     inv.guarda_review("2026-03-08", "## 1. Resumen\nTodo bien")
     assert inv.reviews() == ["2026-03-08"] and "Todo bien" in inv.review("2026-03-08")
     assert (d / "v" / "Review inversiones 2026-03-08.md").exists()
+    # impuestos: escala del ahorro, compensación y regla de los 2 meses
+    assert inv.cuota_ahorro(6000) == 1140 and inv.cuota_ahorro(10000) == 1980 and inv.cuota_ahorro(-5) == 0
+    assert inv.liquida(-1000, 400) == {"base": 300, "cuota": 57, "pendientes": 900}
+    assert inv.liquida(3000, 100, 500)["base"] == 2600
+    A = [{"id": "y", "nombre": "Y", "simbolo": "Y", "tipo": "accion"}]
+    ops = [{"id": "1", "fecha": "2026-01-10", "activo": "y", "tipo": "compra", "cantidad": 10, "precio": 50},
+           {"id": "2", "fecha": "2026-06-01", "activo": "y", "tipo": "venta", "cantidad": 5, "precio": 40},
+           {"id": "3", "fecha": "2026-06-20", "activo": "y", "tipo": "compra", "cantidad": 1, "precio": 40}]
+    dd = inv.limpia({"activos": A, "operaciones": ops})
+    hoy = date(2026, 11, 18)
+    pos = inv.posiciones(dd["operaciones"], dd["activos"], {"Y": {"ultimo": 50}}, hoy)
+    f = inv.fiscal(dd, pos, hoy)
+    assert f["ventas"][0]["resultado"] == -50 and f["ventas"][0]["diferida"] and f["ganancias"] == 0
+    assert f["si_vendes"]["latente"] == -40   # quedan +10 € latentes; al venderlo todo vuelve la pérdida aplazada (-50)
 
 
 if __name__ == "__main__":

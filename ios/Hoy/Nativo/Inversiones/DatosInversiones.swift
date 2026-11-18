@@ -20,6 +20,13 @@ struct PerfilInv: Codable, Equatable {
     var broker = ""
     var referencia = "VWCE.DE"
     var notas = ""
+    var regimen: String? = "comun"          // comun | foral (Navarra o País Vasco)
+    var perdidasPrevias: Double?            // pérdidas de años anteriores sin compensar
+
+    enum CodingKeys: String, CodingKey {
+        case edad, horizonte, objetivo, aportacion, estable, emergencia, tolerancia, caida, broker, referencia, notas, regimen
+        case perdidasPrevias = "perdidas_previas"
+    }
 }
 
 struct ActivoInv: Codable, Identifiable, Hashable {
@@ -117,6 +124,74 @@ struct ReferenciaInv: Decodable, Hashable {
     var nombre: String?
 }
 
+// Impuestos (fiscal() de inversiones.py): opcionales para que una copia guardada de antes siga leyéndose.
+struct VentaFiscalInv: Decodable, Hashable {
+    var fecha: String
+    var activo: String
+    var nombre: String
+    var isin: String
+    var cantidad: Double
+    var compra: String?
+    var compraHasta: String?
+    var adquisicion: Double
+    var transmision: Double
+    var resultado: Double
+    var diferida: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case fecha, activo, nombre, isin, cantidad, compra, adquisicion, transmision, resultado, diferida
+        case compraHasta = "compra_hasta"
+    }
+}
+
+struct RentaInv: Decodable, Hashable {
+    var base: Double
+    var cuota: Double
+    var pendientes: Double
+    var marginal: Double
+}
+
+struct PosFiscalInv: Decodable, Hashable, Identifiable {
+    var id: String
+    var nombre: String
+    var valor: Double
+    var latente: Double
+    var impuesto: Double
+    var neto: Double
+    var reciente: Bool
+}
+
+struct SiVendesInv: Decodable, Hashable {
+    var posiciones: [PosFiscalInv]
+    var valor: Double
+    var latente: Double
+    var impuesto: Double
+    var neto: Double
+    var gananciaNeta: Double
+    var tipo: Double
+
+    enum CodingKeys: String, CodingKey {
+        case posiciones, valor, latente, impuesto, neto, tipo
+        case gananciaNeta = "ganancia_neta"
+    }
+}
+
+struct FiscalInv: Decodable, Hashable {
+    var anio: Int
+    var regimen: String
+    var ventas: [VentaFiscalInv]
+    var ganancias: Double
+    var dividendos: Double
+    var renta: RentaInv
+    var siVendes: SiVendesInv
+    var consejos: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case anio, regimen, ventas, ganancias, dividendos, renta, consejos
+        case siVendes = "si_vendes"
+    }
+}
+
 struct InformeInv: Decodable {
     var perfil: PerfilInv
     var activos: [ActivoInv]
@@ -130,6 +205,7 @@ struct InformeInv: Decodable {
     var proyeccion: [String: ProyeccionInv]
     var stress: [String: Double]
     var reviews: [String]
+    var fiscal: FiscalInv?
 
     /// Lo que tienes ahora, de más a menos valor.
     var abiertas: [PosicionInv] {
@@ -378,6 +454,7 @@ final class DatosInversiones {
             "edad": p.edad.map { $0 as Any } ?? NSNull(), "horizonte": p.horizonte, "objetivo": p.objetivo,
             "aportacion": p.aportacion, "estable": p.estable.map { $0 as Any } ?? NSNull(), "emergencia": p.emergencia,
             "tolerancia": p.tolerancia, "caida": p.caida, "broker": p.broker, "referencia": p.referencia, "notas": p.notas,
+            "regimen": p.regimen ?? "comun", "perdidas_previas": p.perdidasPrevias ?? 0,
         ]
         let cambiaReferencia = p.referencia.uppercased() != inf?.perfil.referencia
         do {

@@ -98,6 +98,13 @@
   .md hr { border: 0; border-top: 1px solid var(--linea); margin: 18px 0; }
   .md a { color: var(--acento); }
   .md .tabla { overflow-x: auto; margin: 10px 0; }
+  #v-impuestos .tabla { overflow-x: auto; }
+  .consejos { margin: 0; padding-left: 1.1em; display: grid; gap: 8px; }
+  #v-impuestos table { border-collapse: collapse; font-size: var(--t-pequeno); min-width: 100%; }
+  #v-impuestos th, #v-impuestos td { padding: 7px 8px; border-top: 1px solid var(--linea); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  #v-impuestos th { color: var(--suave); font-weight: 550; border-top: 0; }
+  #v-impuestos th:first-child, #v-impuestos td:first-child { text-align: left; white-space: normal; min-width: 8em; }
+  #v-impuestos tr.total td { font-weight: 650; }
   .md table { border-collapse: collapse; font-size: var(--t-pequeno); min-width: 100%; overflow-wrap: normal; }
   .md th, .md td { padding: 6px 10px; border-bottom: 1px solid var(--linea); text-align: left; vertical-align: top; }
   .md th { color: var(--suave); font-weight: 550; white-space: nowrap; }
@@ -136,6 +143,7 @@
   <div class="c-seg" role="tablist" aria-label="Secciones" id="pestanas">
     <button role="tab" data-v="cartera">Cartera</button>
     <button role="tab" data-v="operaciones">Operaciones</button>
+    <button role="tab" data-v="impuestos">Impuestos</button>
     <button role="tab" data-v="review">Review</button>
     <button role="tab" data-v="perfil">Perfil</button>
   </div>
@@ -229,6 +237,34 @@
     </section>
   </section>
 
+  <!-- IMPUESTOS -->
+  <section class="vista" id="v-impuestos" hidden>
+    <div class="kpis">
+      <div class="kpi grande c-carta"><small>Si vendes todo hoy te quedan</small><b id="f-neto">—</b><small id="f-neto-s"></small></div>
+      <div class="kpi c-carta"><small>Impuesto al vender todo</small><b id="f-imp">—</b><small id="f-imp-s"></small></div>
+      <div class="kpi c-carta"><small id="f-renta-t">Renta de este año</small><b id="f-renta">—</b><small id="f-renta-s"></small></div>
+      <div class="kpi c-carta"><small>Ganancia limpia</small><b id="f-gan">—</b><small id="f-gan-s"></small></div>
+    </div>
+    <section class="carta c-carta" id="c-consejos" hidden>
+      <h2>Para pagar menos</h2>
+      <ul class="consejos" id="consejos"></ul>
+    </section>
+    <section class="carta c-carta">
+      <h2>Si vendieras cada posición hoy</h2>
+      <div class="tabla"><table id="t-pos"></table></div>
+      <p class="nota-p">Cada fila es vender solo esa posición, sobre lo que ya llevas este año. Una pérdida resta impuesto si hay ganancias con las que compensarla.</p>
+    </section>
+    <section class="carta c-carta">
+      <h2 id="t-ventas">Ventas para la renta</h2>
+      <div class="tabla"><table id="t-ventas-t"></table></div>
+      <p class="nota-p" id="ventas-nota"></p>
+    </section>
+    <section class="carta c-carta">
+      <h2>Cómo se calcula</h2>
+      <p class="nota-p" id="f-como" style="margin-top:0"></p>
+    </section>
+  </section>
+
   <!-- REVIEW -->
   <section class="vista" id="v-review" hidden>
     <section class="carta c-carta">
@@ -253,6 +289,8 @@
         <label>Caída que aguantarías sin vender<input class="c-campo" name="caida" placeholder="-30 %" autocomplete="off"></label>
         <label>Broker(s)<input class="c-campo" name="broker" autocomplete="off"></label>
         <label>Referencia para comparar<input class="c-campo" name="referencia" placeholder="VWCE.DE" autocomplete="off"></label>
+        <label>Dónde tributas<select class="c-campo" name="regimen"><option value="comun">Régimen común (todas menos Navarra y País Vasco)</option><option value="foral">Navarra o País Vasco</option></select></label>
+        <label>Pérdidas de años anteriores sin compensar (€)<input class="c-campo" name="perdidas_previas" inputmode="decimal" placeholder="0"></label>
         <label class="ancho">Notas para el analista<textarea class="c-campo" name="notas" rows="3" maxlength="1000" placeholder="Cosas que cambian el análisis: un gasto grande previsto, que no quieres cripto…"></textarea></label>
         <div class="botones"><button class="c-btn pri" type="submit">Guardar</button></div>
       </form>
@@ -298,11 +336,11 @@ $("#toast-btn").onclick = async () => { $("#toast").removeAttribute("data-on"); 
 
 // ---------- pestañas (la elegida va en el #, así un enlace o recargar vuelve a ella) ----------
 function vista(v) {
-  if (!["cartera", "operaciones", "review", "perfil"].includes(v)) v = "cartera";
+  if (!["cartera", "operaciones", "impuestos", "review", "perfil"].includes(v)) v = "cartera";
   document.querySelectorAll("#pestanas button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.v === v)));
   document.querySelectorAll(".vista").forEach(s => s.hidden = s.id !== `v-${v}`);
   history.replaceState(null, "", `${location.pathname}${location.search}#${v}`);
-  if (I) ({cartera: pintaCartera, operaciones: pintaOps, review: pintaReview, perfil: pintaPerfil})[v]();
+  if (I) ({cartera: pintaCartera, operaciones: pintaOps, impuestos: pintaImpuestos, review: pintaReview, perfil: pintaPerfil})[v]();
 }
 $("#pestanas").onclick = e => { const b = e.target.closest("button"); if (b) vista(b.dataset.v); };
 
@@ -676,16 +714,68 @@ function md(caja, texto) {
   });
 }
 
+// ---------- impuestos ----------
+function fila(celdas, cls) {
+  const tr = el("tr", cls);
+  for (const [txt, c] of celdas) tr.append(el("td", c || null, txt));
+  return tr;
+}
+function vacia(txt, n) { const tr = el("tr"), td = el("td", null, txt); td.colSpan = n; td.style.whiteSpace = "normal"; tr.append(td); return tr; }
+function cabecera(nombres) { const tr = el("tr"); for (const n of nombres) tr.append(el("th", null, n)); return tr; }
+const fechaCorta = d => d ? new Date(d + "T12:00").toLocaleDateString("es-ES", {day: "numeric", month: "short", year: "2-digit"}) : "—";
+function pintaImpuestos() {
+  const F = I.fiscal, S = F.si_vendes, R = F.renta;
+  $("#f-neto").textContent = eur(S.neto);
+  $("#f-neto-s").textContent = `de ${eur(S.valor)} que vale hoy`;
+  $("#f-imp").textContent = eur(S.impuesto);
+  $("#f-imp-s").textContent = S.latente > 0 ? `${String(S.tipo).replace(".", ",")} % de lo ganado` : S.latente < 0 ? "vas en pérdidas: no pagarías" : "";
+  $("#f-renta-t").textContent = `Renta ${F.anio} (lo ya vendido)`;
+  $("#f-renta").textContent = eur(R.cuota);
+  $("#f-renta-s").textContent = R.base ? `base ${eur(R.base, 0)} · marginal ${R.marginal} %` : "nada vendido ni cobrado aún";
+  $("#f-gan").textContent = signo(S.ganancia_neta); $("#f-gan").className = color(S.ganancia_neta);
+  $("#f-gan-s").textContent = `${signo(S.latente)} antes de impuestos`;
+  const cs = F.consejos;
+  $("#c-consejos").hidden = !cs.length;
+  $("#consejos").replaceChildren(...cs.map(c => el("li", null, c)));
+
+  const tp = $("#t-pos");
+  tp.replaceChildren(cabecera(["Posición", "Vale", "Ganancia", "Impuesto", "Te quedan"]));
+  for (const p of S.posiciones) {
+    const tr = fila([[p.nombre], [eur(p.valor)], [signo(p.latente), color(p.latente)], [p.impuesto < 0 ? `${eur(p.impuesto)} (ahorro)` : eur(p.impuesto)], [eur(p.neto)]]);
+    if (p.reciente && p.latente < 0) tr.title = "Compraste hace menos de 2 meses: si vendes y recompras pronto, la pérdida se aplaza";
+    tp.append(tr);
+  }
+  if (S.posiciones.length > 1) tp.append(fila([["Todo junto"], [eur(S.valor)], [signo(S.latente), color(S.latente)], [eur(S.impuesto)], [eur(S.neto)]], "total"));
+  if (!S.posiciones.length) tp.append(vacia("Sin posiciones abiertas", 5));
+
+  $("#t-ventas").textContent = `Ventas de ${F.anio} para la renta`;
+  const tv = $("#t-ventas-t");
+  tv.replaceChildren(cabecera(["Valor", "Vendido", "Comprado", "Adquisición", "Transmisión", "Resultado"]));
+  for (const v of F.ventas) {
+    const comp = v.compra === v.compra_hasta ? fechaCorta(v.compra) : `${fechaCorta(v.compra)} – ${fechaCorta(v.compra_hasta)}`;
+    tv.append(fila([[`${v.nombre}${v.isin ? " · " + v.isin : ""}${v.diferida ? " · pérdida aplazada (2 meses)" : ""}`], [fechaCorta(v.fecha)], [comp],
+                    [eur(v.adquisicion)], [eur(v.transmision)], [signo(v.resultado), color(v.resultado)]]));
+  }
+  if (!F.ventas.length) tv.append(vacia(`Ninguna venta en ${F.anio}: cuando vendas algo, aquí tendrás las cifras que pide la renta.`, 6));
+  $("#ventas-nota").textContent = (F.ventas.length ? "Compara con el informe fiscal de Trade Republic y con los datos fiscales de Hacienda: van en «ganancias y pérdidas por transmisión de acciones admitidas a negociación». Adquisición y transmisión ya llevan las comisiones. " : "")
+    + (F.dividendos ? `Dividendos cobrados en ${F.anio}: ${eur(F.dividendos)} (van en rendimientos del capital mobiliario).` : "");
+  $("#f-como").textContent = `Base del ahorro del IRPF: 19 % hasta 6.000 €, 21 % hasta 50.000 €, 23 % hasta 200.000 €, 27 % hasta 300.000 € y 30 % por encima. Solo pagas al vender (con FIFO: lo primero que compraste es lo primero que vendes) y por dividendos e intereses cada año. Las pérdidas compensan ganancias del mismo año y hasta el 25 % de los dividendos; lo que sobra vale 4 años (apúntalo en Perfil). Si recompras lo mismo en menos de 2 meses, la pérdida se aplaza. No cuenta los intereses de la cuenta de Trade Republic ni retenciones de dividendos extranjeros. `
+    + (F.regimen === "foral" ? "Ojo: tributas en Navarra o País Vasco y sus tramos son otros, así que esta cifra es solo orientativa. " : "")
+    + "Es una estimación para decidir, no tu declaración.";
+}
+
 // ---------- perfil ----------
 function pintaPerfil() {
   const f = $("#f-perfil"), p = I.perfil;
-  for (const k of ["edad", "horizonte", "objetivo", "emergencia", "tolerancia", "caida", "broker", "referencia", "notas"]) f[k].value = p[k] ?? "";
+  for (const k of ["edad", "horizonte", "objetivo", "emergencia", "tolerancia", "caida", "broker", "referencia", "notas", "regimen"]) f[k].value = p[k] ?? "";
+  f.perdidas_previas.value = p.perdidas_previas ? String(p.perdidas_previas).replace(".", ",") : "";
   f.aportacion.value = p.aportacion ? String(p.aportacion).replace(".", ",") : "";
   f.estable.value = p.estable === true ? "si" : p.estable === false ? "no" : "";
 }
 $("#f-perfil").onsubmit = async e => {
   e.preventDefault();
-  const f = e.target, p = Object.fromEntries(["edad", "horizonte", "objetivo", "emergencia", "tolerancia", "caida", "broker", "referencia", "notas"].map(k => [k, f[k].value]));
+  const f = e.target, p = Object.fromEntries(["edad", "horizonte", "objetivo", "emergencia", "tolerancia", "caida", "broker", "referencia", "notas", "regimen"].map(k => [k, f[k].value]));
+  p.perdidas_previas = num(f.perdidas_previas.value) || 0;
   p.aportacion = num(f.aportacion.value) || 0;
   p.estable = f.estable.value === "si" ? true : f.estable.value === "no" ? false : null;
   try {

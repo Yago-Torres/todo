@@ -56,7 +56,7 @@ struct CarteraInversiones: View {
                 .disabled(actualizando)
                 Spacer()
                 if let hora = inf.posiciones.compactMap(\.precioHora).max() {
-                    Text("Yahoo, \(FechasES.cuando(hora)) \(hora.count >= 16 ? String(hora.suffix(5)) : "")")
+                    Text("Precios \(FechasES.cuando(hora)) \(hora.count >= 16 ? String(hora.suffix(5)) : "")")
                         .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.tenue)
                 }
             }

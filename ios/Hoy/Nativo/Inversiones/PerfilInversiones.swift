@@ -7,12 +7,14 @@ struct PerfilInversiones: View {
     @State private var p = PerfilInv()
     @State private var edad = ""
     @State private var aportacion = ""
+    @State private var perdidas = ""
     @State private var guardando = false
 
     private var cambiado: Bool {
         var x = p
         x.edad = Int(edad.trimmingCharacters(in: .whitespaces))
         x.aportacion = DineroES.numero(aportacion) ?? 0
+        x.perdidasPrevias = DineroES.numero(perdidas) ?? 0
         return x != perfil
     }
 
@@ -37,6 +39,11 @@ struct PerfilInversiones: View {
             grupo("Cuentas") {
                 campo("Broker(s)", "Trade Republic", $p.broker)
                 campo("Referencia para comparar", "VWCE.DE", $p.referencia, mayusculas: true)
+            }
+            grupo("Impuestos") {
+                eleccion("Dónde tributas", [("comun", "Régimen común"), ("foral", "Navarra o País Vasco")],
+                         Binding(get: { p.regimen ?? "comun" }, set: { p.regimen = $0 }))
+                campo("Pérdidas de años anteriores (€)", "0", $perdidas, numero: true)
             }
             grupo("Notas para el analista") {
                 TextField("Un gasto grande previsto, que no quieres cripto…", text: $p.notas, axis: .vertical)
@@ -67,6 +74,7 @@ struct PerfilInversiones: View {
         p = perfil
         edad = perfil.edad.map(String.init) ?? ""
         aportacion = DineroES.campo(perfil.aportacion)
+        perdidas = (perfil.perdidasPrevias ?? 0) == 0 ? "" : DineroES.campo(perfil.perdidasPrevias)
     }
 
     private func guarda() {
@@ -75,6 +83,7 @@ struct PerfilInversiones: View {
         var x = p
         x.edad = Int(edad.trimmingCharacters(in: .whitespaces))
         x.aportacion = DineroES.numero(aportacion) ?? 0
+        x.perdidasPrevias = DineroES.numero(perdidas) ?? 0
         x.referencia = x.referencia.trimmingCharacters(in: .whitespaces).uppercased()
         Task {
             _ = await datos.guardaPerfil(x)

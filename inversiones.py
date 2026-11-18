@@ -34,7 +34,8 @@ OPERACIONES = ("compra", "venta", "dividendo")
 # Bolsas en euros, por orden: Trade Republic opera en Xetra/LS Exchange, así que .DE es lo más parecido a su precio
 EUROPA = (".DE", ".F", ".AS", ".PA", ".MI", ".MC", ".SG", ".MU", ".BE")
 PERFIL = {"edad": None, "horizonte": "", "objetivo": "", "aportacion": 0, "estable": None, "emergencia": "",
-          "tolerancia": "", "caida": "", "broker": "Trade Republic", "referencia": "VWCE.DE", "notas": ""}
+          "tolerancia": "", "caida": "", "broker": "Trade Republic", "referencia": "VWCE.DE", "notas": "",
+          "regimen": "comun", "perdidas_previas": 0}
 VACIO = {"perfil": PERFIL, "activos": [], "operaciones": []}
 
 
@@ -67,6 +68,8 @@ def limpia(d):
         "caida": _txt(p.get("caida"), 40), "broker": _txt(p.get("broker")) or PERFIL["broker"],
         "referencia": _txt(p.get("referencia"), 20).upper() or PERFIL["referencia"],
         "notas": _txt(p.get("notas"), 1000),
+        "regimen": p.get("regimen") if p.get("regimen") in ("comun", "foral") else "comun",
+        "perdidas_previas": _num(p.get("perdidas_previas"), 0, 1e8) or 0,
     }
     activos, vistos = [], set()
     for a in d.get("activos") or []:
@@ -400,8 +403,152 @@ def informe(hoy=None):
         "reparto": reparto, "serie": serie,
         "historicos": {a["simbolo"]: dict(sorted(p.get(a["simbolo"], {}).get("dias", {}).items())[-1300:]) for a in d["activos"]},
         "referencia": {"simbolo": d["perfil"]["referencia"], "nombre": p.get(d["perfil"]["referencia"], {}).get("nombre")},
-        "proyeccion": proyeccion(valor, d["perfil"]["aportacion"]), "stress": stress(pos),
+        "proyeccion": proyeccion(valor, d["perfil"]["aportacion"]), "stress": stress(pos), "fiscal": fiscal(d, pos, hoy),
         "reviews": reviews(),
+    }
+
+
+# ---------- impuestos (IRPF, base del ahorro, régimen común) ----------
+# Escala estatal + autonómica del ahorro desde 2025. Es igual en todas las comunidades de régimen común;
+# Navarra y País Vasco tienen la suya (perfil «foral»: se avisa de que la cifra es orientativa).
+TRAMOS_AHORRO = [(6000, 19), (50000, 21), (200000, 23), (300000, 27), (None, 30)]
+DOS_MESES = 61   # regla antiaplicación: comprar lo mismo 2 meses antes o después de vender con pérdida aplaza la pérdida
+
+
+def cuota_ahorro(base):
+    """Impuesto de una base del ahorro con la escala por tramos."""
+    cuota, desde = 0.0, 0.0
+    for hasta, tipo in TRAMOS_AHORRO:
+        if base <= desde:
+            break
+        tramo = (min(base, hasta) if hasta else base) - desde
+        cuota += tramo * tipo / 100
+        desde = hasta or base
+    return round(cuota, 2)
+
+
+def tipo_marginal(base):
+    return next(tipo for hasta, tipo in TRAMOS_AHORRO if hasta is None or base < hasta)
+
+
+def liquida(ganancias, rendimientos, previas=0.0):
+    """Integra y compensa como la renta: ganancias de ventas (G) y dividendos/intereses (R) por separado; el saldo
+    negativo de uno compensa hasta el 25 % del otro; las pérdidas de años anteriores van primero contra G y luego contra
+    el 25 % de R. Devuelve base, cuota y pérdidas que quedan para los 4 años siguientes."""
+    g, r, sobra = ganancias, rendimientos, 0.0
+    if g < 0:
+        c = min(-g, .25 * max(r, 0))
+        r, sobra, g = r - c, -g - c, 0.0
+    elif r < 0:
+        c = min(-r, .25 * g)
+        g, r = g - c, 0.0
+    usa = min(previas, max(g, 0))
+    g, previas = g - usa, previas - usa
+    usa = min(previas, .25 * max(r, 0))
+    r, previas = r - usa, previas - usa
+    base = max(g, 0) + max(r, 0)
+    return {"base": round(base, 2), "cuota": cuota_ahorro(base), "pendientes": round(sobra + previas, 2)}
+
+
+def _e(n, dec=2):
+    """1234.5 → «1.234,50 €»"""
+    return f"{n:,.{dec}f}".replace(",", " ").replace(".", ",").replace(" ", ".") + " €"
+
+
+def fiscal(d, pos, hoy=None):
+    """Lo que toca en la renta de este año y lo que te quedaría si vendieras hoy, con FIFO y fechas de cada lote."""
+    hoy = hoy or date.today()
+    anio, h = hoy.year, hoy.isoformat()
+    activos = {a["id"]: a for a in d["activos"]}
+    lotes, ventas, divid = {}, [], 0.0
+    compras = {}
+    for o in d["operaciones"]:
+        if o["fecha"] > h:
+            continue
+        if o["tipo"] == "compra":
+            lotes.setdefault(o["activo"], []).append([o["cantidad"], (o["cantidad"] * o["precio"] + o["comision"]) / o["cantidad"], o["fecha"]])
+            compras.setdefault(o["activo"], []).append(o["fecha"])
+        elif o["tipo"] == "venta":
+            falta, adq, fechas, ls = o["cantidad"], 0.0, [], lotes.setdefault(o["activo"], [])
+            while falta > 1e-9 and ls:
+                n = min(falta, ls[0][0])
+                adq += n * ls[0][1]
+                fechas.append(ls[0][2])
+                ls[0][0] -= n
+                falta -= n
+                if ls[0][0] <= 1e-9:
+                    ls.pop(0)
+            if o["fecha"][:4] != str(anio):
+                continue
+            trans = (o["cantidad"] - falta) * o["precio"] - o["comision"]
+            v = {"fecha": o["fecha"], "activo": o["activo"], "nombre": activos[o["activo"]]["nombre"],
+                 "isin": activos[o["activo"]]["isin"], "cantidad": round(o["cantidad"] - falta, 8),
+                 "compra": min(fechas) if fechas else None, "compra_hasta": max(fechas) if fechas else None,
+                 "adquisicion": round(adq, 2), "transmision": round(trans, 2), "resultado": round(trans - adq, 2), "diferida": False}
+            v["_vendidas"] = set(fechas)
+            ventas.append(v)
+        elif o["fecha"][:4] == str(anio):
+            divid += o["precio"]
+    # Pérdida aplazada: compraste lo mismo 2 meses antes o después de vender (sin contar los títulos que vendiste)
+    # y aún tienes títulos. Se mira al final para ver también las compras posteriores a la venta.
+    quedan = {k: sum(n for n, *_ in v) for k, v in lotes.items()}
+    for v in ventas:
+        vendidas, dia = v.pop("_vendidas"), date.fromisoformat(v["fecha"])
+        ventana = any(abs((date.fromisoformat(c) - dia).days) <= DOS_MESES for c in compras.get(v["activo"], []) if c not in vendidas)
+        v["diferida"] = bool(v["resultado"] < 0 and ventana and quedan.get(v["activo"], 0) > 1e-9)
+    g = sum(v["resultado"] for v in ventas if not v["diferida"])
+    previas = d["perfil"].get("perdidas_previas") or 0
+    ahora = liquida(g, divid, previas)
+    # si vendieras hoy: cada posición sola y todas juntas, sobre lo que ya llevas este año
+    # (una pérdida aplazada se recupera al vender los títulos que la aplazaron: va con su posición)
+    aplazada = {}
+    for v in ventas:
+        if v["diferida"]:
+            aplazada[v["activo"]] = aplazada.get(v["activo"], 0) + v["resultado"]
+    filas, total_lat, total_val = [], 0.0, 0.0
+    for p in pos:
+        if not p["cantidad"] or p["valor"] is None:
+            continue
+        lat = p["latente"] + aplazada.get(p["id"], 0)
+        extra = round(liquida(g + lat, divid, previas)["cuota"] - ahora["cuota"], 2)
+        recientes = [f for *_, f in lotes.get(p["id"], []) if (hoy - date.fromisoformat(f)).days <= DOS_MESES]
+        filas.append({"id": p["id"], "nombre": p["nombre"], "valor": p["valor"], "latente": p["latente"], "impuesto": extra,
+                      "neto": round(p["valor"] - extra, 2), "reciente": bool(recientes),
+                      "antiguedad": min((f for *_, f in lotes.get(p["id"], [])), default=None)})
+        total_lat += lat
+        total_val += p["valor"]
+    todo = liquida(g + total_lat, divid, previas)
+    imp_todo = round(todo["cuota"] - ahora["cuota"], 2)
+    consejos = []
+    regimen = d["perfil"].get("regimen", "comun")
+    if g > 0:
+        for f in sorted((f for f in filas if f["latente"] < 0), key=lambda f: f["latente"]):
+            ahorro = -f["impuesto"]
+            if ahorro >= 1:
+                consejos.append(f"Vender {f['nombre']} (va {_e(f['latente'])}) compensaría ganancias de este año: "
+                                f"pagarías unos {_e(ahorro)} menos. Si quieres seguir teniéndolo, no lo recompres en 2 meses "
+                                f"o Hacienda no te deja usar esa pérdida.")
+    if ahora["base"] and ahora["base"] < 6000 < ahora["base"] + max(total_lat, 0):
+        consejos.append(f"Llevas {_e(ahora['base'], 0)} de base del ahorro este año. Lo que pase de 6.000 € paga el 21 % en vez del 19 %: "
+                        "si vas a vender mucho, repartir las ventas entre diciembre y enero ahorra 2 puntos en lo que sobra.")
+    if divid > 0:
+        consejos.append(f"Este año has cobrado {_e(divid)} en dividendos y tributan ya, los reinviertas o no. "
+                        "Un ETF de acumulación hace lo mismo sin pasar por Hacienda hasta que vendes.")
+    if ahora["pendientes"]:
+        consejos.append(f"Te quedan {_e(ahora['pendientes'])} de pérdidas por compensar. Caducan a los 4 años: "
+                        "si vas a vender algo con ganancias, mejor antes de que caduquen.")
+    if any(v["diferida"] for v in ventas):
+        consejos.append("Alguna venta con pérdida tiene una compra del mismo valor a menos de 2 meses: esa pérdida no cuenta este año, "
+                        "se aplaza hasta que vendas esos títulos.")
+    return {
+        "anio": anio, "regimen": regimen, "tramos": TRAMOS_AHORRO,
+        "ventas": ventas, "ganancias": round(g, 2), "dividendos": round(divid, 2), "previas": previas,
+        "renta": {**ahora, "tipo_medio": round(ahora["cuota"] / ahora["base"] * 100, 2) if ahora["base"] else 0,
+                  "marginal": tipo_marginal(ahora["base"])},
+        "si_vendes": {"posiciones": filas, "valor": round(total_val, 2), "latente": round(total_lat, 2), "impuesto": imp_todo,
+                      "neto": round(total_val - imp_todo, 2), "ganancia_neta": round(total_lat - imp_todo, 2),
+                      "tipo": round(imp_todo / total_lat * 100, 2) if total_lat > 0 else 0, "pendientes": todo["pendientes"]},
+        "consejos": consejos,
     }
 
 
@@ -444,6 +591,7 @@ def prompt_review(inf, hoy):
     proy = inf["proyeccion"]
     proy_txt = "\n".join(f"- {k} ({v['tasa']} % anual nominal): 5 años {v['anios'][5]:,} €, 10 años {v['anios'][10]:,} €, 20 años {v['anios'][20]:,} €"
                          for k, v in proy.items() if "tasa" in v)
+    fz = inf["fiscal"]
     stress_txt = "\n".join(f"- {k}: {v:,.2f} €" for k, v in inf["stress"].items())
     serie = inf["serie"]
     ref = serie[-1] if serie else {}
@@ -470,6 +618,8 @@ Hoy es {hoy.isoformat()} (domingo). Esta es la review semanal automática de mi 
 {_md_cartera(inf)}
 
 Totales: valor {t['valor']:.2f} €, coste {t['coste']:.2f} €, plusvalía latente {t['latente']:.2f} € ({t['rent'] if t['rent'] is not None else '?'} %), realizado {t['realizado']:.2f} €, dividendos {t['dividendos']:.2f} €, comisiones pagadas {t['comisiones']:.2f} €, TER medio ponderado {t['ter_medio']} % (solo de los que tienen TER apuntado).
+
+Impuestos (IRPF, base del ahorro, calculado con FIFO en la página; régimen {fz['regimen']}): este año ({fz['anio']}) llevo {fz['ganancias']:.2f} € de ganancias netas por ventas y {fz['dividendos']:.2f} € de dividendos → base {fz['renta']['base']:.2f} €, cuota estimada {fz['renta']['cuota']:.2f} €. Pérdidas de años anteriores por compensar: {fz['previas']:.2f} €. Si vendiera todo hoy pagaría {fz['si_vendes']['impuesto']:.2f} € más y me quedarían {fz['si_vendes']['neto']:.2f} €. Usa estas cifras; si propones vender algo, di cuánto impuesto supone y si conviene esperar a enero, compensar con pérdidas o respetar la regla de los 2 meses.
 Comparación: si cada euro que he metido hubiera ido al mismo tiempo a {inf['referencia']['simbolo']} ({inf['referencia']['nombre'] or '?'}), hoy tendría {ref.get('referencia') or '?'} € frente a {ref.get('valor') or '?'} €.
 
 ### Últimas operaciones
