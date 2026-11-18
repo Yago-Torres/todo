@@ -273,11 +273,12 @@ function chip(x, d) {
     c.style.setProperty("--c", color(x.cal));
     if (!x.inicio) c.classList.add("todo-dia");
     else if (d === x.dia) c.append(el("span", "h", x.inicio));
-    c.title = x.t + (x.lugar ? ` · ${x.lugar}` : "");
+    c.title = x.t + (x.lugar ? ` · ${x.lugar}` : "") + (x.entreno ? " · del plan de Entreno" : "");
   }
   c.append(el("span", null, x.t));
   c.onclick = ev => { ev.stopPropagation(); ficha(x); };
-  c.draggable = true;
+  // los entrenos los pone el plan: se mueven en Entreno y aquí se ponen al día solos
+  c.draggable = !x.entreno;
   c.ondragstart = ev => { arrastre = {x, desde: d}; ev.dataTransfer.effectAllowed = "move"; ev.dataTransfer.setData("text/plain", x.id); c.classList.add("arrastrando"); };
   c.ondragend = () => { c.classList.remove("arrastrando"); arrastre = null; };
   return c;
@@ -484,6 +485,7 @@ f.repite.onchange = () => ponTipo(tipo);
 f.dia.onchange = () => { if (!f.fin_dia.value || f.fin_dia.value < f.dia.value) f.fin_dia.value = f.dia.value; };
 
 function ficha(x) {
+  if (x.entreno) { location.href = "/entreno.html"; return; }
   F = x;
   if (!f.cal.options.length) C.calendarios.forEach(c => f.cal.append(Object.assign(document.createElement("option"), {value: c.id, textContent: c.n})));
   f.reset();

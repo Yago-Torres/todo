@@ -1,5 +1,7 @@
 import os
 import time
+
+os.environ["AGENDA_SIN_HILO"] = "1"   # que el hilo del calendario no cuadre los ficheros de verdad
 from datetime import date
 
 import main
@@ -179,6 +181,37 @@ def test_agenda():
     assert "DTSTART;VALUE=DATE:20261201" in t and "DTEND;VALUE=DATE:20261202" in t and "SUMMARY:Cumple\\, de Ana\\; ya" in t and "TRIGGER:-PT0M" in t
     g = agenda.a_google(agenda.limpia({"t": "x", "dia": "2026-11-18", "inicio": "18:00", "fin": "19:30", "repite": "semanal", "excepciones": ["2026-11-25"]}))
     assert g["start"]["dateTime"].startswith("2026-11-18T18:00") and g["recurrence"][1] == "EXDATE;TZID=Europe/Madrid:20261125T180000", g
+    # entrenos planeados: salen solos en «Deporte», siguen al plan y no se editan desde el calendario
+    est = {"habits": [{"id": "gym", "n": "Gimnasio"}, {"id": "agua", "n": "Agua"}],
+           "rutinas": [{"id": "push", "n": "Push A", "hab": "gym", "bloques": [{"ej": "Press banca", "series": 4, "repes": 8, "kg": 60}]}],
+           "plan": {"2026-11-17": ["gym"], "2026-11-19": ["gym", "agua"], "2026-11-21": ["gym"]},
+           "sesion": {"2026-11-19": {"gym": "push"}}}
+    assert agenda.cuadra_entrenos(est, "2026-11-18") == (2, 0, 0)
+    en = {x["entreno"]: x for x in agenda.todos() if x.get("entreno")}
+    assert set(en) == {"2026-11-19:gym", "2026-11-21:gym"}, en
+    assert en["2026-11-19:gym"]["t"] == "Push A" and "Press banca 4×8 · 60 kg" in en["2026-11-19:gym"]["nota"]
+    assert en["2026-11-21:gym"]["t"] == "Gimnasio" and en["2026-11-21:gym"]["cal"] == "Deporte" and en["2026-11-21:gym"]["inicio"] == ""
+    assert agenda.cuadra_entrenos(est, "2026-11-18") == (0, 0, 0)   # idempotente
+    larga = {**est, "rutinas": [{**est["rutinas"][0], "bloques": [{"ej": "x" * 90, "nota": "y" * 90}] * 30}]}
+    agenda.cuadra_entrenos(larga, "2026-11-18")
+    assert agenda.cuadra_entrenos(larga, "2026-11-18") == (0, 0, 0)   # una nota de más de 2000 no se resube siempre
+    agenda.cuadra_entrenos(est, "2026-11-18")
+    for f in (lambda: agenda.edita(en["2026-11-19:gym"]["id"], {"t": "x"}), lambda: agenda.borra(en["2026-11-19:gym"]["id"])):
+        try:
+            f()
+            raise AssertionError("debía fallar")
+        except ValueError:
+            pass
+    est["sesion"] = {}
+    est["plan"] = {"2026-11-19": ["gym"], "2026-11-23": ["gym"]}
+    assert agenda.cuadra_entrenos(est, "2026-11-18") == (1, 1, 1)
+    en2 = {x["entreno"]: x for x in agenda.todos() if x.get("entreno")}
+    assert set(en2) == {"2026-11-19:gym", "2026-11-23:gym"} and en2["2026-11-19:gym"]["id"] == en["2026-11-19:gym"]["id"]
+    assert en2["2026-11-19:gym"]["t"] == "Gimnasio"
+    # pasado el día, el de ayer se queda aunque salga del plan
+    assert agenda.cuadra_entrenos({**est, "plan": {}}, "2026-11-20") == (0, 0, 1)
+    assert {x["entreno"] for x in agenda.todos() if x.get("entreno")} == {"2026-11-19:gym"}
+    assert agenda.a_google(en2["2026-11-19:gym"])["extendedProperties"]["private"]["todo_entreno"] == "2026-11-19:gym"
 
 
 def test_vault():

@@ -134,7 +134,7 @@ struct PantallaCalendario: View {
         case .semana, .dia:
             RejillaHorasCal(dias: vista == .dia ? [dia] : UtilCal.dias(desde: UtilCal.lunes(dia), 7),
                             alTocarHueco: { d, h in dia = d; hoja = .nuevo(dia: d, hora: h, tipo: .evento) },
-                            alTocarEvento: { e in hoja = .edita(e) },
+                            alTocarEvento: { e in abre(e) },
                             alTocarTarea: { t in Task { await datos.marca(t, hecha: !t.hecha) } })
         case .agenda: agenda
         }
@@ -248,18 +248,27 @@ struct PantallaCalendario: View {
         .refreshable { await datos.recarga() }
     }
 
+    /// Los entrenos los pone el plan: se cambian en Entreno y el calendario los sigue solo.
+    private func abre(_ e: EventoCal) {
+        if e.entreno.isEmpty { hoja = .edita(e) } else { Navegador.shared.abre("/entreno.html") }
+    }
+
     // MARK: una fila
 
     @ViewBuilder private func fila(_ el: ElementoDiaCal, dia d: String) -> some View {
         switch el {
         case .evento(let e):
-            Button { hoja = .edita(e) } label: {
+            Button { abre(e) } label: {
                 HStack(alignment: .top, spacing: Tema.Espacio.s) {
                     RoundedRectangle(cornerRadius: 2).fill(datos.color(e.cal)).frame(width: 4)
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 4) {
                             Text(e.t).font(Tema.fuente(.destacado)).foregroundStyle(Tema.texto)
                                 .multilineTextAlignment(.leading)
+                            if !e.entreno.isEmpty {
+                                Image(systemName: "dumbbell").font(.system(size: 11)).foregroundStyle(Tema.tenue)
+                                    .accessibilityLabel("Del plan de Entreno")
+                            }
                             if !e.repite.isEmpty {
                                 Image(systemName: "repeat").font(.system(size: 11)).foregroundStyle(Tema.tenue)
                             }
@@ -283,9 +292,13 @@ struct PantallaCalendario: View {
             }
             .buttonStyle(.plain)
             .contextMenu {
-                Button { hoja = .edita(e) } label: { Label("Cambiar", systemImage: "pencil") }
-                Button(role: .destructive) { Task { await datos.borraEvento(e) } } label: {
-                    Label(e.repite.isEmpty ? "Borrar" : "Borrar la serie", systemImage: "trash")
+                if e.entreno.isEmpty {
+                    Button { hoja = .edita(e) } label: { Label("Cambiar", systemImage: "pencil") }
+                    Button(role: .destructive) { Task { await datos.borraEvento(e) } } label: {
+                        Label(e.repite.isEmpty ? "Borrar" : "Borrar la serie", systemImage: "trash")
+                    }
+                } else {
+                    Button { abre(e) } label: { Label("Cambiar en Entreno", systemImage: "dumbbell") }
                 }
             }
         case .tarea(let t):

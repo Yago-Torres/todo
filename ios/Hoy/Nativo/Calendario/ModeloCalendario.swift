@@ -40,6 +40,8 @@ struct EventoCal: Codable, Identifiable, Hashable {
     var repite: String
     var hasta: String
     var sincro: SincroCal?
+    /// "dia:idHabito" si sale del plan de Entreno: lo cuadra el servidor y aquí no se edita.
+    var entreno: String = ""
 
     /// Para ForEach: una serie repite id en cada día.
     var clave: String { "\(id)|\(dia)" }
@@ -50,7 +52,7 @@ struct EventoCal: Codable, Identifiable, Hashable {
     func cubre(_ d: String) -> Bool { dia <= d && d <= max(dia, finDia) }
 
     enum CodingKeys: String, CodingKey {
-        case id, t, dia, origen, finDia = "fin_dia", inicio, fin, cal, nota, lugar, aviso, repite, hasta, sincro
+        case id, t, dia, origen, finDia = "fin_dia", inicio, fin, cal, nota, lugar, aviso, repite, hasta, sincro, entreno
     }
 
     init(id: String, t: String, dia: String, origen: String = "", finDia: String = "", inicio: String = "", fin: String = "",
@@ -72,6 +74,7 @@ struct EventoCal: Codable, Identifiable, Hashable {
         aviso = (try? c.decodeIfPresent(Int.self, forKey: .aviso)) ?? -1
         repite = s(.repite); hasta = s(.hasta)
         sincro = try? c.decodeIfPresent(SincroCal.self, forKey: .sincro)
+        entreno = s(.entreno)
     }
 }
 

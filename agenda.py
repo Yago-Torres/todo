@@ -11,6 +11,9 @@ tareas del vault (vault.py) y la página las enseña en su día.
 - iCloud: CalDAV con el Apple ID y una contraseña específica de app (ICLOUD_USER e ICLOUD_PASS en el .env).
   Cada calendario va al de iCloud que se llame igual (o empiece igual), si no ALIAS_ICLOUD, si no "calendar".
   ICLOUD_MAPA="cal=nombre,..." en el .env lo fuerza.
+- Los entrenos planeados (plan + sesion de data.json, de hoy en adelante) son eventos de «Deporte» con `entreno`
+  ("dia:idHabito"). Los cuadra `cuadra_entrenos` cada vez que cambia data.json: se crean, se cambian y se borran
+  solos, y por eso no se editan desde el calendario (se cambian en Entreno). Los de días pasados se quedan como fueron.
 """
 import base64
 import importlib.util
@@ -30,6 +33,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 FICHERO = Path(os.getenv("TODO_CALENDARIO", Path(__file__).with_name("calendario.json")))
+ESTADO = Path(os.getenv("TODO_DB", Path(__file__).with_name("data.json")))   # de donde salen los entrenos
 GOOGLE_MODULO = Path(os.getenv("GOOGLE_CALENDARIO", "/home/pi/bots/todo-bot/calendario.py"))
 ZONA = ZoneInfo("Europe/Madrid")
 # id (el mismo nombre que en el bot y en Google) -> nombre y color
@@ -91,6 +95,7 @@ def limpia(d, previo=None):
             "repite": repite if repite in REPITE else "",
             "hasta": hasta if repite and DIA.match(hasta) and hasta >= dia else "",
             "excepciones": sorted(set(exc))[:200],
+            "entreno": str(g("entreno") or "")[:60],
             # dónde está copiado (ids de Google y de iCloud) y cómo fue la última vez
             "ext": p.get("ext") or d.get("ext") or {}, "sincro": p.get("sincro") or {}}
 
@@ -117,6 +122,8 @@ def edita(id_, d):
         if i is None:
             raise ValueError("ese evento ya no está")
         viejo = evs[i]
+        if viejo.get("entreno"):
+            raise ValueError("es un entreno: cámbialo en Entreno y el calendario se pone al día solo")
         e = limpia({k: v for k, v in d.items() if k not in ("id", "ext", "sincro")}, viejo)
         if e["cal"] != viejo["cal"]:
             e["ext"] = {**e["ext"], "mover_de": viejo["cal"]}
@@ -134,6 +141,8 @@ def borra(id_, dia=""):
         e = next((e for e in evs if e["id"] == id_), None)
         if e is None:
             raise ValueError("ese evento ya no está")
+        if e.get("entreno"):
+            raise ValueError("es un entreno: quítalo del plan en Entreno")
         if dia and e["repite"]:
             antes = publico(e)
             e["excepciones"] = sorted(set(e["excepciones"]) | {dia})
@@ -214,6 +223,104 @@ def rango(desde, hasta):
     return sorted(out, key=lambda x: (x["dia"], x["inicio"] or "", x["t"]))
 
 
+# ---------- entrenos planeados ----------
+def _bloques(r):
+    l = []
+    for b in r.get("bloques") or []:
+        x = b.get("ej") or ""
+        if b.get("series") and b.get("repes"):
+            x += f" {b['series']}×{b['repes']}"
+        elif b.get("seg"):
+            x += f" {round(b['seg'] / 60)} min" if b["seg"] >= 60 else f" {b['seg']} s"
+        if b.get("kg"):
+            x += f" · {b['kg']} kg"
+        l.append(f"- {x.strip()}" + (f" ({b['nota']})" if b.get("nota") else ""))
+    return "\n".join(l)
+
+
+def entrenos_deseados(estado, hoy):
+    """{"dia:idHabito": {t, dia, cal, nota}} de lo planeado desde `hoy`. Un hábito es de entreno si tiene rutinas."""
+    habs = {h.get("id"): h.get("n") for h in estado.get("habits") or []}
+    rutinas = {r.get("id"): r for r in estado.get("rutinas") or []}
+    deporte = {r.get("hab") for r in rutinas.values()}
+    out = {}
+    for dia, ids in (estado.get("plan") or {}).items():
+        if not DIA.match(dia) or dia < hoy:
+            continue
+        for hid in ids:
+            if hid not in deporte or hid not in habs:
+                continue
+            r = rutinas.get(((estado.get("sesion") or {}).get(dia) or {}).get(hid))
+            pie = "Del plan de Entreno (todo.yagotg.dev/entreno.html)"
+            # ya recortados como los dejará limpia(): si no, cada pasada los vería cambiados y los volvería a subir
+            out[f"{dia}:{hid}"] = {"t": " ".join(str(r["n"] if r else habs[hid]).split())[:200], "dia": dia, "cal": "Deporte",
+                                   "nota": (_bloques(r)[:2000 - len(pie) - 2] + "\n\n" + pie) if r else pie}
+    return out
+
+
+def cuadra_entrenos(estado=None, hoy=None):
+    """Deja los eventos con `entreno` igual que el plan. Devuelve (creados, cambiados, borrados)."""
+    hoy = hoy or date.today().isoformat()
+    if estado is None:
+        if ESTADO.parent != FICHERO.parent:   # un calendario de otra copia (la de Aitana sin TODO_CALENDARIO): no se toca
+            return 0, 0, 0
+        try:
+            estado = json.loads(ESTADO.read_text("utf-8"))
+        except (OSError, ValueError):
+            return 0, 0, 0
+    quiero = entrenos_deseados(estado, hoy)
+    encolar, fuera, n_nuevos = [], [], 0
+    with _cerrojo:
+        evs, quedan = todos(), []
+        for e in evs:
+            k = e.get("entreno")
+            if not k or e["dia"] < hoy:
+                quedan.append(e)
+                continue
+            d = quiero.pop(k, None)
+            if d is None:   # quitado del plan (o repetido: el primero ya se llevó su sitio)
+                fuera.append(e)
+                continue
+            if (e["t"], e["nota"], e["cal"]) != (d["t"], d["nota"], d["cal"]):
+                e.update(t=d["t"], nota=d["nota"], cal=d["cal"], sincro=estado_inicial())
+                encolar.append(e["id"])
+            quedan.append(e)
+        for k, d in sorted(quiero.items()):
+            e = limpia({**d, "entreno": k})
+            e["sincro"] = estado_inicial()
+            quedan.append(e)
+            encolar.append(e["id"])
+            n_nuevos += 1
+        if encolar or fuera:
+            _guarda(quedan)
+    for e in fuera:
+        _borrados.put(e)
+    for i in encolar:
+        _cola.put(i)
+    if encolar or fuera:
+        _avisa()
+    return n_nuevos, len(encolar) - n_nuevos, len(fuera)
+
+
+_estado_visto = {"mtime": None}
+
+
+def _mira_entrenos():
+    """Desde el hilo: si data.json cambió (la web, Tom, el bot…) o cambió el día, cuadra los entrenos."""
+    try:
+        m = (ESTADO.stat().st_mtime, date.today().isoformat())
+    except OSError:
+        return
+    if m != _estado_visto["mtime"]:
+        _estado_visto["mtime"] = m
+        cuadra_entrenos()
+
+
+def avisa_estado():
+    """main.py la llama al guardar data.json: el calendario se pone al día en segundos, no al minuto."""
+    _avisa()
+
+
 def calendarios():
     return [{"id": k, "n": n, "color": c} for k, (n, c) in CALENDARIOS.items()]
 
@@ -280,6 +387,8 @@ def a_google(e):
                                f";TZID={ZONA}:" + ",".join(x.replace("-", "") + "T" + e["inicio"].replace(":", "") + "00" for x in e["excepciones"])))
     if rec:
         cuerpo["recurrence"] = rec
+    if e.get("entreno"):   # el resumen de la mañana ya los cuenta en «Hoy toca»: así los reconoce y no los repite
+        cuerpo["extendedProperties"] = {"private": {"todo_entreno": e["entreno"]}}
     return cuerpo
 
 
@@ -517,6 +626,10 @@ def _bucle():
     while True:
         _hay_trabajo.wait(timeout=60)
         _hay_trabajo.clear()
+        try:
+            _mira_entrenos()
+        except Exception as ex:
+            print("agenda: entrenos", ex, flush=True)
         while not _borrados.empty():
             e = _borrados.get()
             try:

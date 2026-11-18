@@ -38,6 +38,8 @@ def guarda(p, texto):
         f.flush()
         os.fsync(f.fileno())
     os.replace(tmp, p)
+    if p == DB:   # los entrenos planeados van al calendario (agenda.cuadra_entrenos, en su hilo)
+        agenda.avisa_estado()
 DAY = 10  # len("2026-09-28")
 EMPTY = {
     "todos": [],
@@ -64,6 +66,13 @@ COOKIE = "todo_sesion"
 VIDA = 90 * 24 * 3600  # 90 días: que no te eche de la pantalla de inicio del iPhone
 
 app = FastAPI()
+
+
+@app.on_event("startup")
+def arranca_agenda():
+    """Al arrancar, el hilo del calendario cuadra los entrenos y reintenta lo que quedó sin copiar."""
+    if DB.exists():
+        agenda.avisa_estado()
 
 
 def firma(exp):
