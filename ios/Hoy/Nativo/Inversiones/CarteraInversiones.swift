@@ -11,6 +11,7 @@ struct CarteraInversiones: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Tema.Espacio.l) {
             CifrasInv(inf: inf)
+            if let l = inf.leccion { LeccionInvCarta(leccion: l) }
             GraficaEvolucionInv(inf: inf)
             posiciones
             if !inf.abiertas.isEmpty { GraficaRepartoInv(inf: inf) }

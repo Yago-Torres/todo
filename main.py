@@ -2506,6 +2506,63 @@ def inv_borra_operacion(o: dict, todo_sesion: str = Cookie(None), authorization:
     return vieja   # para deshacer: se vuelve a mandar a /api/inversiones/operacion
 
 
+def _inv_lista(clave, x, nombre):
+    """Pone (o cambia, conservando lo que el cliente no manda: `hechos`, `armada`…) un plan o una alerta."""
+    x = dct(x)
+    x["id"] = inversiones._id(x.get("id")) or f"{clave[0]}{int(time.time() * 1000)}"
+
+    def pon(d):
+        viejo = next((y for y in d[clave] if y["id"] == x["id"]), {})
+        nuevo = {**viejo, **x}
+        if clave == "alertas" and (viejo.get("tipo"), viejo.get("valor")) != (nuevo.get("tipo"), inversiones._num(nuevo.get("valor"))):
+            nuevo["armada"], nuevo["ultima"] = True, ""   # otra alerta: vuelve a estar lista
+        d[clave] = [y for y in d[clave] if y["id"] != x["id"]] + [nuevo]
+    _inv_cambia(pon)
+    hecho = next((y for y in inversiones.lee()[clave] if y["id"] == x["id"]), None)
+    if not hecho:
+        raise HTTPException(400, f"{nombre} no válido: revisa activo e importe")
+    return hecho
+
+
+def _inv_quita(clave, x):
+    i = str(dct(x).get("id") or "")
+
+    def quita(d):
+        viejo = next((y for y in d[clave] if y["id"] == i), None)
+        d[clave] = [y for y in d[clave] if y["id"] != i]
+        return viejo
+    viejo = _inv_cambia(quita)
+    if not viejo:
+        raise HTTPException(404, "No existe")
+    return viejo   # para deshacer
+
+
+@app.post("/api/inversiones/plan")
+def inv_plan(x: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """Un plan de ahorro: {id?, activo, importe, dia 1-28, comision?, desde?, pausado?, nota?}. Lo ejecuta --precios."""
+    exige(todo_sesion, authorization)
+    return _inv_lista("planes", x, "Plan")
+
+
+@app.post("/api/inversiones/plan/borra")
+def inv_borra_plan(x: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    return _inv_quita("planes", x)
+
+
+@app.post("/api/inversiones/alerta")
+def inv_alerta(x: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """Una alerta: {id?, activo (o "*" para la cartera, solo «cae»), tipo bajo|sobre|cae, valor, nota?}."""
+    exige(todo_sesion, authorization)
+    return _inv_lista("alertas", x, "Alerta")
+
+
+@app.post("/api/inversiones/alerta/borra")
+def inv_borra_alerta(x: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    return _inv_quita("alertas", x)
+
+
 @app.post("/api/inversiones/perfil")
 def inv_perfil(p: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
     exige(todo_sesion, authorization)

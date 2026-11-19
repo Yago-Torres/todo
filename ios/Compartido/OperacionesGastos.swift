@@ -19,7 +19,8 @@ import Foundation
 //        (que_viaje del servidor); asigna: [ids] los devuelve a él (deshacer un borrado)
 //   {op: "viaje.borra", id}                     sus gastos vuelven al ciclo
 //   {op: "viaje.asigna", ids, viaje}            esos gastos pasan a ese viaje ("" = al ciclo)
-//   {op: "ajustes.pon", cambios: {ingreso?, dia_cobro?, hucha?}}
+//   {op: "ajustes.pon", cambios: {ingreso?, dia_cobro?, hucha?, inversion?}}
+//   {op: "cat.pon", cat: {id, n, presu?}}  {op: "cat.borra", id}   (Operaciones.swift: crear, renombrar, quitar)
 //   {op: "ingreso.edita", id, cambios}  {op: "ingreso.borra", id}  {op: "ingreso.restaura", ingreso}
 
 enum ReglasGastos {
@@ -202,7 +203,12 @@ enum OpsGastos {
         case "ajustes.pon":
             var a = (e["ajustes"] as? [String: Any]) ?? [:]
             let cambios = (op["cambios"] as? [String: Any]) ?? [:]
-            for (k, v) in cambios where ["ingreso", "dia_cobro", "hucha"].contains(k) { a[k] = v }
+            for (k, v) in cambios where ["ingreso", "dia_cobro", "hucha", "inversion"].contains(k) { a[k] = v }
+            if let x = (a["inversion"] as? NSNumber)?.doubleValue {
+                // como la hucha: cuenta desde el día que se pone
+                if x <= 0 { a["inversion_desde"] = "" }
+                else if texto(a, "inversion_desde").isEmpty { a["inversion_desde"] = Fecha.hoy() }
+            }
             if let h = (a["hucha"] as? NSNumber)?.doubleValue {
                 // la hucha empieza a contar el día que se pone; sin hucha, no hay «desde»
                 if h <= 0 { a["hucha_desde"] = "" }

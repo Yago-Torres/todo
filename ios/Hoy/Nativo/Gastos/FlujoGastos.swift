@@ -37,6 +37,7 @@ struct FlujoGastos: View {
         var l = r.cats.filter { $0.gastado > 0 }
             .map { Nodo(id: $0.id, nombre: $0.n, valor: $0.gastado, color: datos.color($0.id), cats: [$0.id]) }
         if r.aparte > 0 { l.append(Nodo(id: "_hucha", nombre: "Hucha de viajes", valor: r.aparte, color: Tema.acento, cats: [])) }
+        if let iv = r.inversion, iv.cuenta > 0 { l.append(Nodo(id: "_inversion", nombre: "Inversión", valor: iv.cuenta, color: Tema.aviso, cats: [])) }
         l.sort { $0.valor > $1.valor }
         var c = Cuentas()
         c.gastado = l.reduce(0) { $0 + $1.valor }

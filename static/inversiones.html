@@ -78,6 +78,12 @@
   .cands button small { color: var(--suave); margin-left: 6px; }
   .op { display: grid; grid-template-columns: 74px minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 9px 4px; border-top: 1px solid var(--linea); font-size: var(--t-texto); }
   .op:first-child { border-top: 0; }
+  .lista-pl .op { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .lista-pl .op .sub { display: block; font-size: var(--t-pequeno); color: var(--suave); }
+  .presu-inv b { font-size: var(--t-seccion); font-variant-numeric: tabular-nums; }
+  .leccion { border-left: 3px solid var(--acento); }
+  .leccion h2 { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .leccion h2 small { font-weight: 400; font-size: var(--t-pequeno); color: var(--suave); }
   .op time { font-size: var(--t-pequeno); color: var(--suave); font-variant-numeric: tabular-nums; }
   .op span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .op .acc { display: flex; gap: 6px; justify-content: flex-end; }
@@ -143,6 +149,7 @@
   <div class="c-seg" role="tablist" aria-label="Secciones" id="pestanas">
     <button role="tab" data-v="cartera">Cartera</button>
     <button role="tab" data-v="operaciones">Operaciones</button>
+    <button role="tab" data-v="planes">Planes</button>
     <button role="tab" data-v="impuestos">Impuestos</button>
     <button role="tab" data-v="review">Review</button>
     <button role="tab" data-v="perfil">Perfil</button>
@@ -156,6 +163,11 @@
       <div class="kpi c-carta"><small>Hoy</small><b id="k-dia">—</b><small id="k-dia-s"></small></div>
       <div class="kpi c-carta"><small>Metido (neto)</small><b id="k-met">—</b><small id="k-met-s"></small></div>
     </div>
+
+    <section class="carta c-carta leccion" id="c-leccion" hidden>
+      <h2>Lección de la semana <small id="leccion-f"></small></h2>
+      <div class="md" id="leccion"></div>
+    </section>
 
     <section class="carta c-carta">
       <div class="cab">
@@ -234,6 +246,58 @@
     <section class="carta c-carta">
       <h2>Historial</h2>
       <div id="ops"></div>
+    </section>
+  </section>
+
+  <!-- PLANES: presupuesto (de gastos), planes de ahorro, alertas y avisos -->
+  <section class="vista" id="v-planes" hidden>
+    <section class="carta c-carta presu-inv">
+      <h2>Presupuesto de inversión</h2>
+      <div id="presu-inv"><p class="vacio">Cargando…</p></div>
+    </section>
+
+    <section class="carta c-carta">
+      <h2>Planes de ahorro</h2>
+      <p class="nota-p" style="margin-top:0">Cada mes, el día que digas (si cae en fin de semana, el lunes), se apunta sola la compra con el precio de ese día y te llega un aviso. Es un precio estimado: corrígelo con el de Trade Republic desde Operaciones.</p>
+      <div class="lista-pl" id="planes"></div>
+      <form class="rejilla" id="f-plan" style="margin-top:12px">
+        <input type="hidden" name="id">
+        <label>Activo<select class="c-campo" name="activo" required></select></label>
+        <label>Cada mes (€)<input class="c-campo" name="importe" inputmode="decimal" required placeholder="100" autocomplete="off"></label>
+        <label>Día del mes<input class="c-campo" name="dia" type="number" min="1" max="28" required placeholder="2"></label>
+        <label>Comisión (€)<input class="c-campo" name="comision" inputmode="decimal" placeholder="0" autocomplete="off"></label>
+        <label>Desde<input class="c-campo" type="date" name="desde"></label>
+        <label class="ancho">Nota<input class="c-campo" name="nota" maxlength="120" placeholder="Opcional" autocomplete="off"></label>
+        <div class="botones">
+          <button class="c-btn pri" type="submit" id="b-plan">Crear plan</button>
+          <button class="c-btn" type="button" id="b-plan-cancela" hidden>Cancelar</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="carta c-carta">
+      <h2>Alertas de precio</h2>
+      <p class="nota-p" style="margin-top:0">Se miran cada 15 minutos con el precio de L&amp;S. Avisan una vez y se vuelven a activar cuando el precio se aleja un 2 %; la de caída, una vez al día.</p>
+      <div class="lista-pl" id="alertas"></div>
+      <form class="rejilla" id="f-alerta" style="margin-top:12px">
+        <input type="hidden" name="id">
+        <label>De<select class="c-campo" name="activo" required></select></label>
+        <label>Cuando<select class="c-campo" name="tipo">
+          <option value="bajo">baje de (€)</option><option value="sobre">suba de (€)</option><option value="cae">caiga en un día (%)</option>
+        </select></label>
+        <label><span id="l-valor">Precio (€)</span><input class="c-campo" name="valor" inputmode="decimal" required autocomplete="off"></label>
+        <label class="ancho">Nota<input class="c-campo" name="nota" maxlength="120" placeholder="Opcional: por qué te importa (comprar más, revisar…)" autocomplete="off"></label>
+        <div class="botones">
+          <button class="c-btn pri" type="submit" id="b-alerta">Crear alerta</button>
+          <button class="c-btn" type="button" id="b-alerta-cancela" hidden>Cancelar</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="carta c-carta">
+      <h2>Avisos</h2>
+      <p class="nota-p" style="margin-top:0">Planes, alertas, la review del domingo y la renta llegan como notificación de la app. Si no tiene los avisos activados en ningún sitio, llegan por Telegram. En Tom, los días de los planes se avisan solos.</p>
+      <div id="avisos" style="margin-top:10px"></div>
     </section>
   </section>
 
@@ -345,11 +409,11 @@ $("#toast-btn").onclick = async () => { $("#toast").removeAttribute("data-on"); 
 
 // ---------- pestañas (la elegida va en el #, así un enlace o recargar vuelve a ella) ----------
 function vista(v) {
-  if (!["cartera", "operaciones", "impuestos", "review", "perfil"].includes(v)) v = "cartera";
+  if (!["cartera", "operaciones", "planes", "impuestos", "review", "perfil"].includes(v)) v = "cartera";
   document.querySelectorAll("#pestanas button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.v === v)));
   document.querySelectorAll(".vista").forEach(s => s.hidden = s.id !== `v-${v}`);
   history.replaceState(null, "", `${location.pathname}${location.search}#${v}`);
-  if (I) ({cartera: pintaCartera, operaciones: pintaOps, impuestos: pintaImpuestos, review: pintaReview, perfil: pintaPerfil})[v]();
+  if (I) ({cartera: pintaCartera, operaciones: pintaOps, planes: pintaPlanes, impuestos: pintaImpuestos, review: pintaReview, perfil: pintaPerfil})[v]();
 }
 $("#pestanas").onclick = e => { const b = e.target.closest("button"); if (b) vista(b.dataset.v); };
 
@@ -396,6 +460,8 @@ function pintaCartera() {
   $("#k-met").textContent = eur(metido);
   $("#k-met-s").textContent = [t.realizado ? `vendido ${signo(t.realizado)}` : "", t.dividendos ? `dividendos ${eur(t.dividendos)}` : "", t.comisiones ? `comisiones ${eur(t.comisiones)}` : ""].filter(Boolean).join(" · ") || "coste de lo que tienes";
 
+  $("#c-leccion").hidden = !I.leccion;
+  if (I.leccion) { md($("#leccion"), I.leccion.texto); $("#leccion-f").textContent = `review del ${corta(I.leccion.fecha)}`; }
   document.querySelectorAll("#rangos button").forEach(b => b.setAttribute("aria-selected", String(+b.dataset.r === rango)));
   serie();
   posiciones();
@@ -811,6 +877,129 @@ $("#f-perfil").onsubmit = async e => {
     toast("Perfil guardado"); cargar();
   } catch (err) { toast(`No se guardó: ${err.message}`); }
 };
+
+// ---------- planes de ahorro, alertas, presupuesto y avisos ----------
+const nombreAct = id => id === "*" ? "Toda la cartera" : (I.activos.find(a => a.id === id) || {nombre: id}).nombre;
+const coma = n => n == null ? "" : String(n).replace(".", ",");
+function opcionesActivo(sel, conCartera) {
+  const antes = sel.value;
+  sel.replaceChildren(...(conCartera ? [Object.assign(el("option", null, "Toda la cartera"), {value: "*"})] : []),
+                      ...I.activos.map(a => Object.assign(el("option", null, `${a.nombre} (${a.simbolo})`), {value: a.id})));
+  if ([...sel.options].some(o => o.value === antes)) sel.value = antes;
+}
+function filaPl(txt, sub, acciones) {
+  const f = el("div", "op"), s = el("span", null, txt);
+  if (sub) s.append(el("span", "sub", sub));
+  const acc = el("span", "acc");
+  for (const [t, cls, fn] of acciones) { const b = el("button", "c-btn mini" + (cls ? " " + cls : ""), t); b.onclick = fn; acc.append(b); }
+  f.append(s, el("span"), acc);
+  return f;
+}
+async function pintaPresuInv() {
+  const caja = $("#presu-inv");
+  try {
+    const r = await api("/api/gastos/resumen");
+    const iv = r.inversion, periodo = r.dia_cobro === 1 ? "mes" : "ciclo";
+    const hasta = corta(r.fin), enlace = Object.assign(el("a", "c-btn mini", iv && iv.presu ? "Cambiar en Gastos" : "Ponerlo en Gastos"), {href: "/gastos.html"});
+    if (!iv || !iv.presu) {
+      caja.replaceChildren(el("p", "vacio", `Sin presupuesto. En Gastos → Presupuestos → «Para invertir cada ${periodo}» le dedicas una cantidad: cuenta como un fijo y aquí ves cuánto llevas.`), enlace);
+      return;
+    }
+    const ap = iv.aportado || 0, b = el("div", "c-barra");
+    b.append(Object.assign(el("i"), {style: `width:${Math.min(100, ap * 100 / iv.presu)}%`}));
+    caja.replaceChildren(el("b", null, `${eur(ap)} de ${eur(iv.presu)}`),
+      el("p", "nota-p", ap >= iv.presu ? `Hecho este ${periodo} (hasta el ${hasta}).` : `Te quedan ${eur(iv.presu - ap)} por invertir hasta el ${hasta}.`), b, enlace);
+    enlace.style.marginTop = "10px";
+  } catch (e) { caja.replaceChildren(el("p", "vacio", `No se pudo leer Gastos: ${e.message}`)); }
+}
+function pintaPlanes() {
+  opcionesActivo($("#f-plan").activo, false);
+  opcionesActivo($("#f-alerta").activo, true);
+  const pl = $("#planes");
+  pl.replaceChildren(...(I.planes.length ? I.planes.map(x => filaPl(
+    `${eur(x.importe)} en ${nombreAct(x.activo)} · el ${x.dia} de cada mes${x.pausado ? " · en pausa" : ""}`,
+    [x.pausado ? "" : x.proximo ? `Próximo: ${corta(x.proximo)}` : "", x.hechos.length ? `${x.hechos.length} ya apuntado${x.hechos.length > 1 ? "s" : ""}` : "", x.nota].filter(Boolean).join(" · "),
+    [["Editar", "", () => editaPlan(x)],
+     [x.pausado ? "Reanudar" : "Pausar", "", async () => { await api("/api/inversiones/plan", {id: x.id, pausado: !x.pausado}); toast(x.pausado ? "Plan reanudado" : "Plan en pausa"); cargar(); }],
+     ["Borrar", "peligro", async () => { const v = await api("/api/inversiones/plan/borra", {id: x.id}); toast("Plan borrado (sus compras se quedan)", () => api("/api/inversiones/plan", v)); cargar(); }]]))
+    : [el("p", "vacio", I.activos.length ? "Sin planes. Si tienes uno en Trade Republic, apúntalo y no tendrás que meter cada compra." : "Primero apunta un activo en Operaciones.")]));
+  const al = $("#alertas"), tipos = {bajo: "baja de", sobre: "sube de", cae: "cae en un día un"};
+  al.replaceChildren(...(I.alertas.length ? I.alertas.map(x => filaPl(
+    `${nombreAct(x.activo)} ${tipos[x.tipo]} ${x.tipo === "cae" ? coma(x.valor) + " %" : eur(x.valor)}`,
+    [x.tipo !== "cae" && !x.armada ? `Saltó el ${corta(x.ultima)}: se reactiva al alejarse un 2 %` : x.tipo === "cae" && x.ultima ? `Última vez: ${corta(x.ultima)}` : "", x.nota].filter(Boolean).join(" · "),
+    [["Editar", "", () => editaAlerta(x)],
+     ["Borrar", "peligro", async () => { const v = await api("/api/inversiones/alerta/borra", {id: x.id}); toast("Alerta borrada", () => api("/api/inversiones/alerta", v)); cargar(); }]]))
+    : [el("p", "vacio", "Sin alertas.")]));
+  tipoAlerta();
+  pintaPresuInv();
+  pintaAvisosInv();
+}
+function editaPlan(x) {
+  const f = $("#f-plan");
+  for (const k of ["id", "activo", "dia", "desde", "nota"]) f[k].value = x[k] ?? "";
+  f.importe.value = coma(x.importe); f.comision.value = x.comision ? coma(x.comision) : "";
+  $("#b-plan").textContent = "Guardar plan"; $("#b-plan-cancela").hidden = false;
+  f.scrollIntoView({behavior: "smooth", block: "center"});
+}
+function limpiaPlan() { const f = $("#f-plan"); f.reset(); f.id.value = ""; $("#b-plan").textContent = "Crear plan"; $("#b-plan-cancela").hidden = true; }
+$("#b-plan-cancela").onclick = limpiaPlan;
+$("#f-plan").onsubmit = async e => {
+  e.preventDefault();
+  const f = e.target, x = {id: f.id.value || undefined, activo: f.activo.value, importe: num(f.importe.value), dia: +f.dia.value,
+                           comision: num(f.comision.value) || 0, desde: f.desde.value || hoyISO(), nota: f.nota.value};
+  if (!x.importe) { toast("Falta el importe"); return; }
+  try { await api("/api/inversiones/plan", x); toast(f.id.value ? "Plan cambiado" : "Plan creado: la primera compra se apunta sola"); limpiaPlan(); cargar(); }
+  catch (err) { toast(`No se guardó: ${err.message}`); }
+};
+function tipoAlerta() {
+  const f = $("#f-alerta"), cae = f.tipo.value === "cae";
+  $("#l-valor").textContent = cae ? "Caída (%)" : "Precio (€)";
+  f.valor.placeholder = cae ? "3" : "100";
+  // «toda la cartera» solo tiene sentido con la caída del día
+  const cartera = f.activo.querySelector('option[value="*"]');
+  if (cartera) cartera.disabled = !cae;
+  if (!cae && f.activo.value === "*") f.activo.value = I.activos[0]?.id || "";
+}
+$("#f-alerta").tipo.onchange = tipoAlerta;
+function editaAlerta(x) {
+  const f = $("#f-alerta");
+  for (const k of ["id", "tipo", "nota"]) f[k].value = x[k] ?? "";
+  tipoAlerta(); f.activo.value = x.activo; f.valor.value = coma(x.valor);
+  $("#b-alerta").textContent = "Guardar alerta"; $("#b-alerta-cancela").hidden = false;
+  f.scrollIntoView({behavior: "smooth", block: "center"});
+}
+function limpiaAlerta() { const f = $("#f-alerta"); f.reset(); f.id.value = ""; $("#b-alerta").textContent = "Crear alerta"; $("#b-alerta-cancela").hidden = true; tipoAlerta(); }
+$("#b-alerta-cancela").onclick = limpiaAlerta;
+$("#f-alerta").onsubmit = async e => {
+  e.preventDefault();
+  const f = e.target, x = {id: f.id.value || undefined, activo: f.activo.value, tipo: f.tipo.value, valor: num(f.valor.value), nota: f.nota.value};
+  if (!x.valor) { toast("Falta el valor"); return; }
+  try { await api("/api/inversiones/alerta", x); toast(f.id.value ? "Alerta cambiada" : "Alerta creada"); limpiaAlerta(); cargar(); }
+  catch (err) { toast(`No se guardó: ${err.message}`); }
+};
+// los mismos avisos push que Entreno (subs.json): basta con activarlos en un sitio
+const b64 = s => { const l = s.replace(/-/g, "+").replace(/_/g, "/"), bin = atob(l + "=".repeat((4 - l.length % 4) % 4)); return Uint8Array.from(bin, c => c.charCodeAt(0)); };
+async function pintaAvisosInv() {
+  const caja = $("#avisos");
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window))
+    return caja.replaceChildren(el("p", "vacio", "Este navegador no puede recibirlos. En el iPhone, abre todo desde la pantalla de inicio (no desde Safari) o usa Tom."));
+  if (Notification.permission === "denied") return caja.replaceChildren(el("p", "vacio", "Permiso denegado: actívalo en Ajustes del iPhone → Notificaciones."));
+  const reg = await navigator.serviceWorker.getRegistration(), sub = reg && await reg.pushManager.getSubscription();
+  if (sub && Notification.permission === "granted") return caja.replaceChildren(el("p", "vacio", "Activados en este dispositivo."));
+  const b = el("button", "c-btn", "Activar avisos aquí");
+  b.onclick = async () => {
+    try {
+      if (await Notification.requestPermission() !== "granted") return pintaAvisosInv();
+      const r = await navigator.serviceWorker.register("/sw.js"); await navigator.serviceWorker.ready;
+      const {clave} = await api("/api/push/clave");
+      const s = await r.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: b64(clave)});
+      await api("/api/push/sub", s.toJSON());
+      toast("Avisos activados");
+    } catch (e) { toast(`No se pudo: ${e.message}`); }
+    pintaAvisosInv();
+  };
+  caja.replaceChildren(b);
+}
 
 // ---------- carga ----------
 async function cargar() {

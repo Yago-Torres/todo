@@ -46,11 +46,13 @@ struct ResumenGastos: Decodable {
     var sugeridoTotal = 0.0
     var pareja = ""
     var hucha: Hucha?
+    /// El presupuesto de inversión del ciclo y lo aportado (de Inversiones de todo); nil si no hay.
+    var inversion: Inversion?
     /// Las cuentas de cada viaje (por id): total, lo pagado por cada uno, mi parte y lo que la pareja me debe.
     var cuentas: [String: CuentaViaje] = [:]
 
     enum CodingKeys: String, CodingKey {
-        case inicio, fin, dias, hechos, actual, total, aparte, presu, ingreso, extra, proyeccion, n, cats, serie, historico, insights, suscripciones, ingresos, pareja, hucha, recurrentes, cuentas
+        case inicio, fin, dias, hechos, actual, total, aparte, presu, ingreso, extra, proyeccion, n, cats, serie, historico, insights, suscripciones, ingresos, pareja, hucha, recurrentes, cuentas, inversion
         case diaCobro = "dia_cobro"
         case seriePrevia = "serie_previa"
         case sugeridoTotal = "sugerido_total"
@@ -155,6 +157,13 @@ struct ResumenGastos: Decodable {
         }
     }
 
+    /// presu: lo previsto por ciclo; aportado: compras − ventas del ciclo (nil si no se sabe); cuenta: lo que suma al total.
+    struct Inversion: Decodable, Hashable {
+        var presu = 0.0
+        var aportado: Double?
+        var cuenta = 0.0
+    }
+
     struct Hucha: Decodable, Hashable {
         var aporte = 0.0
         var aportado = 0.0
@@ -229,6 +238,7 @@ struct ResumenGastos: Decodable {
         sugeridoTotal = c.v(.sugeridoTotal, 0)
         pareja = (try? c.decodeIfPresent(String.self, forKey: .pareja)) ?? ""
         hucha = try? c.decodeIfPresent(Hucha.self, forKey: .hucha)
+        inversion = try? c.decodeIfPresent(Inversion.self, forKey: .inversion)
         cuentas = c.v(.cuentas, [:])
     }
 
@@ -328,9 +338,10 @@ struct EstadoGastos: Decodable {
         var ingreso = 0.0
         var diaCobro = 1
         var hucha = 0.0
+        var inversion = 0.0
 
         enum CodingKeys: String, CodingKey {
-            case ingreso, hucha
+            case ingreso, hucha, inversion
             case diaCobro = "dia_cobro"
         }
 
@@ -338,7 +349,7 @@ struct EstadoGastos: Decodable {
 
         init(from d: Decoder) throws {
             let c = try d.container(keyedBy: CodingKeys.self)
-            ingreso = c.v(.ingreso, 0); diaCobro = c.v(.diaCobro, 1); hucha = c.v(.hucha, 0)
+            ingreso = c.v(.ingreso, 0); diaCobro = c.v(.diaCobro, 1); hucha = c.v(.hucha, 0); inversion = c.v(.inversion, 0)
         }
     }
 

@@ -11,6 +11,14 @@ divisa se pasan a euros con el cambio del mismo día al bajarlos, así el cálcu
     python3 inversiones.py --precios        # lo que lanza inversiones-precios.timer
     python3 inversiones.py --review         # lo que lanza inversiones-review.timer (domingos)
     python3 inversiones.py --review --ver   # la review sin guardarla ni mandarla
+
+Planes de ahorro y alertas de precio (19/11) los revisa `--precios` después de bajar los precios (`revisa()`):
+- Un plan ({activo, importe, dia, comision}) apunta solo su compra cada mes, con el precio de ese día (estimado: se
+  corrige a mano con el de Trade Republic). El id de la operación es `plan-<id>-<AAAA-MM>` y el mes queda en `hechos`:
+  aunque la borres no vuelve, y lanzar el script dos veces no la duplica. Si el día cae en fin de semana, el lunes.
+- Una alerta: «bajo» (precio ≤ valor), «sobre» (≥ valor) o «cae» (el día baja ≥ valor %; activo "*" = la cartera).
+  Avisa una vez y se rearma cuando el precio vuelve un 2 % al otro lado («cae», una vez al día).
+- Los avisos van por aviso.py: el push de la app primero y Telegram si no llega.
 """
 import json
 import os
@@ -36,7 +44,8 @@ EUROPA = (".DE", ".F", ".AS", ".PA", ".MI", ".MC", ".SG", ".MU", ".BE")
 PERFIL = {"edad": None, "horizonte": "", "objetivo": "", "aportacion": 0, "estable": None, "emergencia": "",
           "tolerancia": "", "caida": "", "broker": "Trade Republic", "referencia": "VWCE.DE", "notas": "",
           "regimen": "comun", "perdidas_previas": 0, "intereses": {}}
-VACIO = {"perfil": PERFIL, "activos": [], "operaciones": []}
+VACIO = {"perfil": PERFIL, "activos": [], "operaciones": [], "planes": [], "alertas": []}
+ALERTAS = ("bajo", "sobre", "cae")
 
 
 # ---------- limpieza (como clean() de main.py: lo que no está aquí no se guarda) ----------
@@ -99,9 +108,32 @@ def limpia(d):
         ops.append({"id": _id(o.get("id")) or f"op{len(ops)}", "fecha": dia, "activo": o["activo"], "tipo": o["tipo"],
                     # dividendo: precio = importe neto cobrado, cantidad 0
                     "cantidad": cant if o["tipo"] != "dividendo" else 0, "precio": precio,
-                    "comision": _num(o.get("comision"), 0, 1e6) or 0, "nota": _txt(o.get("nota"), 200)})
+                    "comision": _num(o.get("comision"), 0, 1e6) or 0, "nota": _txt(o.get("nota"), 200),
+                    # de qué plan de ahorro sale (precio estimado hasta que lo corrijas) y de dónde vino
+                    "plan": _id(o.get("plan")), "src": o.get("src") if o.get("src") in ("web", "plan", "foto", "tom") else ""})
     ops.sort(key=lambda o: (o["fecha"], o["tipo"] != "compra"))
-    return {"perfil": perfil, "activos": activos, "operaciones": ops}
+    planes = []
+    for x in d.get("planes") or []:
+        if not isinstance(x, dict) or x.get("activo") not in vistos or not (imp := _num(x.get("importe"), 1, 1e6)):
+            continue
+        try:
+            desde = date.fromisoformat(str(x.get("desde"))[:10]).isoformat()
+        except ValueError:
+            desde = date.today().isoformat()
+        planes.append({"id": _id(x.get("id")) or f"p{len(planes)}", "activo": x["activo"], "importe": imp,
+                       "dia": int(_num(x.get("dia"), 1, 28) or 1), "comision": _num(x.get("comision"), 0, 100) or 0,
+                       "desde": desde, "pausado": x.get("pausado") is True, "nota": _txt(x.get("nota"), 120),
+                       "hechos": sorted({m for m in x.get("hechos") or [] if re.fullmatch(r"20\d\d-\d\d", str(m))})[-120:]})
+    alertas = []
+    for x in d.get("alertas") or []:
+        if not isinstance(x, dict) or x.get("tipo") not in ALERTAS or not (v := _num(x.get("valor"), 0.0001, 1e9)):
+            continue
+        if x.get("activo") != "*" and x.get("activo") not in vistos or (x.get("activo") == "*" and x["tipo"] != "cae"):
+            continue
+        alertas.append({"id": _id(x.get("id")) or f"a{len(alertas)}", "activo": x["activo"], "tipo": x["tipo"],
+                        "valor": v if x["tipo"] != "cae" else min(v, 50), "nota": _txt(x.get("nota"), 120),
+                        "armada": x.get("armada") is not False, "ultima": _txt(x.get("ultima"), 10)})
+    return {"perfil": perfil, "activos": activos, "operaciones": ops, "planes": planes, "alertas": alertas}
 
 
 def lee():
@@ -249,6 +281,134 @@ def actualiza(simbolos=None, rango=None):
         time.sleep(.3)
     _escribe(PRECIOS, p)
     return fallos
+
+
+# ---------- planes de ahorro y alertas (los revisa --precios) ----------
+def dia_plan(anio, mes, dia):
+    """El día que se ejecuta el plan ese mes: si cae en fin de semana, el lunes siguiente."""
+    d = date(anio, mes, dia)
+    return d + timedelta(days=(7 - d.weekday()) % 7) if d.weekday() >= 5 else d
+
+
+def proximo_plan(x, hoy=None):
+    hoy = hoy or date.today()
+    for n in range(0, 3):
+        a, m = (hoy.year * 12 + hoy.month - 1 + n) // 12, (hoy.month - 1 + n) % 12 + 1
+        d = dia_plan(a, m, x["dia"])
+        if d >= hoy and f"{a}-{m:02d}" not in x["hechos"] and d.isoformat() >= x["desde"]:
+            return d.isoformat()
+    return None
+
+
+def _precio_dia(p, simbolo, dia, hoy):
+    s = p.get(simbolo) or {}
+    if dia == hoy and s.get("ultimo"):
+        return s["ultimo"]
+    dias = s.get("dias") or {}
+    if dia >= hoy:
+        return dias.get(dia)
+    # festivo o antes de la primera cotización bajada: la siguiente de esa semana
+    despues = [k for k in dias if dia <= k <= (date.fromisoformat(dia) + timedelta(days=5)).isoformat()]
+    return dias[min(despues)] if despues else _precio_en(dias, dia)
+
+
+def ejecuta_planes(d, p, hoy=None):
+    """Apunta en `d` las compras de los planes que ya tocaban. Devuelve [(plan, operación)]."""
+    hoy = hoy or date.today()
+    activos = {a["id"]: a for a in d["activos"]}
+    hechas = []
+    for x in d["planes"]:
+        if x["pausado"]:
+            continue
+        ini = date.fromisoformat(x["desde"])
+        a, m = ini.year, ini.month
+        while (a, m) <= (hoy.year, hoy.month):
+            mes, cuando = f"{a}-{m:02d}", dia_plan(a, m, x["dia"])
+            if mes not in x["hechos"] and ini <= cuando <= hoy:
+                precio = _precio_dia(p, activos[x["activo"]]["simbolo"], cuando.isoformat(), hoy.isoformat())
+                if precio:
+                    o = {"id": f"plan-{x['id']}-{mes}", "fecha": cuando.isoformat(), "activo": x["activo"], "tipo": "compra",
+                         "cantidad": round((x["importe"] - x["comision"]) / precio, 6), "precio": round(precio, 4),
+                         "comision": x["comision"], "nota": "Plan de ahorro · precio estimado: corrígelo con el de Trade Republic",
+                         "plan": x["id"], "src": "plan"}
+                    d["operaciones"] = [y for y in d["operaciones"] if y["id"] != o["id"]] + [o]
+                    x["hechos"] = sorted(set(x["hechos"]) | {mes})
+                    hechas.append((x, o))
+            a, m = (a + 1, 1) if m == 12 else (a, m + 1)
+    return hechas
+
+
+def _cambio_dia(s):
+    """(precio de ahora, % del día) de un símbolo de precios.json."""
+    ahora = s.get("ultimo") or (s["dias"][max(s["dias"])] if s.get("dias") else None)
+    ayer = s.get("ayer")
+    if not ayer and s.get("dias"):
+        hoy = date.today().isoformat()
+        previos = [k for k in s["dias"] if k < hoy]
+        ayer = s["dias"][max(previos)] if previos else None
+    return ahora, (round((ahora / ayer - 1) * 100, 2) if ahora and ayer else None)
+
+
+def revisa_alertas(d, p, hoy=None):
+    """Las alertas que saltan ahora: [(alerta, texto)]. Marca en `d` las disparadas y rearma las que volvieron."""
+    hoy = (hoy or date.today()).isoformat()
+    activos = {a["id"]: a for a in d["activos"]}
+    saltan = []
+    for x in d["alertas"]:
+        if x["activo"] == "*":
+            pos = posiciones(d["operaciones"], d["activos"], p)
+            valor = sum(y["valor"] or 0 for y in pos)
+            dia = sum(y["dia_eur"] or 0 for y in pos)
+            cambio = round(dia / (valor - dia) * 100, 2) if valor - dia > 0 else None
+            nombre, precio = "Tu cartera", valor
+        else:
+            a = activos[x["activo"]]
+            precio, cambio = _cambio_dia(p.get(a["simbolo"]) or {})
+            nombre = a["nombre"]
+        if precio is None:
+            continue
+        if x["tipo"] == "cae":
+            if cambio is not None and cambio <= -x["valor"] and x["ultima"] != hoy:
+                x["ultima"] = hoy
+                caida = f"{abs(cambio):.1f}".replace(".", ",")
+                saltan.append((x, f"{nombre} cae un {caida} % hoy" + (f" ({_e(precio)})" if x["activo"] != "*" else "")))
+            continue
+        cruza = precio <= x["valor"] if x["tipo"] == "bajo" else precio >= x["valor"]
+        vuelve = precio > x["valor"] * 1.02 if x["tipo"] == "bajo" else precio < x["valor"] * 0.98
+        if x["armada"] and cruza:
+            x["armada"], x["ultima"] = False, hoy
+            saltan.append((x, f"{nombre} está a {_e(precio)}: {'por debajo' if x['tipo'] == 'bajo' else 'por encima'} de {_e(x['valor'])}"))
+        elif not x["armada"] and vuelve:
+            x["armada"] = True
+    return saltan
+
+
+def revisa(hoy=None, ver=False):
+    """Tras bajar precios: planes que tocan y alertas que saltan. Guarda y avisa (push de la app; si no, Telegram)."""
+    import aviso
+    d, p = lee(), lee_precios()
+    planes = ejecuta_planes(d, p, hoy)
+    alertas = revisa_alertas(d, p, hoy)
+    if (planes or alertas or any(not x["armada"] for x in d["alertas"])) and not ver:
+        actual = lee()   # lo último del disco (la web pudo guardar entre medias): solo se le pasan los cambios de aquí
+        actual["operaciones"] = [y for y in actual["operaciones"] if y["id"] not in {o["id"] for _, o in planes}] + [o for _, o in planes]
+        por_id = {x["id"]: x for x in d["planes"]}
+        for x in actual["planes"]:
+            if x["id"] in por_id:
+                x["hechos"] = sorted(set(x["hechos"]) | set(por_id[x["id"]]["hechos"]))
+        por_id = {x["id"]: x for x in d["alertas"]}
+        for x in actual["alertas"]:
+            if x["id"] in por_id and (x["tipo"], x["valor"]) == (por_id[x["id"]]["tipo"], por_id[x["id"]]["valor"]):
+                x["armada"], x["ultima"] = por_id[x["id"]]["armada"], por_id[x["id"]]["ultima"]
+        guarda(actual)
+    nombres = {a["id"]: a["nombre"] for a in d["activos"]}
+    for x, o in planes:
+        aviso.avisa("Plan de ahorro", f"{_e(x['importe'])} en {nombres[x['activo']]}: {str(o['cantidad']).replace('.', ',')} part. a {_e(o['precio'])} "
+                    "(precio estimado; corrígelo si TR dio otro)", f"plan-{x['id']}", "/inversiones.html#operaciones", ver=ver)
+    for x, texto in alertas:
+        aviso.avisa("Alerta de precio", texto + (f" · {x['nota']}" if x["nota"] else ""), f"alerta-{x['id']}",
+                    "/inversiones.html#cartera", ver=ver)
+    return planes, alertas
 
 
 # ---------- cálculo ----------
@@ -399,6 +559,8 @@ def informe(hoy=None):
     fz = fiscal(d, pos, hoy)
     return {
         "perfil": d["perfil"], "activos": d["activos"], "operaciones": d["operaciones"], "posiciones": pos,
+        "planes": [{**x, "proximo": proximo_plan(x, hoy)} for x in d["planes"]], "alertas": d["alertas"],
+        "leccion": leccion(),
         "total": {"valor": valor, "coste": coste, "latente": round(valor - coste, 2),
                   "rent": round((valor / coste - 1) * 100, 2) if coste else None,
                   "realizado": round(sum(x["realizado"] for x in pos), 2), "dividendos": round(sum(x["dividendos"] for x in pos), 2),
@@ -629,7 +791,11 @@ def aviso_renta(hoy=None):
                + f"Cuota estimada por inversiones: {_e(dc['cuota'])}\n\n"
                + "\n".join(f"{i}. {p}" for i, p in enumerate(dc["pasos"], 1)))
     msg += "\n\nTodo, con la tabla de ventas: https://todo.yagotg.dev/inversiones.html#impuestos"
-    _telegram(msg)
+    import aviso   # la app primero; el texto largo, por Telegram solo si el push no llega
+    titulo = f"Cierre de {f['anio']}: impuestos" if hoy.month == 12 else f"Renta {dc['ejercicio']}"
+    cuerpo = (f"Cuota estimada {_e(f['renta']['cuota'])}. Mira qué puedes optimizar antes del 31." if hoy.month == 12
+              else f"{dc['estado']} Cuota estimada por inversiones: {_e(dc['cuota'])}.")
+    aviso.avisa(titulo, cuerpo, "renta", "/inversiones.html#impuestos", largo=msg)
 
 
 # ---------- reviews ----------
@@ -668,6 +834,7 @@ def prompt_review(inf, hoy):
             trozos = re.findall(r"(?ms)^#{2,3} *(?:1\.|9\.).*?(?=^#{2,3} *\d+\.|\Z)", texto)
             texto = "\n".join(trozos) or texto[:3000]
         previas.append(f"#### Review del {f}\n\n{texto}")
+    lecciones_previas = "; ".join(l.splitlines()[0].strip("* ") for f in inf["reviews"][:12] if (l := leccion_de(review(f)))) or "(ninguna todavía)"
     proy = inf["proyeccion"]
     proy_txt = "\n".join(f"- {k} ({v['tasa']} % anual nominal): 5 años {v['anios'][5]:,} €, 10 años {v['anios'][10]:,} €, 20 años {v['anios'][20]:,} €"
                          for k, v in proy.items() if "tasa" in v)
@@ -719,7 +886,7 @@ Para la cartera propuesta, calcula el stress con las mismas caídas por tipo y d
 
 Antes de empezar, busca en la web los datos actuales que necesites (precios, TER, composición de los ETFs/fondos, noticias relevantes de las empresas o sectores). No inventes cifras: si no encuentras un dato, dilo y trabaja con un supuesto explícito.
 
-Estructúralo así (encabezados `## 1. …` a `## 10. …`, exactamente con esos números):
+Estructúralo así (encabezados `## 1. …` a `## 11. …`, exactamente con esos números):
 
 ## 1. Resumen ejecutivo (máx. 5 líneas)
 La foto general en lenguaje claro: cómo está el portfolio, el mayor problema y la acción más importante que debería hacer.
@@ -755,6 +922,13 @@ Lista priorizada de 3 a 7 acciones concretas, cada una con: qué hacer, por qué
 ## 10. Preguntas para mí
 Si te falta información que cambiaría las conclusiones, las preguntas clave (máx. 5).
 
+## 11. Lección de la semana
+Estoy empezando y quiero aprender. Una sola idea de inversión explicada para alguien que empieza (máx. 150 palabras),
+elegida a partir de algo que haya pasado esta semana en MI cartera o en el mercado (p. ej. por qué ha caído X, qué es el
+TER, la regla de los 2 meses, el interés compuesto, la diversificación, el riesgo de divisa). Primero una línea en
+negrita con la idea; después la explicación con un ejemplo en € con mis números; al final «Para pensar:» y una pregunta.
+No repitas el tema de las lecciones anteriores: {lecciones_previas}.
+
 ## Formato de salida (importante: lo lee una página web, no un chat)
 - Responde SOLO con el informe en Markdown: sin saludo, sin «aquí tienes», sin comentar tu proceso de búsqueda.
 - Tablas en Markdown normal. Nada de HTML.
@@ -776,6 +950,19 @@ def grafica_proyeccion(inf):
         "etiquetas": [str(hoy + n) for n in range(len(pr["aportado"]["anios"]))],
         "series": [{"nombre": f"{k} ({v['tasa']} %)", "datos": v["anios"]} for k, v in pr.items() if "tasa" in v]
                   + [{"nombre": "Lo aportado", "datos": pr["aportado"]["anios"]}]}, ensure_ascii=False) + "\n```")
+
+
+def leccion_de(texto):
+    m = re.search(r"(?ms)^## 11\.[^\n]*\n(.*?)(?=^## |\Z)", texto or "")
+    return m.group(1).strip() if m else ""
+
+
+def leccion():
+    """La lección de la última review que la tenga: {fecha, texto}, o None."""
+    for f in reviews():
+        if (x := leccion_de(review(f))):
+            return {"fecha": f, "texto": x}
+    return None
 
 
 def guarda_review(fecha, texto):
@@ -820,6 +1007,13 @@ def hacer_review(ver=False):
 
 def avisa(hoy, texto, inf):
     import html
+    import aviso
+    t = inf["total"]
+    lec = leccion_de(texto)
+    titulo = re.sub(r"\*\*(.+?)\*\*", r"\1", lec.splitlines()[0]) if lec else ""
+    if aviso.push(f"Review de inversiones · {_e(t['valor'], 0)}", ("Lección: " + titulo[:120]) if titulo else "Ya tienes la review del domingo",
+                  "review", f"/inversiones.html?review={hoy.isoformat()}#review"):
+        return
     resumen = re.search(r"(?ms)^## 1\..*?\n(.*?)(?=^## 2\.|\Z)", texto)
     cuerpo = re.sub(r"\*\*(.+?)\*\*", r"\1", (resumen.group(1) if resumen else texto[:800]).strip())
     t = inf["total"]
@@ -844,6 +1038,11 @@ if __name__ == "__main__":
     if "--precios" in sys.argv:
         f = actualiza()
         print("\n".join(f) or "ok")
+        try:
+            planes, alertas = revisa(ver="--ver" in sys.argv)
+            print(f"planes: {len(planes)}, alertas: {len(alertas)}")
+        except Exception as e:   # que un fallo aquí no deje sin precios
+            print("planes/alertas:", e, file=sys.stderr)
         sys.exit(1 if f and len(f) == len(lee()["activos"]) + 1 else 0)
     elif "--review" in sys.argv:
         hacer_review(ver="--ver" in sys.argv)

@@ -8,8 +8,10 @@ struct AjustesCicloGastos: View {
     @Binding var aviso: String?
     @State private var datos = DatosGastos.shared
     @State private var ingreso = ""
+    @State private var invertir = ""
     @State private var nota: String?
     @FocusState private var foco: Bool
+    @FocusState private var focoInvertir: Bool
 
     private var a: EstadoGastos.Ajustes { datos.ajustes }
 
@@ -38,6 +40,20 @@ struct AjustesCicloGastos: View {
                 .pickerStyle(.menu)
                 .tint(Tema.acento)
             }
+            HStack(spacing: Tema.Espacio.s) {
+                Text("Para invertir cada \(a.diaCobro == 1 ? "mes" : "ciclo")").font(Tema.fuente(.texto)).foregroundStyle(Tema.texto)
+                Spacer()
+                TextField("nada", text: $invertir)
+                    .keyboardType(.decimalPad)
+                    .focused($focoInvertir)
+                    .multilineTextAlignment(.trailing)
+                    .font(Tema.fuente(.texto)).monospacedDigit()
+                    .padding(.horizontal, Tema.Espacio.m).padding(.vertical, 8)
+                    .frame(width: 130)
+                    .background(Tema.carta2, in: RoundedRectangle(cornerRadius: Tema.Radio.boton, style: .continuous))
+                    .accessibilityLabel("Lo que dedicas a invertir cada ciclo, en euros")
+                Text("€").font(Tema.fuente(.texto)).foregroundStyle(Tema.suave)
+            }
             Text(resumen).font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
                 .fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.interpolate)
@@ -57,7 +73,9 @@ struct AjustesCicloGastos: View {
             .background(Tema.acentoSuave, in: Capsule())
             .foregroundStyle(Tema.acento)
         }
-        .onAppear { ingreso = campo(a.ingreso) }
+        .onAppear { ingreso = campo(a.ingreso); invertir = campo(a.inversion) }
+        .onChange(of: a.inversion) { _, v in if !focoInvertir { invertir = campo(v) } }
+        .onChange(of: focoInvertir) { _, ahora in if !ahora { guardaInversion() } }
         .onChange(of: a.ingreso) { _, v in if !foco { ingreso = campo(v) } }
         .onChange(of: foco) { _, ahora in if !ahora { guardaIngreso() } }
     }
@@ -72,8 +90,8 @@ struct AjustesCicloGastos: View {
                              : "Los sugeridos son lo que gastas de media: \(Eur.entero(r.sugeridoTotal)) al ciclo."
         }
         if presu > 0 {
-            let ahorro = a.ingreso - presu - a.hucha
-            return "Presupuesto \(Eur.entero(presu)) · ahorro objetivo \(Eur.entero(ahorro)) (\(Int((ahorro * 100 / a.ingreso).rounded())) %)"
+            let ahorro = a.ingreso - presu - a.hucha - a.inversion
+            return "Presupuesto \(Eur.entero(presu))\(a.inversion > 0 ? " + \(Eur.entero(a.inversion)) a invertir" : "") · ahorro objetivo \(Eur.entero(ahorro)) (\(Int((ahorro * 100 / a.ingreso).rounded())) %)"
         }
         return "Los sugeridos dejan \(Eur.entero(a.ingreso - r.sugeridoTotal)) de ahorro al ciclo."
     }
@@ -82,6 +100,12 @@ struct AjustesCicloGastos: View {
         let nuevo = ingreso.trimmingCharacters(in: .whitespaces).isEmpty ? 0 : (Eur.lee(ingreso) ?? a.ingreso)
         guard abs(nuevo - a.ingreso) > 0.004 else { ingreso = campo(a.ingreso); return }
         guarda(["ingreso": max(0, nuevo)], nuevo > 0 ? "Ingreso: \(Eur.entero(nuevo)) al mes" : "Ingreso variable")
+    }
+
+    private func guardaInversion() {
+        let nuevo = invertir.trimmingCharacters(in: .whitespaces).isEmpty ? 0 : (Eur.lee(invertir) ?? a.inversion)
+        guard abs(nuevo - a.inversion) > 0.004 else { invertir = campo(a.inversion); return }
+        guarda(["inversion": max(0, nuevo)], nuevo > 0 ? "Inversión: \(Eur.entero(nuevo)) cada ciclo" : "Sin presupuesto de inversión")
     }
 
     private func ponDia(_ d: Int) {

@@ -293,6 +293,51 @@ final class DatosGastos {
         if enCola { ponEnResumen([cat: max(0, valor)]) }
     }
 
+    /// Crea una categoría (id nil) o la renombra. El id de una nueva sale del nombre, como en la web.
+    func ponCategoria(id: String?, nombre: String, presu: Double? = nil) async throws {
+        let inst = instancia
+        let n = nombre.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !n.isEmpty else { return }
+        let cats = estado?.cats ?? []
+        if id == nil, cats.contains(where: { $0.n.lowercased() == n.lowercased() }) {
+            throw APIError(mensaje: "Ya tienes «\(n)».")
+        }
+        var cid = id ?? Self.slug(n)
+        if id == nil {
+            var k = 2
+            let base = cid
+            while cats.contains(where: { $0.id == cid }) { cid = "\(base.prefix(17))-\(k)"; k += 1 }
+        }
+        var cat: [String: Any] = ["id": cid, "n": n]
+        if let presu { cat["presu"] = max(0, presu) }
+        try await opera(inst, ["op": "cat.pon", "cat": cat, "resumen": id == nil ? "Categoría nueva: \(n)" : "Ahora se llama \(n)"])
+        await refresca(inst)
+    }
+
+    /// Quita una categoría: lo suyo pasa a Otros y sus reglas se borran (Operaciones.swift, «cat.borra»).
+    func quitaCategoria(_ id: String) async throws {
+        let inst = instancia
+        try await opera(inst, ["op": "cat.borra", "id": id, "resumen": "Quitar la categoría \(nombreCat(id))"])
+        await refresca(inst)
+    }
+
+    /// «Comer fuera» → «comer-fuera»: sin tildes ni símbolos, como slug() de la web.
+    static func slug(_ s: String) -> String {
+        let plano = s.lowercased().folding(options: .diacriticInsensitive, locale: Locale(identifier: "es_ES"))
+        var out = "", guion = false
+        for u in plano.unicodeScalars {
+            if (97...122).contains(u.value) || (48...57).contains(u.value) {
+                out.unicodeScalars.append(u)
+                guion = false
+            } else if !out.isEmpty && !guion {
+                out += "-"
+                guion = true
+            }
+        }
+        while out.hasSuffix("-") { out.removeLast() }
+        return out.isEmpty ? "cat" : String(out.prefix(20))
+    }
+
     /// «Usar sugeridos»: copia el presupuesto sugerido de cada categoría que tenga uno.
     func usaSugeridos() async throws {
         let inst = instancia

@@ -227,6 +227,9 @@ struct InformeInv: Decodable {
     var reviews: [String]
     var fiscal: FiscalInv?
     var declaracion: DeclaracionInv?
+    var planes: [PlanInv]?
+    var alertas: [AlertaInv]?
+    var leccion: LeccionInv?
 
     /// Lo que tienes ahora, de más a menos valor.
     var abiertas: [PosicionInv] {
@@ -353,6 +356,7 @@ final class DatosInversiones {
             let nuevo = try JSONDecoder().decode(InformeInv.self, from: crudo)
             withAnimation(Tema.Muelle.pantalla) { inf = nuevo }
             copia = fecha
+            if fecha == nil { Task { await AvisosInversiones.programa(nuevo) } }
             error = nil
         } catch let e as DecodingError {
             error = "No entiendo lo que devuelve /api/inversiones (\(e.localizedDescription))"

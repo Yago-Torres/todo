@@ -288,6 +288,10 @@ Todo lo de Tom funciona sin conexión y se sincroniza solo al volver (`Compartid
   `reparto: pago|cobro`) y sus gastos. La hucha: lo que apartas cada ciclo, las sugerencias 3/4/6 y el plan ciclo a ciclo.
 - **Ajustes del ciclo** (`AjustesGastos.swift`, en «Presupuestos»): cuánto cobras y el día de cobro (vuelve al ciclo de
   hoy). Sin red se guardan, pero las cuentas del ciclo (las calcula el servidor) no cambian hasta que llegan.
+  También «Para invertir cada ciclo» (`ajustes.pon {inversion}`), que sale como fila «Inversión» (lo aportado, de
+  Inversiones) y como banda en el flujo.
+- **Categorías propias** (19/11, en «Presupuestos»): el nombre se edita en la fila, la ✕ la quita (lo suyo pasa a Otros y
+  sus reglas se van) y la fila de abajo crea una (antes de Otros). Operaciones `cat.pon` y `cat.borra` (Operaciones.swift).
 - **Ingresos** (`IngresosGastos.swift`): editar y borrar (con deshacer). Apuntar lleva día y, en un viaje en otra moneda,
   la moneda; tras apuntar sale «Deshacer» (una operación `gasto.borra`/`ingreso.borra`). El editor de un gasto de un viaje
   compartido elige el reparto.
@@ -418,6 +422,11 @@ proyección): Tom solo pinta `GET /api/inversiones`, así que la web y el iPhone
 - `ImpuestosInversiones`: lo que te quedaría si vendes hoy, la renta del año, consejos y las ventas para la declaración
   (todo de `informe.fiscal`, calculado en el servidor).
 - `PerfilInversiones`: el contexto que lee la review (y dónde tributas y las pérdidas de años anteriores).
+- `PlanesInversiones` (19/11): el presupuesto de inversión (de `/api/gastos/resumen`), los planes de ahorro (el servidor
+  apunta la compra sola cada mes; `HojaPlanInv`) y las alertas de precio (`HojaAlertaInv`). `AvisosInversiones` programa
+  avisos locales (prefijo `inv.`) el día de cada plan a las 19:00 y el domingo a las 11:30 (la review); se rehacen en cada
+  carga con red y respetan el interruptor de avisos. Las alertas no se saben de antemano: llegan por el push de la web o
+  Telegram (`aviso.py` en la Pi). `LeccionInvCarta`: la lección de la última review, arriba de Cartera.
 - `/inversiones.html?review=fecha` (el enlace del aviso del domingo) abre esa review (`Navegador.reviewInversiones`).
 
 ## Calendario (`Hoy/Nativo/Calendario/`)

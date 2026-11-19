@@ -81,6 +81,18 @@ enum PruebaOperaciones {
         comprueba(g.count == 1 && (g[0]["importe"] as? Double) == 12.5, "gasto editado y otro borrado")
         comprueba(((gastos["cats"] as? [[String: Any]])?.first?["presu"] as? Double) == 250, "presupuesto puesto")
 
+        // 7b. categorías: crear (antes de Otros), renombrar y quitar (lo suyo pasa a Otros, sus reglas se van)
+        var cg: [String: Any] = ["cats": [["id": "comida", "n": "Comida", "presu": 0.0], ["id": "otros", "n": "Otros", "presu": 0.0]],
+                                 "gastos": [["id": "a", "importe": 3.0, "cat": "comida"]], "reglas": [["id": "r", "txt": "bar", "cat": "comida"]]]
+        try? Operaciones.aplicaGastos(["op": "cat.pon", "cat": ["id": "gym", "n": "Gimnasio", "presu": 30.0]], &cg, estricto: true)
+        try? Operaciones.aplicaGastos(["op": "cat.pon", "cat": ["id": "comida", "n": "Súper"]], &cg, estricto: true)
+        let ids = ((cg["cats"] as? [[String: Any]]) ?? []).compactMap { $0["id"] as? String }
+        comprueba(ids == ["comida", "gym", "otros"], "categoría nueva antes de Otros")
+        comprueba(((cg["cats"] as? [[String: Any]])?.first?["n"] as? String) == "Súper", "categoría renombrada")
+        try? Operaciones.aplicaGastos(["op": "cat.borra", "id": "comida"], &cg, estricto: true)
+        comprueba(((cg["gastos"] as? [[String: Any]])?.first?["cat"] as? String) == "otros", "lo de la quitada pasa a Otros")
+        comprueba(((cg["reglas"] as? [[String: Any]]) ?? []).isEmpty, "sus reglas se van")
+
         // 8. tareas: creada sin red (tmp), cambiada y hecha; con el alias tmp → real ya conocido
         var bandeja: [String: Any] = ["tareas": [["id": "real1", "t": "Llamar"]]]
         let alias: (String) -> String = { $0 == "tmp:X" ? "real2" : $0 }

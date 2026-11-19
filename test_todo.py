@@ -1121,6 +1121,30 @@ def test_inversiones():
     assert p["cantidad"] == 5 and p["coste"] == 100.5 and p["valor"] == 200 and p["latente"] == 99.5
     assert p["realizado"] == round(15 * 30 - 1 - (101 + 5 * 20.1), 2) and p["dividendos"] == 2 and p["comisiones"] == 3
     assert p["dia"] == round((40 / 40 - 1) * 100, 2) and p["peso"] == 100
+    # planes de ahorro: el día que toca (fin de semana → lunes), con el precio de ese día, una vez por mes
+    assert inv.dia_plan(2026, 3, 7) == date(2026, 3, 9) and inv.dia_plan(2026, 3, 2) == date(2026, 3, 2)
+    pl = inv.limpia({**datos, "planes": [{"id": "p", "activo": "a", "importe": 51, "comision": 1, "dia": 2, "desde": "2026-01-01"},
+                                          {"id": "q", "activo": "zzz", "importe": 5}, {"id": "r", "activo": "a", "importe": 0}]})
+    assert [x["id"] for x in pl["planes"]] == ["p"] and inv.limpia(pl) == pl
+    hechas = inv.ejecuta_planes(pl, precios, date(2026, 3, 7))
+    assert [o["fecha"] for _, o in hechas] == ["2026-01-02", "2026-02-02", "2026-03-02"], hechas
+    assert hechas[1][1]["cantidad"] == 2.5 and hechas[1][1]["id"] == "plan-p-2026-02" and pl["planes"][0]["hechos"] == ["2026-01", "2026-02", "2026-03"]
+    assert hechas[0][1]["precio"] == 10   # el 2/1 no hay cotización: la siguiente de esa semana
+    assert inv.ejecuta_planes(pl, precios, date(2026, 3, 7)) == []   # una vez
+    pl["operaciones"] = [o for o in pl["operaciones"] if o["id"] != "plan-p-2026-02"]
+    assert inv.ejecuta_planes(pl, precios, date(2026, 3, 7)) == []   # borrada a mano: no vuelve
+    assert inv.proximo_plan(pl["planes"][0], date(2026, 3, 7)) == "2026-04-02"
+    # alertas: avisan una vez y se rearman al volver un 2 %
+    al = inv.limpia({**datos, "alertas": [{"id": "x", "activo": "a", "tipo": "bajo", "valor": 45}, {"id": "y", "activo": "a", "tipo": "cae", "valor": 3},
+                                           {"id": "z", "activo": "*", "tipo": "bajo", "valor": 1}, {"id": "w", "activo": "*", "tipo": "cae", "valor": 3}]})
+    assert [x["id"] for x in al["alertas"]] == ["x", "y", "w"]
+    pr = {"AAA.DE": {"dias": {"2026-03-05": 50}, "ultimo": 44, "ayer": 50}}
+    s = inv.revisa_alertas(al, pr, date(2026, 3, 6))
+    assert [x["id"] for x, _ in s] == ["x", "y", "w"] and s[0][1] == "aaa.de está a 44,00 €: por debajo de 45,00 €" and s[1][1] == "aaa.de cae un 12,0 % hoy (44,00 €)" and al["alertas"][0]["armada"] is False, s
+    assert inv.revisa_alertas(al, pr, date(2026, 3, 6)) == []
+    pr["AAA.DE"].update(ultimo=46.5, ayer=46.5)
+    assert inv.revisa_alertas(al, pr, date(2026, 3, 7)) == [] and al["alertas"][0]["armada"] is True
+    assert inv.leccion_de("## 10. x\nhola\n## 11. Lección de la semana\n**Idea**\nTexto\n") == "**Idea**\nTexto"
     s = inv.serie_cartera(datos["operaciones"], datos["activos"], precios, "REF", date(2026, 3, 7))
     assert s[0] == {"dia": "2026-01-05", "valor": 100, "metido": 101, "referencia": 101}
     assert s[-1]["dia"] == "2026-03-07" and s[-1]["valor"] == 200 and s[-1]["metido"] == round(101 + 201 - 449, 2)

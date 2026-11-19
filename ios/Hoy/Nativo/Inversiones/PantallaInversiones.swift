@@ -1,16 +1,16 @@
 import SwiftUI
 
-/// Inversiones en nativo (lo de static/inversiones.html): Cartera, Operaciones, Impuestos, Review y Perfil, con las mismas
+/// Inversiones en nativo (lo de static/inversiones.html): Cartera, Operaciones, Planes, Impuestos, Review y Perfil, con las mismas
 /// cuentas que la web porque las hace el servidor. «/inversiones.html?review=fecha» (el aviso del domingo) abre esa review.
 struct PantallaInversiones: View {
-    enum Vista: Hashable { case cartera, operaciones, impuestos, review, perfil }
+    enum Vista: Hashable { case cartera, operaciones, planes, impuestos, review, perfil }
 
     @State private var datos = DatosInversiones.shared
     @State private var vista: Vista = .cartera
     @ObservedObject private var navegador = Navegador.shared
 
     private let opciones: [(valor: Vista, titulo: String)] = [
-        (.cartera, "Cartera"), (.operaciones, "Operaciones"), (.impuestos, "Impuestos"), (.review, "Review"), (.perfil, "Perfil"),
+        (.cartera, "Cartera"), (.operaciones, "Operaciones"), (.planes, "Planes"), (.impuestos, "Impuestos"), (.review, "Review"), (.perfil, "Perfil"),
     ]
 
     var body: some View {
@@ -28,6 +28,7 @@ struct PantallaInversiones: View {
                         switch vista {
                         case .cartera: CarteraInversiones(inf: inf)
                         case .operaciones: OperacionesInversiones(inf: inf)
+                        case .planes: PlanesInversiones(inf: inf)
                         case .impuestos: ImpuestosInversiones(inf: inf)
                         case .review: ReviewInversiones(inf: inf)
                         case .perfil: PerfilInversiones(perfil: inf.perfil)

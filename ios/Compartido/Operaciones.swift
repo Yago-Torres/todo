@@ -271,6 +271,38 @@ enum Operaciones {
                 cats[i]["presu"] = max(0, valor)
             }
             e["cats"] = cats
+        case "cat.pon":
+            // crea o renombra (y, si trae presu, le pone el presupuesto). Las nuevas, antes de Otros (la de por defecto)
+            guard let c = op["cat"] as? [String: Any], let cid = idDe(c), !cid.isEmpty else { return }
+            var cats = lista(e["cats"])
+            let n = ((c["n"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if let i = cats.firstIndex(where: { idDe($0) == cid }) {
+                if !n.isEmpty { cats[i]["n"] = n }
+                if let p = (c["presu"] as? NSNumber)?.doubleValue { cats[i]["presu"] = max(0, p) }
+            } else {
+                guard !n.isEmpty else { return }
+                if estricto, cats.count >= 30 { throw Rechazo("Como mucho 30 categorías.") }
+                let nueva: [String: Any] = ["id": cid, "n": n, "presu": max(0, (c["presu"] as? NSNumber)?.doubleValue ?? 0)]
+                cats.insert(nueva, at: cats.firstIndex(where: { idDe($0) == "otros" }) ?? cats.count)
+            }
+            e["cats"] = cats
+        case "cat.borra":
+            // lo suyo pasa a Otros (o a la última que quede) y sus reglas se van: lo mismo que la web y clean() del servidor
+            var cats = lista(e["cats"])
+            guard cats.contains(where: { idDe($0) == id }) else { return }
+            if cats.count <= 1 {
+                if estricto { throw Rechazo("Tiene que quedar al menos una categoría.") }
+                return
+            }
+            cats = cats.filter { idDe($0) != id }
+            let destino = cats.contains(where: { idDe($0) == "otros" }) ? "otros" : (idDe(cats[cats.count - 1]) ?? "otros")
+            for i in gastos.indices where (gastos[i]["cat"] as? String) == id { gastos[i]["cat"] = destino }
+            var ingresos = lista(e["ingresos"])
+            for i in ingresos.indices where (ingresos[i]["cat"] as? String) == id { ingresos[i]["cat"] = destino }
+            e["cats"] = cats
+            e["gastos"] = gastos
+            e["ingresos"] = ingresos
+            e["reglas"] = lista(e["reglas"]).filter { ($0["cat"] as? String) != id }
         default:
             // reglas de categoría y recurrentes (Compartido/OperacionesGastos.swift)
             if try ReglasGastos.aplica(op, &e, estricto: estricto) { return }

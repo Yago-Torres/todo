@@ -507,6 +507,34 @@ private struct CategoriasGastos: View {
                     fila(c)
                 }
             }
+            if editando { FilaNuevaCategoria { aviso = $0 } }
+            if let iv = r.inversion, iv.presu > 0 || (iv.aportado ?? 0) > 0, !editando {
+                let ap = iv.aportado ?? 0
+                Button { Navegador.shared.abre("/inversiones.html") } label: {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: Tema.Espacio.s) {
+                            Circle().fill(Tema.acento).frame(width: 8, height: 8)
+                            Text("Inversión").font(Tema.fuente(.texto)).foregroundStyle(Tema.texto)
+                            Spacer()
+                            HStack(spacing: 0) {
+                                Text(Eur.texto(ap)).foregroundStyle(Tema.texto)
+                                if iv.presu > 0 { Text(" / \(Eur.entero(iv.presu))").foregroundStyle(Tema.suave) }
+                            }
+                            .font(Tema.fuente(.texto)).monospacedDigit()
+                        }
+                        if iv.presu > 0 {
+                            BarraPresupuesto(valor: ap, maximo: iv.presu, ritmo: nil, color: Tema.acento).frame(height: 6)
+                        }
+                        Text(iv.aportado == nil ? "Previsto para invertir este ciclo."
+                             : ap >= iv.presu ? "Invertido este ciclo (de Inversiones)." : "Te quedan \(Eur.texto(iv.presu - ap)) por invertir este ciclo.")
+                            .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
+                    }
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(EstiloHundir())
+                .accessibilityHint("Abre Inversiones")
+            }
             if r.aparte > 0 && !editando {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
@@ -580,20 +608,28 @@ private struct FilaPresupuesto: View {
     let alError: (String?) -> Void
     @State private var datos = DatosGastos.shared
     @State private var texto: String
+    @State private var nombre: String
+    @State private var confirmaQuitar = false
     @FocusState private var foco: Bool
+    @FocusState private var focoNombre: Bool
 
     init(c: ResumenGastos.Categoria, color: Color, alError: @escaping (String?) -> Void) {
         self.c = c
         self.color = color
         self.alError = alError
         _texto = State(initialValue: c.presu > 0 ? Eur.campo(c.presu) : "")
+        _nombre = State(initialValue: c.n)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: Tema.Espacio.s) {
                 Circle().fill(color).frame(width: 8, height: 8)
-                Text(c.n).font(Tema.fuente(.texto)).foregroundStyle(Tema.texto)
+                TextField("Nombre", text: $nombre)
+                    .focused($focoNombre)
+                    .font(Tema.fuente(.texto)).foregroundStyle(Tema.texto)
+                    .submitLabel(.done)
+                    .accessibilityLabel("Nombre de la categoría \(c.n)")
                 Spacer()
                 TextField(c.sugerido > 0 ? Eur.campo(c.sugerido) : "sin límite", text: $texto)
                     .keyboardType(.decimalPad)
@@ -604,6 +640,11 @@ private struct FilaPresupuesto: View {
                     .frame(width: 120)
                     .background(Tema.carta2, in: RoundedRectangle(cornerRadius: Tema.Radio.boton, style: .continuous))
                     .accessibilityLabel("Presupuesto de \(c.n) por ciclo")
+                Button { confirmaQuitar = true } label: {
+                    Image(systemName: "xmark.circle.fill").font(.system(size: 18)).foregroundStyle(Tema.tenue)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Quitar la categoría \(c.n)")
             }
             if !c.por.isEmpty {
                 Text(c.sugerido > 0 ? "Sugerido \(Eur.entero(c.sugerido)): \(c.por)" : c.por)
@@ -612,6 +653,29 @@ private struct FilaPresupuesto: View {
         }
         .onChange(of: foco) { _, ahora in
             if !ahora { guarda() }
+        }
+        .onChange(of: focoNombre) { _, ahora in
+            if !ahora { renombra() }
+        }
+        .confirmationDialog("¿Quitar «\(c.n)»?", isPresented: $confirmaQuitar, titleVisibility: .visible) {
+            Button("Quitar", role: .destructive) {
+                Task {
+                    do { try await datos.quitaCategoria(c.id); Haptica.shared.toca(.marcar); alError(nil) }
+                    catch { Haptica.shared.toca(.error); alError(DatosGastos.mensaje(error)) }
+                }
+            }
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            Text("Sus movimientos pasan a Otros y las reglas que mandaban aquí se borran.")
+        }
+    }
+
+    private func renombra() {
+        let n = nombre.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !n.isEmpty, n != c.n else { nombre = c.n; return }
+        Task {
+            do { try await datos.ponCategoria(id: c.id, nombre: n); Haptica.shared.toca(.marcar); alError(nil) }
+            catch { Haptica.shared.toca(.error); nombre = c.n; alError(DatosGastos.mensaje(error)) }
         }
     }
 
@@ -626,6 +690,54 @@ private struct FilaPresupuesto: View {
             } catch {
                 Haptica.shared.toca(.error)
                 texto = c.presu > 0 ? Eur.campo(c.presu) : ""
+                alError(DatosGastos.mensaje(error))
+            }
+        }
+    }
+}
+
+/// La fila de abajo en «Presupuestos»: nombre y límite de una categoría nueva.
+private struct FilaNuevaCategoria: View {
+    let alError: (String?) -> Void
+    @State private var datos = DatosGastos.shared
+    @State private var nombre = ""
+    @State private var presu = ""
+
+    var body: some View {
+        HStack(spacing: Tema.Espacio.s) {
+            Image(systemName: "plus.circle").foregroundStyle(Tema.acento)
+            TextField("Categoría nueva", text: $nombre)
+                .font(Tema.fuente(.texto))
+                .submitLabel(.done)
+                .onSubmit(crea)
+            TextField("sin límite", text: $presu)
+                .keyboardType(.decimalPad)
+                .multilineTextAlignment(.trailing)
+                .font(Tema.fuente(.texto)).monospacedDigit()
+                .padding(.horizontal, Tema.Espacio.m).padding(.vertical, 8)
+                .frame(width: 100)
+                .background(Tema.carta2, in: RoundedRectangle(cornerRadius: Tema.Radio.boton, style: .continuous))
+                .accessibilityLabel("Presupuesto de la categoría nueva")
+            Button("Añadir", action: crea)
+                .font(Tema.fuente(.pequeno, peso: .semibold))
+                .foregroundStyle(Tema.acento)
+                .disabled(nombre.trimmingCharacters(in: .whitespaces).isEmpty)
+        }
+        .padding(.top, 4)
+    }
+
+    private func crea() {
+        let n = nombre.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !n.isEmpty else { return }
+        let p = Eur.lee(presu)
+        Task {
+            do {
+                try await datos.ponCategoria(id: nil, nombre: n, presu: p)
+                Haptica.shared.toca(.marcar)
+                nombre = ""; presu = ""
+                alError(nil)
+            } catch {
+                Haptica.shared.toca(.error)
                 alError(DatosGastos.mensaje(error))
             }
         }
