@@ -427,6 +427,11 @@ proyección): Tom solo pinta `GET /api/inversiones`, así que la web y el iPhone
   avisos locales (prefijo `inv.`) el día de cada plan a las 19:00 y el domingo a las 11:30 (la review); se rehacen en cada
   carga con red y respetan el interruptor de avisos. Las alertas no se saben de antemano: llegan por el push de la web o
   Telegram (`aviso.py` en la Pi). `LeccionInvCarta`: la lección de la última review, arriba de Cartera.
+- `MercadoInversiones` (19/11): pestaña Mercado (el informe del sábado, `/api/mercado`, con «Otras» semanas y lo que viene),
+  `NoMiresInvCarta`/`NoMiresInvAjuste` (con `informe.mirar` false, Cartera sale borrosa hasta «Ver igualmente»; el ajuste,
+  en Perfil) y `MultasInvCarta` (en Planes: activar, importes, últimas multas y crear el hábito «Aportar»).
+- Calendario: «Mercados» (`RespuestaCal.mercado`) va aparte en `DatosCalendario.mercado` y solo se pinta con el botón de
+  la gráfica (`verMercado`, guardado en `calMercado`); `visibles` es lo que pintan Mes, Semana y Agenda.
 - `/inversiones.html?review=fecha` (el enlace del aviso del domingo) abre esa review (`Navegador.reviewInversiones`).
 
 ## Calendario (`Hoy/Nativo/Calendario/`)
