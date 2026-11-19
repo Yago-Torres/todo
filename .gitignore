@@ -21,7 +21,13 @@ __pycache__/
 *.py[oc]
 .claude/
 
-# inversiones: cartera, precios y reviews son datos
+# inversiones: cartera, precios y reviews son datos (17/11)
 inversiones.json
 precios.json
 reviews-inversiones/
+# calendario, mercado, multas y preguntas: datos (19/11)
+calendario.json
+multas.json
+mercado/
+mercado-eventos.json
+preguntas-inversiones.json

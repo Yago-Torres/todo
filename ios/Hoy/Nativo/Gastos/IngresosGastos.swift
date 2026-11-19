@@ -65,7 +65,7 @@ struct IngresosGastos: View {
     }
 
     private func origen(_ src: String) -> String {
-        ["atajo": "atajo", "applepay": "Apple Pay", "bot": "Telegram", "ticket": "ticket", "banco": "banco", "siri": "Siri"][src] ?? ""
+        ["atajo": "atajo", "applepay": "Apple Pay", "bot": "Telegram", "ticket": "ticket", "banco": "banco", "correo": "correo", "siri": "Siri"][src] ?? ""
     }
 }
 

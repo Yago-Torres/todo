@@ -1077,3 +1077,114 @@ if __name__ == "__main__":
         print(prompt_review(informe(), date.today()))
     else:
         print(__doc__)
+
+
+# ---------- preguntas a Claude (la pestaña «Pregunta» de la web y de Tom) ----------
+# Una pregunta tarda de 20 s a un par de minutos (puede buscar en la web): se guarda «pensando» y se contesta en un hilo;
+# la web y Tom miran la lista cada pocos segundos. Más allá de 100 s Cloudflare cortaría una petición que esperase.
+PREGUNTAS = DATOS.with_name("preguntas-inversiones.json")
+_cerrojo_preguntas = __import__("threading").Lock()
+PREGUNTA = """Eres mi asesor de inversiones de confianza (no un asesor regulado: lo digo yo, no hace falta repetirlo
+más de una vez y en una línea). Tengo {edad} años, empiezo a invertir (broker {broker}, horizonte {horizonte},
+tolerancia {tolerancia}, aporto unos {aportacion} € al mes). Hoy es {hoy}.
+
+Mi cartera ahora:
+{cartera}
+Planes de ahorro: {planes}
+{mirar}
+Lo último de la review del domingo (sobre mi cartera):
+{review}
+
+Lo último del informe de mercado del sábado:
+{mercado}
+
+Lo que te he preguntado antes (para seguir el hilo):
+{previas}
+
+Mi pregunta: {q}
+
+Contesta en español, claro y para alguien que empieza, sin rodeos: primero la respuesta en 1-3 frases, luego el porqué
+con mis números si vienen al caso (cifras en euros con coma decimal). Si necesitas datos de hoy (precios, noticias), búscalos
+en la web y di de dónde salen; si no los encuentras, dilo. Separa **Hecho:** y **Opinión:** cuando mezcles. Nada de
+órdenes de comprar o vender un valor concreto: explica las opciones y sus riesgos. Markdown sencillo, sin HTML,
+máximo unas 350 palabras salvo que pida más."""
+
+
+def preguntas():
+    try:
+        l = json.loads(PREGUNTAS.read_text("utf-8"))
+    except (OSError, ValueError):
+        return []
+    ahora = time.time()
+    for p in l:   # un reinicio a mitad deja una «pensando» huérfana
+        if p.get("estado") == "pensando" and ahora - p.get("t", ahora) > 10 * 60:
+            p.update(estado="error", r="Se cortó mientras pensaba (¿reinicio?). Vuelve a preguntar.")
+    return l
+
+
+def _guarda_pregunta(id_, **cambios):
+    with _cerrojo_preguntas:
+        l = preguntas()
+        for p in l:
+            if p["id"] == id_:
+                p.update(cambios)
+        _escribe(PREGUNTAS, l)
+
+
+def prompt_pregunta(q, hoy=None):
+    hoy = hoy or date.today()
+    inf = informe(hoy)
+    p = inf["perfil"]
+    pos = [x for x in inf["posiciones"] if x["cantidad"] > 0]
+    cartera = "\n".join(f"- {x['nombre']} ({x['simbolo']}, {x['tipo']}): {x['peso']} % · metido {x['coste']:.2f} €"
+                        + (f" · vale {x['valor']:.2f} € ({x['rent']:+.1f} %)" if inf["mirar"] and x.get("valor") is not None and x.get("rent") is not None else "")
+                        for x in pos) or "(vacía)"
+    planes = ", ".join(f"{x['activo']} {x['importe']} €/mes" for x in inf["planes"] if x.get("activo") is not False) or "ninguno"
+    mirar = "" if inf["mirar"] else ("Tengo activo el modo «no mires»: no me cuentes cuánto vale la cartera hoy ni cuánto se ha movido "
+                                     "salvo que te lo pregunte expresamente.\n")
+    review_txt = (review(inf["reviews"][0]) or "")[:2500] if inf["reviews"] else "(todavía no hay)"
+    try:
+        import mercado
+        l = mercado.lista()
+        t = mercado.informe(l[0]) if l else ""
+        merc = "\n".join(re.findall(r"(?ms)^## *(?:1\.|4\.).*?(?=^## *\d+\.|\Z)", t or ""))[:2500] or "(todavía no hay)"
+    except Exception:
+        merc = "(no disponible)"
+    previas = "\n".join(f"P: {x['q']}\nR: {x['r'][:600]}" for x in preguntas()[:3] if x.get("estado") == "lista") or "(ninguna)"
+    return PREGUNTA.format(edad=p["edad"] or "?", broker=p["broker"], horizonte=p["horizonte"] or "?", tolerancia=p["tolerancia"] or "?",
+                           aportacion=p["aportacion"], hoy=hoy.isoformat(), cartera=cartera, planes=planes, mirar=mirar,
+                           review=review_txt, mercado=merc, previas=previas, q=q)
+
+
+def _contesta(id_, q):
+    try:
+        claude = os.environ.get("CLAUDE_BIN", str(Path.home() / ".local/bin/claude"))
+        r = subprocess.run([claude, "-p", "--model", os.environ.get("PREGUNTA_MODEL", "sonnet"),
+                            "--tools", "WebSearch,WebFetch", "--allowedTools", "WebSearch,WebFetch",
+                            "--strict-mcp-config", "--no-session-persistence"],
+                           input=prompt_pregunta(q), capture_output=True, text=True, timeout=5 * 60)
+        if r.returncode or not r.stdout.strip():
+            raise RuntimeError((r.stderr or r.stdout or "sin respuesta")[-300:])
+        _guarda_pregunta(id_, estado="lista", r=r.stdout.strip()[:12000])
+    except Exception as e:
+        _guarda_pregunta(id_, estado="error", r=f"No he podido contestar: {str(e)[:300]}")
+
+
+def pregunta(q):
+    q = " ".join(str(q or "").split())[:1000]
+    if not q:
+        raise ValueError("¿Qué le pregunto?")
+    with _cerrojo_preguntas:
+        l = preguntas()
+        if sum(1 for x in l if x.get("estado") == "pensando") >= 2:
+            raise ValueError("Ya hay dos preguntas pensándose: espera a que acaben")
+        p = {"id": "q" + str(time.time_ns())[-12:], "q": q, "r": "", "estado": "pensando", "t": time.time(),
+             "cuando": datetime.now().isoformat(timespec="minutes")}
+        _escribe(PREGUNTAS, ([p] + l)[:50])
+    __import__("threading").Thread(target=_contesta, args=(p["id"], q), daemon=True).start()
+    return p
+
+
+def borra_pregunta(id_):
+    with _cerrojo_preguntas:
+        _escribe(PREGUNTAS, [x for x in preguntas() if x["id"] != id_])

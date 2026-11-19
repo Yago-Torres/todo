@@ -258,6 +258,47 @@ def entrenos_deseados(estado, hoy):
     return out
 
 
+def carrera_deseada(estado, hoy):
+    """{"carrera:qué:día": evento} del plan de 5k (carrera.py) desde `hoy`: el día de la carrera, los tests y las
+    fases. Van como los entrenos (los pone el plan, no se editan a mano). Solo si el plan está aplicado en este
+    data.json (tiene sus rutinas): la copia de Aitana no lo tiene."""
+    import carrera
+    if not any(r.get("id") == carrera.RUTINA["suave"] for r in estado.get("rutinas") or []) or not carrera.habito_correr(estado):
+        return {}
+    try:
+        inf = carrera.informe(estado, date.fromisoformat(hoy))
+    except Exception:   # un data.json a medias: ya se cuadrará en la próxima pasada
+        return {}
+    pie = "Del plan de carrera (todo.yagotg.dev/carrera.html)"
+    out = {}
+
+    def pon(que, dia, t, nota, fin_dia=""):
+        if dia >= hoy:
+            out[f"carrera:{que}:{dia}"] = {"t": t[:200], "dia": dia, "fin_dia": fin_dia or dia, "cal": "Deporte",
+                                         "nota": (nota + "\n\n" + pie)[:2000]}
+
+    obj, est, proy = inf["objetivo"], inf["estimacion"]["seg"], inf["proyeccion"]
+    pon("dia-d", obj["dia"], f"🏁 Carrera 5k · objetivo {carrera.mmss(obj['seg'])}",
+        f"El 5k objetivo: bajar de {carrera.mmss(obj['seg'])}. Ahora estás en {carrera.mmss(est)} ({inf['estimacion']['fuente']})."
+        + (f" {proy['texto']}." if proy.get("texto") else ""))
+    fase_antes = None
+    for w in inf["semanas"]:
+        lun = date.fromisoformat(w["lunes"])
+        dom = (lun + timedelta(days=6)).isoformat()
+        if w["fase"] != fase_antes and fase_antes is not None:
+            pon(f"fase-{w['fase'].lower()}", w["lunes"], f"🏃 Empieza la fase «{w['fase']}»",
+                {"Específico": "Llegan las series y los tempos: se entrena el ritmo de carrera.",
+                 "Afinar": "Menos volumen y algo de ritmo de carrera: llegar fresco al día D."}.get(w["fase"], ""))
+        fase_antes = w["fase"]
+        if w["test"]:
+            pon(f"test-{w['n']}", w["lunes"], f"⏱ Semana de test de 5k (semana {w['n']})",
+                "El primer día de carrera de esta semana es el test: 5k a tope. Con él se recalculan tus ritmos.", dom)
+        if w["descarga"] and w["estado"] != "pasada" and w["fase"] != "Afinar" and not w["test"]:
+            pon(f"descarga-{w['n']}", w["lunes"], f"🌿 Semana de descarga (semana {w['n']})",
+                "Algo menos de volumen para asimilar las tres semanas de subida. Si fallas semanas, se mueve.", dom)
+    return out
+
+
 def cuadra_entrenos(estado=None, hoy=None):
     """Deja los eventos con `entreno` igual que el plan. Devuelve (creados, cambiados, borrados)."""
     hoy = hoy or date.today().isoformat()
@@ -268,7 +309,7 @@ def cuadra_entrenos(estado=None, hoy=None):
             estado = json.loads(ESTADO.read_text("utf-8"))
         except (OSError, ValueError):
             return 0, 0, 0
-    quiero = entrenos_deseados(estado, hoy)
+    quiero = {**entrenos_deseados(estado, hoy), **carrera_deseada(estado, hoy)}
     encolar, fuera, n_nuevos = [], [], 0
     with _cerrojo:
         evs, quedan = todos(), []
@@ -281,8 +322,8 @@ def cuadra_entrenos(estado=None, hoy=None):
             if d is None:   # quitado del plan (o repetido: el primero ya se llevó su sitio)
                 fuera.append(e)
                 continue
-            if (e["t"], e["nota"], e["cal"]) != (d["t"], d["nota"], d["cal"]):
-                e.update(t=d["t"], nota=d["nota"], cal=d["cal"], sincro=estado_inicial())
+            if (e["t"], e["nota"], e["cal"], e["fin_dia"]) != (d["t"], d["nota"], d["cal"], d.get("fin_dia", e["dia"])):
+                e.update(t=d["t"], nota=d["nota"], cal=d["cal"], fin_dia=d.get("fin_dia", e["dia"]), sincro=estado_inicial())
                 encolar.append(e["id"])
             quedan.append(e)
         for k, d in sorted(quiero.items()):

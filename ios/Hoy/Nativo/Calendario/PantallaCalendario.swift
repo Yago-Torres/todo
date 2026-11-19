@@ -264,7 +264,7 @@ struct PantallaCalendario: View {
     private func abre(_ e: EventoCal) {
         if !e.mercado.isEmpty {   // de «Mercados»: no se edita, se lee
             datos.avisa(e.t + (e.inicio.isEmpty ? "" : " · \(e.inicio)") + (e.nota.isEmpty ? "" : " · \(e.nota)"))
-        } else if e.entreno.isEmpty { hoja = .edita(e) } else { Navegador.shared.abre("/entreno.html") }
+        } else if e.entreno.isEmpty { hoja = .edita(e) } else { Navegador.shared.abre(e.entreno.hasPrefix("carrera:") ? "/carrera.html" : "/entreno.html") }
     }
 
     // MARK: una fila

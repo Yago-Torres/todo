@@ -106,6 +106,12 @@
 
   .fechas { display: flex; gap: 6px; flex-wrap: wrap; }
   .md { line-height: 1.55; overflow-wrap: anywhere; }
+  .pregunta textarea { width: 100%; box-sizing: border-box; font: inherit; padding: .6rem .7rem; border-radius: 10px;
+    border: 1px solid var(--c-borde, #ccc); background: var(--c-fondo2, transparent); color: inherit; resize: vertical; }
+  .sugerencias { display: flex; flex-wrap: wrap; gap: .4rem; margin: .5rem 0; }
+  .qa .q { font-weight: 600; margin: 0 0 .4rem; }
+  .qa .meta { display: flex; justify-content: space-between; align-items: center; gap: .5rem; font-size: .8rem; opacity: .7; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .md h2 { margin: 26px 0 8px; font-size: var(--t-seccion); }
   .md h2:first-child { margin-top: 0; }
   .md h3 { margin: 18px 0 6px; font-size: var(--t-destacado); }
@@ -167,6 +173,7 @@
     <button role="tab" data-v="mercado">Mercado</button>
     <button role="tab" data-v="impuestos">Impuestos</button>
     <button role="tab" data-v="review">Review</button>
+    <button role="tab" data-v="pregunta">Pregunta</button>
     <button role="tab" data-v="perfil">Perfil</button>
   </div>
 
@@ -391,6 +398,21 @@
     </section>
   </section>
 
+  <!-- PREGUNTA -->
+  <section class="vista" id="v-pregunta" hidden>
+    <section class="carta c-carta">
+      <h2>Pregúntale a Claude</h2>
+      <p class="nota-p">Sabe tu cartera, tu perfil, la última review y el informe de mercado, y puede buscar en la web. Tarda de 20 segundos a un par de minutos: puedes irte y volver.</p>
+      <form id="f-pregunta" class="pregunta">
+        <label class="sr" for="q">Tu pregunta</label>
+        <textarea id="q" rows="3" maxlength="1000" placeholder="¿Estoy demasiado concentrado? ¿Qué pasa si sube el BCE los tipos?"></textarea>
+        <div class="sugerencias" id="sugerencias"></div>
+        <button class="c-btn pri" id="b-preguntar">Preguntar</button>
+      </form>
+    </section>
+    <div id="preguntas"></div>
+  </section>
+
   <!-- PERFIL -->
   <section class="vista" id="v-perfil" hidden>
     <section class="carta c-carta">
@@ -464,11 +486,11 @@ $("#toast-btn").onclick = async () => { $("#toast").removeAttribute("data-on"); 
 
 // ---------- pestañas (la elegida va en el #, así un enlace o recargar vuelve a ella) ----------
 function vista(v) {
-  if (!["cartera", "operaciones", "planes", "mercado", "impuestos", "review", "perfil"].includes(v)) v = "cartera";
+  if (!["cartera", "operaciones", "planes", "mercado", "impuestos", "review", "pregunta", "perfil"].includes(v)) v = "cartera";
   document.querySelectorAll("#pestanas button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.v === v)));
   document.querySelectorAll(".vista").forEach(s => s.hidden = s.id !== `v-${v}`);
   history.replaceState(null, "", `${location.pathname}${location.search}#${v}`);
-  if (I) ({cartera: pintaCartera, operaciones: pintaOps, planes: pintaPlanes, mercado: pintaMercado, impuestos: pintaImpuestos, review: pintaReview, perfil: pintaPerfil})[v]();
+  if (I) ({cartera: pintaCartera, operaciones: pintaOps, planes: pintaPlanes, mercado: pintaMercado, impuestos: pintaImpuestos, review: pintaReview, pregunta: pintaPreguntas, perfil: pintaPerfil})[v]();
 }
 $("#pestanas").onclick = e => { const b = e.target.closest("button"); if (b) vista(b.dataset.v); };
 
@@ -756,6 +778,43 @@ function proximoDomingo() {
   const d = new Date(); d.setDate(d.getDate() + ((7 - d.getDay()) % 7 || (d.getHours() >= 11 ? 7 : 0)));
   return `${d.getDate()} ${MESES[d.getMonth()]}`;
 }
+// ---------- pregunta a Claude (se contesta en el servidor; aquí se mira cada 3 s mientras piensa) ----------
+const SUGERENCIAS = ["¿Estoy demasiado concentrado?", "¿Qué pasa con mi cartera si la bolsa cae un 30 %?",
+  "¿Me conviene un plan de ahorro en un ETF mundial?", "Explícame cómo tributan mis ganancias"];
+let relojPreguntas = null;
+async function pintaPreguntas() {
+  clearTimeout(relojPreguntas);
+  if ($("#sugerencias").childElementCount === 0)
+    $("#sugerencias").replaceChildren(...SUGERENCIAS.map(s => { const b = el("button", "c-btn mini", s); b.type = "button"; b.onclick = () => { $("#q").value = s; $("#q").focus(); }; return b; }));
+  let l = [];
+  try { l = (await api("/api/inversiones/preguntas")).preguntas; } catch (e) { $("#preguntas").replaceChildren(el("p", "vacio", `No se pudo cargar: ${e.message}`)); return; }
+  $("#preguntas").replaceChildren(...l.map(p => {
+    const c = el("section", "carta c-carta qa");
+    const meta = el("div", "meta");
+    meta.append(el("span", null, p.cuando.replace("T", " · ")));
+    const x = el("button", "c-btn mini", "Borrar"); x.type = "button";
+    x.onclick = async () => { await api("/api/inversiones/pregunta/borra", {id: p.id}); pintaPreguntas(); };
+    meta.append(x);
+    const r = el("article", "md");
+    if (p.estado === "pensando") r.append(el("p", "vacio", "Pensando… (puede buscar en la web)"));
+    else if (p.estado === "error") r.append(el("p", "vacio", p.r));
+    else md(r, p.r);
+    c.append(el("p", "q", p.q), r, meta);
+    return c;
+  }));
+  if (l.some(p => p.estado === "pensando") && location.hash === "#pregunta") relojPreguntas = setTimeout(pintaPreguntas, 3000);
+}
+$("#f-pregunta").onsubmit = async e => {
+  e.preventDefault();
+  const q = $("#q").value.trim();
+  if (!q) return;
+  $("#b-preguntar").disabled = true;
+  try { await api("/api/inversiones/pregunta", {q}); $("#q").value = ""; }
+  catch (err) { toast(err.message); }
+  $("#b-preguntar").disabled = false;
+  pintaPreguntas();
+};
+
 async function pintaReview() {
   const fechas = I.reviews;
   const pedida = new URLSearchParams(location.search).get("review");

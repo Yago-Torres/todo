@@ -316,7 +316,7 @@ struct Movimiento: Decodable, Identifiable, Hashable {
 
     /// De dónde vino el apunte (lo que la web llama ORIGEN).
     var origen: String {
-        ["atajo": "atajo", "applepay": "Apple Pay", "bot": "Telegram", "ticket": "ticket", "banco": "banco",
+        ["atajo": "atajo", "applepay": "Apple Pay", "bot": "Telegram", "ticket": "ticket", "banco": "banco", "correo": "correo",
          "siri": "Siri"][src] ?? ""
     }
 }

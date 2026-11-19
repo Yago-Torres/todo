@@ -929,6 +929,18 @@ def test_rachas():
     assert clean(c) == c
 
 
+def test_carrera_calendario():
+    import agenda
+    import carrera
+    s = {"habits": [{"id": "c", "n": "Correr"}], "rutinas": [{"id": carrera.RUTINA["suave"], "hab": "c", "n": "x", "bloques": []}],
+         "plan": {}, "log": {}, "sesion": {}, "actividad": {}}
+    d = agenda.carrera_deseada(s, "2026-11-19")
+    assert f"carrera:dia-d:{carrera.CARRERA.isoformat()}" in d
+    assert all(v["dia"] >= "2026-11-19" and v["cal"] == "Deporte" for v in d.values())
+    assert not any(k.startswith("carrera:descarga") and v["dia"] >= "2027-03-01" for k, v in d.items())
+    assert agenda.carrera_deseada({**s, "rutinas": []}, "2026-11-19") == {}   # sin el plan aplicado (Aitana), nada
+
+
 def test_multas():
     """Cada falta multa `fallo`; romper una racha de `racha_min` o más, `racha` además; el comodín salva; «aportar» no multa."""
     H = [{"id": "w", "n": "Agua", "goal": 7}, {"id": "aportar", "n": "Aportar", "goal": 1, "cada": 5}]
@@ -1221,4 +1233,5 @@ if __name__ == "__main__":
     test_aparato()
     test_inversiones()
     test_multas()
+    test_carrera_calendario()
     print("ok")

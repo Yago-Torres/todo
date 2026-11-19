@@ -2690,6 +2690,28 @@ def get_mercado_dia(fecha: str, todo_sesion: str = Cookie(None), authorization: 
     return {"fecha": fecha, "texto": texto}
 
 
+@app.get("/api/inversiones/preguntas")
+def inv_preguntas(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    return {"preguntas": inversiones.preguntas()}
+
+
+@app.post("/api/inversiones/pregunta")
+def inv_pregunta(d: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    try:
+        return inversiones.pregunta(d.get("q"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/inversiones/pregunta/borra")
+def inv_pregunta_borra(d: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    inversiones.borra_pregunta(str(d.get("id") or ""))
+    return {"ok": True}
+
+
 @app.get("/api/inversiones/review/{fecha}")
 def inv_review(fecha: str, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
     exige(todo_sesion, authorization)

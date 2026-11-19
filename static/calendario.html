@@ -281,7 +281,7 @@ function chip(x, d) {
     c.style.setProperty("--c", color(x.cal));
     if (!x.inicio) c.classList.add("todo-dia");
     else if (d === x.dia) c.append(el("span", "h", x.inicio));
-    c.title = x.t + (x.lugar ? ` · ${x.lugar}` : "") + (x.entreno ? " · del plan de Entreno" : "");
+    c.title = x.t + (x.lugar ? ` · ${x.lugar}` : "") + (x.entreno ? (x.entreno.startsWith("carrera:") ? " · del plan de carrera" : " · del plan de Entreno") : "");
   }
   c.append(el("span", null, x.t));
   c.onclick = ev => { ev.stopPropagation(); ficha(x); };
@@ -493,7 +493,7 @@ f.repite.onchange = () => ponTipo(tipo);
 f.dia.onchange = () => { if (!f.fin_dia.value || f.fin_dia.value < f.dia.value) f.fin_dia.value = f.dia.value; };
 
 function ficha(x) {
-  if (x.entreno) { location.href = "/entreno.html"; return; }
+  if (x.entreno) { location.href = x.entreno.startsWith("carrera:") ? "/carrera.html" : "/entreno.html"; return; }
   if (x.mercado) { toast(x.t + (x.inicio ? ` · ${x.inicio}` : "") + (x.nota ? ` · ${x.nota}` : "")); return; }
   F = x;
   if (!f.cal.options.length) C.calendarios.forEach(c => f.cal.append(Object.assign(document.createElement("option"), {value: c.id, textContent: c.n})));

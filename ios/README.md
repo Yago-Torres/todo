@@ -432,6 +432,9 @@ proyección): Tom solo pinta `GET /api/inversiones`, así que la web y el iPhone
   en Perfil) y `MultasInvCarta` (en Planes: activar, importes, últimas multas y crear el hábito «Aportar»).
 - Calendario: «Mercados» (`RespuestaCal.mercado`) va aparte en `DatosCalendario.mercado` y solo se pinta con el botón de
   la gráfica (`verMercado`, guardado en `calMercado`); `visibles` es lo que pintan Mes, Semana y Agenda.
+- `PreguntaInversiones` (19/11): pestaña Pregunta. `POST /api/inversiones/pregunta` y mira `/api/inversiones/preguntas`
+  cada 3 s mientras alguna está «pensando» (el servidor contesta en un hilo). Los entrenos con `entreno` «carrera:…»
+  (el plan de 5k en el calendario) abren carrera.html en vez de Entreno. Gastos: origen «correo».
 - `/inversiones.html?review=fecha` (el enlace del aviso del domingo) abre esa review (`Navegador.reviewInversiones`).
 
 ## Calendario (`Hoy/Nativo/Calendario/`)
