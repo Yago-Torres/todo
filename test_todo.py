@@ -929,6 +929,26 @@ def test_rachas():
     assert clean(c) == c
 
 
+def test_multas():
+    """Cada falta multa `fallo`; romper una racha de `racha_min` o más, `racha` además; el comodín salva; «aportar» no multa."""
+    H = [{"id": "w", "n": "Agua", "goal": 7}, {"id": "aportar", "n": "Aportar", "goal": 1, "cada": 5}]
+    s = clean({"habits": H, "comodines": {"al_mes": 0}, "log": {f"2026-11-0{i}": ["w"] for i in range(1, 5)}})
+    conf = {"activo": True, "fallo": 1, "racha": 5, "racha_min": 3, "desde": "2026-11-01"}
+    m = main.multas(s, conf, "2026-11-08")
+    # el 5 rompe la racha de 4 (1 + 5), el 6 y el 7 son faltas sueltas (1 cada una)
+    assert [(x["dia"], x["euros"]) for x in m] == [("2026-11-05", 6), ("2026-11-06", 1), ("2026-11-07", 1)], m
+    assert m[0]["motivo"] == "rompe una racha de 4 días" and all(x["id"] == "w" for x in m)
+    assert main.multas(s, {**conf, "desde": "2026-11-07"}, "2026-11-08") == [m[2]]
+    assert main.multas(s, {**conf, "activo": False}, "2026-11-08") == []
+    con_comodin = clean({**s, "comodines": {"al_mes": 2}})
+    assert [x["dia"] for x in main.multas(con_comodin, conf, "2026-11-08")][0] != "2026-11-05"
+    # los aportes: «aportar» los días con compra, y fuera de los que ya no
+    s["log"]["2026-10-01"] = ["aportar"]
+    assert main.aportes_en_log(s, [{"fecha": "2026-11-02", "tipo": "compra"}, {"fecha": "2026-11-03", "tipo": "venta"}])
+    assert "aportar" in s["log"]["2026-11-02"] and "w" in s["log"]["2026-11-02"] and "aportar" not in s["log"].get("2026-10-01", [])
+    assert not main.aportes_en_log(s, [{"fecha": "2026-11-02", "tipo": "compra"}])
+
+
 def test_descansos_api():
     import tempfile
     from pathlib import Path
@@ -1200,4 +1220,5 @@ if __name__ == "__main__":
     test_escalada()
     test_aparato()
     test_inversiones()
+    test_multas()
     print("ok")

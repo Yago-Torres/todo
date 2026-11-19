@@ -58,6 +58,18 @@ struct PantallaCalendario: View {
                         .padding(.horizontal, Tema.Espacio.m).frame(height: 32)
                         .background(Tema.carta2, in: Capsule())
                 }
+                Button {
+                    Haptica.shared.toca(.marcar)
+                    withAnimation(Tema.Muelle.pantalla) { datos.verMercado.toggle() }
+                } label: {
+                    Image(systemName: "chart.line.uptrend.xyaxis")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(datos.verMercado ? Tema.acentoTexto : Tema.suave)
+                        .frame(width: 40, height: 40)
+                        .background(datos.verMercado ? Color(hex: "#64748B") : Tema.carta2, in: Circle())
+                }
+                .accessibilityLabel(datos.verMercado ? "Ocultar Mercados" : "Ver Mercados")
+                .accessibilityHint("BCE, Fed y resultados de lo que tienes")
                 Menu {
                     ForEach(TipoElementoCal.allCases) { t in
                         Button { nuevo(t) } label: {
@@ -250,7 +262,9 @@ struct PantallaCalendario: View {
 
     /// Los entrenos los pone el plan: se cambian en Entreno y el calendario los sigue solo.
     private func abre(_ e: EventoCal) {
-        if e.entreno.isEmpty { hoja = .edita(e) } else { Navegador.shared.abre("/entreno.html") }
+        if !e.mercado.isEmpty {   // de «Mercados»: no se edita, se lee
+            datos.avisa(e.t + (e.inicio.isEmpty ? "" : " · \(e.inicio)") + (e.nota.isEmpty ? "" : " · \(e.nota)"))
+        } else if e.entreno.isEmpty { hoja = .edita(e) } else { Navegador.shared.abre("/entreno.html") }
     }
 
     // MARK: una fila
@@ -292,7 +306,9 @@ struct PantallaCalendario: View {
             }
             .buttonStyle(.plain)
             .contextMenu {
-                if e.entreno.isEmpty {
+                if !e.mercado.isEmpty {
+                    Button { abre(e) } label: { Label("Ver", systemImage: "chart.line.uptrend.xyaxis") }
+                } else if e.entreno.isEmpty {
                     Button { hoja = .edita(e) } label: { Label("Cambiar", systemImage: "pencil") }
                     Button(role: .destructive) { Task { await datos.borraEvento(e) } } label: {
                         Label(e.repite.isEmpty ? "Borrar" : "Borrar la serie", systemImage: "trash")

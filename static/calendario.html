@@ -138,6 +138,7 @@
     <div class="c-seg" id="vistas" role="group" aria-label="Vista">
       <button type="button" data-v="mes">Mes</button><button type="button" data-v="semana">Semana</button><button type="button" data-v="agenda">Agenda</button>
     </div>
+    <button class="c-btn mini" type="button" id="b-mercado" aria-pressed="false" title="BCE, Fed y resultados de lo que tienes (K)">Mercados</button>
     <button class="c-btn pri" type="button" id="b-nuevo" title="Nuevo (N)">+ Nuevo</button>
   </div>
 
@@ -242,6 +243,8 @@ async function cargar() {
   const [d, h] = rangoVista();
   try {
     C = await api(`/api/calendario?desde=${d}&hasta=${h}`);
+    // «Mercados» (mercado.py) va aparte y solo se mezcla con el interruptor encendido
+    if (verMercado) C.eventos = [...C.eventos, ...(C.mercado || [])];
     HOY = C.hoy;
     puerta(false);
     const malos = C.eventos.filter(e => Object.values(e.sincro || {}).some(v => v.startsWith("error")));
@@ -251,7 +254,12 @@ async function cargar() {
     if (e.message !== "401") $("#estado").textContent = "Sin conexión";
   }
 }
-const color = id => (C.calendarios.find(c => c.id === id) || C.calendarios[0]).color;
+const MERCADO = "#64748B";
+let verMercado = lee("cal-mercado") === "1";
+const color = id => id === "mercado" ? MERCADO : (C.calendarios.find(c => c.id === id) || C.calendarios[0]).color;
+function pintaBotonMercado() { $("#b-mercado").setAttribute("aria-pressed", String(verMercado)); $("#b-mercado").classList.toggle("pri", verMercado); }
+$("#b-mercado").onclick = () => { verMercado = !verMercado; apunta("cal-mercado", verMercado ? "1" : "0"); pintaBotonMercado(); cargar(); };
+pintaBotonMercado();
 const del_dia = d => [
   ...C.eventos.filter(e => e.dia <= d && d <= e.fin_dia).sort((a, b) => (!!a.inicio - !!b.inicio) || (a.inicio || "").localeCompare(b.inicio || "")),
   ...C.tareas.filter(t => t.due === d).map(t => ({...t, tarea: true})).sort((a, b) => (a.hora || "99").localeCompare(b.hora || "99")),
@@ -278,7 +286,7 @@ function chip(x, d) {
   c.append(el("span", null, x.t));
   c.onclick = ev => { ev.stopPropagation(); ficha(x); };
   // los entrenos los pone el plan: se mueven en Entreno y aquí se ponen al día solos
-  c.draggable = !x.entreno;
+  c.draggable = !x.entreno && !x.mercado;
   c.ondragstart = ev => { arrastre = {x, desde: d}; ev.dataTransfer.effectAllowed = "move"; ev.dataTransfer.setData("text/plain", x.id); c.classList.add("arrastrando"); };
   c.ondragend = () => { c.classList.remove("arrastrando"); arrastre = null; };
   return c;
@@ -486,6 +494,7 @@ f.dia.onchange = () => { if (!f.fin_dia.value || f.fin_dia.value < f.dia.value) 
 
 function ficha(x) {
   if (x.entreno) { location.href = "/entreno.html"; return; }
+  if (x.mercado) { toast(x.t + (x.inicio ? ` · ${x.inicio}` : "") + (x.nota ? ` · ${x.nota}` : "")); return; }
   F = x;
   if (!f.cal.options.length) C.calendarios.forEach(c => f.cal.append(Object.assign(document.createElement("option"), {value: c.id, textContent: c.n})));
   f.reset();
@@ -570,6 +579,7 @@ addEventListener("keydown", e => {
   else if (k === "t") $("#b-hoy").click();
   else if (e.key === "ArrowLeft") paso(-1);
   else if (e.key === "ArrowRight") paso(1);
+  else if (k === "k") $("#b-mercado").click();
   else if (k === "m" || k === "s" || k === "a") { vista = {m: "mes", s: "semana", a: "agenda"}[k]; apunta("cal-vista", vista); cargar(); }
 });
 $("#f-clave").onsubmit = async e => {

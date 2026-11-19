@@ -21,6 +21,8 @@ struct PerfilInversiones: View {
         var i = perfil.intereses ?? [:]
         if let n = DineroES.numero(intereses), n > 0 { i[ejercicio] = n } else { i[ejercicio] = nil }
         x.intereses = i
+        // esto se guarda aparte, al tocarlo (NoMiresInvAjuste, MultasInvCarta): no cuenta como «sin guardar»
+        x.noMires = perfil.noMires; x.diaMirar = perfil.diaMirar; x.multas = perfil.multas
         return x
     }
     @State private var guardando = false
@@ -31,6 +33,7 @@ struct PerfilInversiones: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tema.Espacio.l) {
+            NoMiresInvAjuste(perfil: perfil)
             Text("Lo lee la review del domingo. Lo que dejes vacío lo supondrá y te lo preguntará.")
                 .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
                 .fixedSize(horizontal: false, vertical: true)

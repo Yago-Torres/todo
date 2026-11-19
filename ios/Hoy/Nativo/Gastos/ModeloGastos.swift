@@ -162,6 +162,10 @@ struct ResumenGastos: Decodable {
         var presu = 0.0
         var aportado: Double?
         var cuenta = 0.0
+        var multas: Double?          // lo que suman los hábitos sin hacer (multas.json de todo), ya dentro de presu
+        var nMultas: Int?
+
+        enum CodingKeys: String, CodingKey { case presu, aportado, cuenta, multas, nMultas = "n_multas" }
     }
 
     struct Hucha: Decodable, Hashable {

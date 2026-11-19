@@ -81,7 +81,21 @@
   .lista-pl .op { grid-template-columns: minmax(0, 1fr) auto auto; }
   .lista-pl .op .sub { display: block; font-size: var(--t-pequeno); color: var(--suave); }
   .presu-inv b { font-size: var(--t-seccion); font-variant-numeric: tabular-nums; }
+  /* siete pestañas no caben en un móvil: se desplazan de lado en vez de ensanchar la página */
+  #pestanas { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  #pestanas::-webkit-scrollbar { display: none; }
+  #pestanas button { flex: 0 0 auto; }
+  .md, .md li { min-width: 0; overflow-wrap: anywhere; }
   .leccion { border-left: 3px solid var(--acento); }
+  /* «no mires»: fuera del día de mirar, las cifras de Cartera salen borrosas hasta que pides verlas */
+  body[data-nomires] #v-cartera .kpis, body[data-nomires] #v-cartera .c-evol, body[data-nomires] #v-cartera .dos { filter: blur(9px); pointer-events: none; user-select: none; }
+  body[data-nomires] #estado { visibility: hidden; }
+  .nomires { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+  .interruptor { display: flex; align-items: center; gap: 10px; font-size: var(--t-texto); color: var(--texto); }
+  .interruptor input { width: 20px; height: 20px; accent-color: var(--acento); }
+  .eventos-m { list-style: none; padding: 0; margin: 0; }
+  .eventos-m li { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 10px; padding: 7px 0; border-top: 1px solid var(--linea); font-size: var(--t-texto); }
+  .eventos-m time { color: var(--suave); font-size: var(--t-pequeno); font-variant-numeric: tabular-nums; }
   .leccion h2 { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
   .leccion h2 small { font-weight: 400; font-size: var(--t-pequeno); color: var(--suave); }
   .op time { font-size: var(--t-pequeno); color: var(--suave); font-variant-numeric: tabular-nums; }
@@ -150,6 +164,7 @@
     <button role="tab" data-v="cartera">Cartera</button>
     <button role="tab" data-v="operaciones">Operaciones</button>
     <button role="tab" data-v="planes">Planes</button>
+    <button role="tab" data-v="mercado">Mercado</button>
     <button role="tab" data-v="impuestos">Impuestos</button>
     <button role="tab" data-v="review">Review</button>
     <button role="tab" data-v="perfil">Perfil</button>
@@ -164,12 +179,17 @@
       <div class="kpi c-carta"><small>Metido (neto)</small><b id="k-met">—</b><small id="k-met-s"></small></div>
     </div>
 
+    <section class="carta c-carta nomires" id="c-nomires" hidden>
+      <div><h2 style="margin:0">Hoy no toca mirar</h2><p class="nota-p" id="nomires-txt"></p></div>
+      <button class="c-btn" id="b-ver">Ver igualmente</button>
+    </section>
+
     <section class="carta c-carta leccion" id="c-leccion" hidden>
       <h2>Lección de la semana <small id="leccion-f"></small></h2>
       <div class="md" id="leccion"></div>
     </section>
 
-    <section class="carta c-carta">
+    <section class="carta c-carta c-evol">
       <div class="cab">
         <h2>Evolución</h2>
         <div class="c-seg rangos" id="rangos">
@@ -295,9 +315,35 @@
     </section>
 
     <section class="carta c-carta">
+      <h2>Multas por hábitos</h2>
+      <p class="nota-p" style="margin-top:0">Cada hábito que te saltas suma a lo que toca invertir este ciclo (en Gastos, encima del presupuesto de inversión); romper una racha, más. Un comodín que la salva no multa.</p>
+      <form class="rejilla" id="f-multas" style="margin-top:10px">
+        <label class="ancho interruptor"><input type="checkbox" name="activo"> Activadas</label>
+        <label>Por hábito sin hacer (€)<input class="c-campo" name="fallo" inputmode="decimal" placeholder="1"></label>
+        <label>Por romper una racha (€ más)<input class="c-campo" name="racha" inputmode="decimal" placeholder="5"></label>
+        <label>Racha desde (días)<input class="c-campo" name="racha_min" type="number" min="1" placeholder="3"></label>
+        <div class="botones"><button class="c-btn pri" type="submit">Guardar</button></div>
+      </form>
+      <div id="multas" style="margin-top:12px"></div>
+    </section>
+
+    <section class="carta c-carta">
       <h2>Avisos</h2>
       <p class="nota-p" style="margin-top:0">Planes, alertas, la review del domingo y la renta llegan como notificación de la app. Si no tiene los avisos activados en ningún sitio, llegan por Telegram. En Tom, los días de los planes se avisan solos.</p>
       <div id="avisos" style="margin-top:10px"></div>
+    </section>
+  </section>
+
+  <!-- MERCADO: el informe del sábado (mercado.py) y las fechas que vienen -->
+  <section class="vista" id="v-mercado" hidden>
+    <section class="carta c-carta">
+      <div class="cab"><h2 id="t-mercado">Informe de mercado</h2><select class="c-campo" id="mercado-f" aria-label="Informe de otra semana" style="width:auto"></select></div>
+      <div class="md" id="mercado"><p class="vacio">Cargando…</p></div>
+    </section>
+    <section class="carta c-carta">
+      <h2>Lo que viene</h2>
+      <p class="nota-p" style="margin-top:0">También en el calendario, en «Mercados» (con su interruptor: por defecto no se ve).</p>
+      <ul class="eventos-m" id="eventos-m"></ul>
     </section>
   </section>
 
@@ -348,6 +394,15 @@
   <!-- PERFIL -->
   <section class="vista" id="v-perfil" hidden>
     <section class="carta c-carta">
+      <h2>Modo «no mires»</h2>
+      <p class="nota-p" style="margin-top:0">Mirar la cartera a diario solo da ganas de tocarla. Con esto, el valor y lo que sube o baja cada día solo se ven el día que elijas (las cifras salen borrosas el resto, con «Ver igualmente»), y las alertas de caída no avisan.</p>
+      <form class="rejilla" id="f-nomires" style="margin-top:10px">
+        <label class="interruptor"><input type="checkbox" name="no_mires"> Activado</label>
+        <label>Día de mirar<select class="c-campo" name="dia_mirar"><option value="0">Lunes</option><option value="1">Martes</option><option value="2">Miércoles</option><option value="3">Jueves</option><option value="4">Viernes</option><option value="5">Sábado</option><option value="6">Domingo</option></select></label>
+      </form>
+    </section>
+
+    <section class="carta c-carta">
       <h2>Tu contexto</h2>
       <p class="nota-p" style="margin:0 0 12px">Lo lee la review del domingo. Lo que dejes vacío lo supondrá y te lo preguntará.</p>
       <form class="rejilla" id="f-perfil">
@@ -374,7 +429,7 @@
 <script>
 const $ = s => document.querySelector(s);
 const el = (t, cls, txt) => { const e = document.createElement(t); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
-let I = null, rango = 0, abierta = null, deshacer = null, reloj, reviewVista = null;
+let I = null, rango = 0, abierta = null, deshacer = null, reloj, reviewVista = null, verAhora = false, M = null;
 
 const eur = (n, d = 2) => n == null ? "—" : n.toLocaleString("es-ES", {style: "currency", currency: "EUR", minimumFractionDigits: d, maximumFractionDigits: d});
 const signo = (n, f = eur) => n == null ? "—" : (n > 0 ? "+" : "") + f(n);
@@ -409,11 +464,11 @@ $("#toast-btn").onclick = async () => { $("#toast").removeAttribute("data-on"); 
 
 // ---------- pestañas (la elegida va en el #, así un enlace o recargar vuelve a ella) ----------
 function vista(v) {
-  if (!["cartera", "operaciones", "planes", "impuestos", "review", "perfil"].includes(v)) v = "cartera";
+  if (!["cartera", "operaciones", "planes", "mercado", "impuestos", "review", "perfil"].includes(v)) v = "cartera";
   document.querySelectorAll("#pestanas button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.v === v)));
   document.querySelectorAll(".vista").forEach(s => s.hidden = s.id !== `v-${v}`);
   history.replaceState(null, "", `${location.pathname}${location.search}#${v}`);
-  if (I) ({cartera: pintaCartera, operaciones: pintaOps, planes: pintaPlanes, impuestos: pintaImpuestos, review: pintaReview, perfil: pintaPerfil})[v]();
+  if (I) ({cartera: pintaCartera, operaciones: pintaOps, planes: pintaPlanes, mercado: pintaMercado, impuestos: pintaImpuestos, review: pintaReview, perfil: pintaPerfil})[v]();
 }
 $("#pestanas").onclick = e => { const b = e.target.closest("button"); if (b) vista(b.dataset.v); };
 
@@ -460,6 +515,11 @@ function pintaCartera() {
   $("#k-met").textContent = eur(metido);
   $("#k-met-s").textContent = [t.realizado ? `vendido ${signo(t.realizado)}` : "", t.dividendos ? `dividendos ${eur(t.dividendos)}` : "", t.comisiones ? `comisiones ${eur(t.comisiones)}` : ""].filter(Boolean).join(" · ") || "coste de lo que tienes";
 
+  const DIAS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"];
+  const tapa = !I.mirar && !verAhora;
+  document.body.toggleAttribute("data-nomires", tapa);
+  $("#c-nomires").hidden = !tapa;
+  if (tapa) $("#nomires-txt").textContent = `Modo «no mires»: la cartera se mira el ${DIAS[I.perfil.dia_mirar]}. Lo de un día no dice nada a ${I.perfil.horizonte || "largo plazo"}.`;
   $("#c-leccion").hidden = !I.leccion;
   if (I.leccion) { md($("#leccion"), I.leccion.texto); $("#leccion-f").textContent = `review del ${corta(I.leccion.fecha)}`; }
   document.querySelectorAll("#rangos button").forEach(b => b.setAttribute("aria-selected", String(+b.dataset.r === rango)));
@@ -853,8 +913,44 @@ function pintaImpuestos() {
 }
 
 // ---------- perfil ----------
+$("#b-ver").onclick = () => { verAhora = true; pintaCartera(); };
+const fnm = $("#f-nomires");
+fnm.onchange = async () => {
+  try {
+    await api("/api/inversiones/perfil", {no_mires: fnm.no_mires.checked, dia_mirar: +fnm.dia_mirar.value});
+    verAhora = false; toast(fnm.no_mires.checked ? "Modo «no mires» activado" : "Modo «no mires» quitado"); cargar();
+  } catch (err) { toast(`No se guardó: ${err.message}`); }
+};
+// ---------- mercado ----------
+async function pintaMercado(fecha) {
+  try {
+    if (!M || fecha === undefined) M = await api("/api/mercado");
+    const sel = $("#mercado-f");
+    sel.replaceChildren(...M.fechas.map(f => Object.assign(el("option", null, `Semana del ${corta(f)}`), {value: f})));
+    sel.hidden = M.fechas.length < 2;
+    const caja = $("#mercado");
+    if (!M.ultimo) caja.replaceChildren(el("p", "vacio", "Todavía no hay informe: sale los sábados por la mañana."));
+    else {
+      const x = fecha && fecha !== M.ultimo.fecha ? await api(`/api/mercado/${fecha}`) : M.ultimo;
+      sel.value = x.fecha;
+      $("#t-mercado").textContent = `Informe de mercado · ${corta(x.fecha)}`;
+      md(caja, x.texto);
+    }
+    const TIPO = {bce: "BCE", fed: "Fed", resultados: "Resultados", dato: "Dato", otro: ""};
+    const l = $("#eventos-m");
+    l.replaceChildren(...(M.eventos.length ? M.eventos.map(e => {
+      const li = el("li"), d = el("div", null, (TIPO[e.tipo] && !e.t.startsWith(TIPO[e.tipo]) ? TIPO[e.tipo] + " · " : "") + e.t);
+      if (e.nota) d.append(el("div", "nota-p", e.nota));
+      li.append(el("time", null, corta(e.dia) + (e.hora ? " " + e.hora : "")), d);
+      return li;
+    }) : [el("li", "vacio", "Sin fechas todavía.")]));
+  } catch (e) { $("#mercado").replaceChildren(el("p", "vacio", `No se pudo cargar: ${e.message}`)); }
+}
+$("#mercado-f").onchange = e => pintaMercado(e.target.value);
+
 function pintaPerfil() {
   const f = $("#f-perfil"), p = I.perfil;
+  fnm.no_mires.checked = !!p.no_mires; fnm.dia_mirar.value = String(p.dia_mirar ?? 6);
   for (const k of ["edad", "horizonte", "objetivo", "emergencia", "tolerancia", "caida", "broker", "referencia", "notas", "regimen"]) f[k].value = p[k] ?? "";
   f.perdidas_previas.value = p.perdidas_previas ? String(p.perdidas_previas).replace(".", ",") : "";
   const ej = String(I.declaracion.ejercicio), int = (p.intereses || {})[ej];
@@ -931,9 +1027,42 @@ function pintaPlanes() {
      ["Borrar", "peligro", async () => { const v = await api("/api/inversiones/alerta/borra", {id: x.id}); toast("Alerta borrada", () => api("/api/inversiones/alerta", v)); cargar(); }]]))
     : [el("p", "vacio", "Sin alertas.")]));
   tipoAlerta();
+  pintaMultas();
   pintaPresuInv();
   pintaAvisosInv();
 }
+async function pintaMultas() {
+  const f = $("#f-multas"), m = I.perfil.multas || {};
+  f.activo.checked = !!m.activo; f.fallo.value = coma(m.fallo ?? 1); f.racha.value = coma(m.racha ?? 5); f.racha_min.value = m.racha_min ?? 3;
+  const caja = $("#multas");
+  try {
+    const r = await api("/api/multas");
+    const partes = [];
+    if (!r.hay_habito) {
+      const b = el("button", "c-btn", "Crear el hábito «Aportar a la inversión»");
+      b.onclick = async () => { await api("/api/habito/aportar", {}); toast("Hábito creado: lo marcan solas tus compras"); pintaMultas(); };
+      partes.push(el("p", "nota-p", "Aportar como hábito: se marca solo el día que compras algo (también los planes) y lleva su racha."), b);
+    } else partes.push(el("p", "nota-p", "Hábito «Aportar a la inversión»: se marca solo los días que compras (en Hábitos ves su racha)."));
+    if (m.activo) {
+      partes.push(el("p", null, r.multas.length ? `Desde el ${corta(m.desde)}: ${eur(r.total)} en multas.` : `Desde el ${corta(m.desde)}: ni una multa. Así sí.`));
+      const ultimas = [...r.multas].reverse().slice(0, 8);
+      if (ultimas.length) {
+        const ul = el("ul", "eventos-m");
+        for (const x of ultimas) { const li = el("li"); li.append(el("time", null, corta(x.dia)), el("div", null, `${x.n}: ${x.motivo} · ${eur(x.euros)}`)); ul.append(li); }
+        partes.push(ul);
+      }
+    }
+    caja.replaceChildren(...partes);
+  } catch (e) { caja.replaceChildren(el("p", "vacio", `No se pudieron leer: ${e.message}`)); }
+}
+$("#f-multas").onsubmit = async e => {
+  e.preventDefault();
+  const f = e.target, m = I.perfil.multas || {};
+  const nuevo = {activo: f.activo.checked, fallo: num(f.fallo.value) ?? 1, racha: num(f.racha.value) ?? 5, racha_min: +f.racha_min.value || 3,
+                 desde: f.activo.checked ? (m.activo && m.desde ? m.desde : hoyISO()) : ""};
+  try { await api("/api/inversiones/perfil", {multas: nuevo}); toast(nuevo.activo ? "Multas activadas desde hoy" : "Multas desactivadas"); cargar(); }
+  catch (err) { toast(`No se guardó: ${err.message}`); }
+};
 function editaPlan(x) {
   const f = $("#f-plan");
   for (const k of ["id", "activo", "dia", "desde", "nota"]) f[k].value = x[k] ?? "";

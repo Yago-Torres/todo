@@ -152,6 +152,7 @@ struct PlanesInversiones: View {
             presupuesto
             listaPlanes
             listaAlertas
+            MultasInvCarta(perfil: inf.perfil)
             Text("Planes, alertas, la review y la renta te llegan como notificación: los días de los planes y el domingo, de Tom; "
                  + "las alertas, del push de la web (actívalo en Entreno o en Inversiones de la web) o, si no, por Telegram.")
                 .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)

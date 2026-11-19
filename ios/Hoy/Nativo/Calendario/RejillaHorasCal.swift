@@ -75,7 +75,7 @@ struct RejillaHorasCal: View {
                 .frame(width: margen - 6, alignment: .trailing).padding(.trailing, 6)
             ForEach(dias, id: \.self) { d in
                 VStack(spacing: 2) {
-                    ForEach(datos.eventos.filter { $0.cubre(d) && ($0.todoElDia || $0.dia != d) }, id: \.clave) { e in
+                    ForEach(datos.visibles.filter { $0.cubre(d) && ($0.todoElDia || $0.dia != d) }, id: \.clave) { e in
                         ficha(e.t, color: datos.color(e.cal)) { alTocarEvento(e) }
                     }
                     ForEach(datos.tareas.filter { $0.due == d }) { t in
@@ -145,7 +145,7 @@ struct RejillaHorasCal: View {
 
     /// Los que se pisan van uno al lado del otro.
     private func coloca(_ d: String) -> [Colocado] {
-        let es = datos.eventos.filter { $0.dia == d && !$0.todoElDia }.compactMap { e -> Colocado? in
+        let es = datos.visibles.filter { $0.dia == d && !$0.todoElDia }.compactMap { e -> Colocado? in
             guard let i = UtilCal.minutos(e.inicio) else { return nil }
             var f = UtilCal.minutos(e.fin) ?? (i + 60)
             if e.finDia > e.dia { f = 24 * 60 }   // sigue al día siguiente

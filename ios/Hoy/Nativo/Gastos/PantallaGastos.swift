@@ -526,7 +526,8 @@ private struct CategoriasGastos: View {
                             BarraPresupuesto(valor: ap, maximo: iv.presu, ritmo: nil, color: Tema.acento).frame(height: 6)
                         }
                         Text(iv.aportado == nil ? "Previsto para invertir este ciclo."
-                             : ap >= iv.presu ? "Invertido este ciclo (de Inversiones)." : "Te quedan \(Eur.texto(iv.presu - ap)) por invertir este ciclo.")
+                             : (ap >= iv.presu ? "Invertido este ciclo (de Inversiones)." : "Te quedan \(Eur.texto(iv.presu - ap)) por invertir este ciclo.")
+                               + ((iv.multas ?? 0) > 0 ? " Incluye \(Eur.texto(iv.multas ?? 0)) de multas por hábitos sin hacer." : ""))
                             .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
                     }
                     .padding(.vertical, 4)

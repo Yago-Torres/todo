@@ -42,6 +42,8 @@ struct EventoCal: Codable, Identifiable, Hashable {
     var sincro: SincroCal?
     /// "dia:idHabito" si sale del plan de Entreno: lo cuadra el servidor y aquí no se edita.
     var entreno: String = ""
+    /// bce | fed | resultados | dato | otro si es del calendario «Mercados» (mercado.py): de solo lectura, con su interruptor.
+    var mercado: String = ""
 
     /// Para ForEach: una serie repite id en cada día.
     var clave: String { "\(id)|\(dia)" }
@@ -52,7 +54,7 @@ struct EventoCal: Codable, Identifiable, Hashable {
     func cubre(_ d: String) -> Bool { dia <= d && d <= max(dia, finDia) }
 
     enum CodingKeys: String, CodingKey {
-        case id, t, dia, origen, finDia = "fin_dia", inicio, fin, cal, nota, lugar, aviso, repite, hasta, sincro, entreno
+        case id, t, dia, origen, finDia = "fin_dia", inicio, fin, cal, nota, lugar, aviso, repite, hasta, sincro, entreno, mercado
     }
 
     init(id: String, t: String, dia: String, origen: String = "", finDia: String = "", inicio: String = "", fin: String = "",
@@ -75,6 +77,7 @@ struct EventoCal: Codable, Identifiable, Hashable {
         repite = s(.repite); hasta = s(.hasta)
         sincro = try? c.decodeIfPresent(SincroCal.self, forKey: .sincro)
         entreno = s(.entreno)
+        mercado = s(.mercado)
     }
 }
 
@@ -106,6 +109,7 @@ struct RespuestaCal: Codable {
     var hoy: String?
     var calendarios: [CalendarioTom]?
     var eventos: [EventoCal]?
+    var mercado: [EventoCal]?
     var tareas: [TareaCal]?
 }
 

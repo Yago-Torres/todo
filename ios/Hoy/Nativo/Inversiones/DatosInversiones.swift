@@ -23,10 +23,15 @@ struct PerfilInv: Codable, Equatable {
     var regimen: String? = "comun"          // comun | foral (Navarra o País Vasco)
     var perdidasPrevias: Double?            // pérdidas de años anteriores sin compensar
     var intereses: [String: Double]?        // intereses de la cuenta por año («2026»: 31,2)
+    var noMires: Bool?                      // las cifras de la cartera solo el día de mirar
+    var diaMirar: Int?                      // 0 lunes … 6 domingo
+    var multas: MultasConfInv?              // hábitos sin hacer que suman a lo que toca invertir
 
     enum CodingKeys: String, CodingKey {
-        case edad, horizonte, objetivo, aportacion, estable, emergencia, tolerancia, caida, broker, referencia, notas, regimen, intereses
+        case edad, horizonte, objetivo, aportacion, estable, emergencia, tolerancia, caida, broker, referencia, notas, regimen, intereses, multas
         case perdidasPrevias = "perdidas_previas"
+        case noMires = "no_mires"
+        case diaMirar = "dia_mirar"
     }
 }
 
@@ -230,6 +235,8 @@ struct InformeInv: Decodable {
     var planes: [PlanInv]?
     var alertas: [AlertaInv]?
     var leccion: LeccionInv?
+    /// false con «no mires» fuera del día de mirar (las cifras se tapan)
+    var mirar: Bool?
 
     /// Lo que tienes ahora, de más a menos valor.
     var abiertas: [PosicionInv] {

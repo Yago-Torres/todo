@@ -3,14 +3,14 @@ import SwiftUI
 /// Inversiones en nativo (lo de static/inversiones.html): Cartera, Operaciones, Planes, Impuestos, Review y Perfil, con las mismas
 /// cuentas que la web porque las hace el servidor. «/inversiones.html?review=fecha» (el aviso del domingo) abre esa review.
 struct PantallaInversiones: View {
-    enum Vista: Hashable { case cartera, operaciones, planes, impuestos, review, perfil }
+    enum Vista: Hashable { case cartera, operaciones, planes, mercado, impuestos, review, perfil }
 
     @State private var datos = DatosInversiones.shared
     @State private var vista: Vista = .cartera
     @ObservedObject private var navegador = Navegador.shared
 
     private let opciones: [(valor: Vista, titulo: String)] = [
-        (.cartera, "Cartera"), (.operaciones, "Operaciones"), (.planes, "Planes"), (.impuestos, "Impuestos"), (.review, "Review"), (.perfil, "Perfil"),
+        (.cartera, "Cartera"), (.operaciones, "Operaciones"), (.planes, "Planes"), (.mercado, "Mercado"), (.impuestos, "Impuestos"), (.review, "Review"), (.perfil, "Perfil"),
     ]
 
     var body: some View {
@@ -29,6 +29,7 @@ struct PantallaInversiones: View {
                         case .cartera: CarteraInversiones(inf: inf)
                         case .operaciones: OperacionesInversiones(inf: inf)
                         case .planes: PlanesInversiones(inf: inf)
+                        case .mercado: MercadoInversiones()
                         case .impuestos: ImpuestosInversiones(inf: inf)
                         case .review: ReviewInversiones(inf: inf)
                         case .perfil: PerfilInversiones(perfil: inf.perfil)
@@ -63,7 +64,7 @@ struct PantallaInversiones: View {
     private var cabecera: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(datos.inf.map { DineroES.eur($0.total.valor) } ?? "Tu cartera")
+                Text(datos.inf.flatMap { ($0.mirar ?? true) ? DineroES.eur($0.total.valor) : nil } ?? "Tu cartera")
                     .estiloEtiqueta().foregroundStyle(Tema.suave)
                     .contentTransition(.numericText())
                 Text("Inversiones").font(Tema.fuente(.titulo)).foregroundStyle(Tema.texto)

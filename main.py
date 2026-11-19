@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 
 import carrera
 import inversiones
+import mercado
 import agenda
 import vault
 
@@ -70,9 +71,12 @@ app = FastAPI()
 
 @app.on_event("startup")
 def arranca_agenda():
-    """Al arrancar, el hilo del calendario cuadra los entrenos y reintenta lo que quedó sin copiar."""
+    """Al arrancar, el hilo del calendario cuadra los entrenos y reintenta lo que quedó sin copiar; y el que vigila
+    Inversiones (aportes en el log y multas.json)."""
     if DB.exists():
         agenda.avisa_estado()
+    if not os.getenv("AGENDA_SIN_HILO"):
+        threading.Thread(target=vigila_inversiones, daemon=True).start()
 
 
 def firma(exp):
@@ -1600,6 +1604,7 @@ def rachas(s, hoy):
     con_algo = [d for d in (*s["log"], *s["descansos"], *manual) if d < hoy]
     d = date.fromisoformat(max(min(con_algo, default=hoy), (h0 - timedelta(days=HISTORIA)).isoformat()))
     est = {h["id"]: {"n": 0, "hueco": 0, "dias": {}, "rompio": None} for h in s["habits"]}
+    faltas = []   # (día, hábito, racha que tenía): lo que tocaba y no se hizo; lo usan las multas (multas())
     gastados = {}   # mes -> días con comodín (a mano o solo)
 
     def exige(h, dia, hueco):
@@ -1625,12 +1630,14 @@ def rachas(s, hoy):
                 caen.append(e)
             else:
                 e["hueco"] = 0   # sin racha no hay nada que romper
+                faltas.append((k, h["id"], 0))
         if caen and len(usados) < al_mes:
             usados.append(k)
             for e in caen:
                 e["dias"][k] = "comodin"
         else:
             for e in caen:
+                faltas.append((k, next(h["id"] for h in s["habits"] if est[h["id"]] is e), e["n"]))
                 e["rompio"], e["n"], e["hueco"], e["dias"][k] = (k, e["n"]), 0, 0, "fallo"
         d += timedelta(days=1)
 
@@ -1665,9 +1672,93 @@ def rachas(s, hoy):
         "comodines": {"al_mes": al_mes, "usados": usados, "quedan": max(0, al_mes - len(usados)), "hoy": hoy in manual},
         "vacaciones": [p for p in s["vacaciones"] if p["hasta"] >= hoy],
         "descansos": s["descansos"].get(hoy, []),
+        "faltas": [{"dia": d_, "id": i_, "racha": n_} for d_, i_, n_ in faltas],
         "llamada": f"Mantén tu racha de {juego[0]['base']} {'día' if juego[0]['base'] == 1 else 'días'}: "
                    f"{nombres([x['n'] for x in juego])}" if juego else None,
     }
+
+
+# ---------- multas: los hábitos que fallas suman a lo que toca invertir (perfil.multas de inversiones) ----------
+APORTAR = "aportar"   # el hábito «Aportar a la inversión»: lo marcan solas las compras de Inversiones (vigila_inversiones)
+MULTAS = DB.with_name("multas.json")   # lo lee Gastos (GASTOS_MULTAS) para sumarlo al presupuesto de inversión
+
+
+def multas(s, conf, hoy):
+    """[{dia, id, n, racha, euros, motivo}] desde conf.desde hasta ayer. Un comodín que salva la racha no multa."""
+    if not conf.get("activo") or not conf.get("desde"):
+        return []
+    nombres = {h["id"]: h["n"] for h in s["habits"]}
+    out = []
+    for f in rachas(s, hoy)["faltas"]:
+        if f["dia"] < conf["desde"] or f["id"] == APORTAR:
+            continue
+        rota = f["racha"] >= conf["racha_min"]
+        out.append({**f, "n": nombres.get(f["id"], f["id"]), "euros": round(conf["fallo"] + (conf["racha"] if rota else 0), 2),
+                    "motivo": f"rompe una racha de {f['racha']} días" if rota else "no hecho"})
+    return out
+
+
+def aportes_en_log(s, ops):
+    """Pone «aportar» en el log los días con alguna compra y lo quita de los que ya no tienen. True si cambió algo."""
+    if not any(h["id"] == APORTAR for h in s["habits"]):
+        return False
+    dias = {o["fecha"] for o in ops if o["tipo"] == "compra"}
+    cambio = False
+    for d in set(s["log"]) | dias:
+        tiene = APORTAR in s["log"].get(d, [])
+        if (d in dias) != tiene:
+            cambio = True
+            l = set(s["log"].get(d, [])) ^ {APORTAR}
+            s["log"][d] = sorted(l)
+    return cambio
+
+
+def vigila_inversiones():
+    """Hilo: si cambian data.json o inversiones.json (la web, Tom, el bot, un plan de ahorro) o cambia el día, marca los
+    aportes en el log y reescribe multas.json."""
+    visto = None
+    while True:
+        try:
+            ahora = tuple(f.stat().st_mtime if f.exists() else 0 for f in (DB, inversiones.DATOS)) + (date.today().isoformat(),)
+            if ahora != visto and DB.exists():
+                visto = ahora
+                d = inversiones.lee()
+                with cerrojo_estado:
+                    s = clean(dct(json.loads(DB.read_text("utf-8"))))
+                    if aportes_en_log(s, d["operaciones"]):
+                        guarda(DB, json.dumps(clean(s), ensure_ascii=False))
+                conf = d["perfil"]["multas"]
+                guarda(MULTAS, json.dumps({"conf": conf, "multas": multas(s, conf, date.today().isoformat())}, ensure_ascii=False))
+                visto = tuple(f.stat().st_mtime if f.exists() else 0 for f in (DB, inversiones.DATOS)) + (date.today().isoformat(),)
+        except Exception as e:
+            print("vigila_inversiones:", e, flush=True)
+        time.sleep(60)
+
+
+@app.post("/api/habito/aportar")
+def crea_aportar(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """Crea el hábito «Aportar a la inversión» (una vez cada 5 semanas como mucho: un plan mensual nunca la rompe)."""
+    exige(todo_sesion, authorization)
+
+    def pon(s):
+        if not any(h["id"] == APORTAR for h in s["habits"]):
+            s["habits"].append({"id": APORTAR, "n": "Aportar a la inversión", "c": "#2E7D5B", "goal": 1, "cada": 5})
+            aportes_en_log(s, inversiones.lee()["operaciones"])
+    cambia_estado(pon)
+    return {"ok": True}
+
+
+@app.get("/api/multas")
+def get_multas(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """Las multas desde que se activaron, el total y lo de ayer (para el resumen de la mañana)."""
+    exige(todo_sesion, authorization)
+    conf = inversiones.lee()["perfil"]["multas"]
+    s = clean(dct(json.loads(DB.read_text("utf-8")))) if DB.exists() else clean({})
+    hoy = date.today()
+    l = multas(s, conf, hoy.isoformat())
+    ayer = (hoy - timedelta(days=1)).isoformat()
+    return {"conf": conf, "multas": l, "total": round(sum(x["euros"] for x in l), 2),
+            "ayer": [x for x in l if x["dia"] == ayer], "hay_habito": any(h["id"] == APORTAR for h in s["habits"])}
 
 
 def racha(s, hid, hoy):
@@ -2160,7 +2251,9 @@ def calendario(desde: str = "", hasta: str = "", todo_sesion: str = Cookie(None)
         raise HTTPException(400, "rango de fechas raro")
     tareas = trozo(lambda: [{k: t[k] for k in ("id", "t", "due", "hora", "hecha", "estado", "nota")}
                             for t in vault.todas() if t["t"] and t["due"] and desde <= t["due"] <= hasta])
+    # «Mercados» (BCE, Fed, resultados: mercado.py) va aparte: no es un calendario tuyo, no se copia fuera y se ve con un interruptor
     return {"hoy": hoy.isoformat(), "calendarios": agenda.calendarios(), "eventos": agenda.rango(desde, hasta),
+            "mercado": mercado.eventos_en(desde, hasta),
             "tareas": tareas if isinstance(tareas, list) else [], "desde": desde, "hasta": hasta}
 
 
@@ -2577,6 +2670,24 @@ def inv_perfil(p: dict, todo_sesion: str = Cookie(None), authorization: str = He
 def inv_precios(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
     exige(todo_sesion, authorization)
     return {"fallos": inversiones.actualiza()}
+
+
+@app.get("/api/mercado")
+def get_mercado(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """Las fechas de los informes de mercado del sábado y el último entero."""
+    exige(todo_sesion, authorization)
+    l = mercado.lista()
+    return {"fechas": l, "ultimo": {"fecha": l[0], "texto": mercado.informe(l[0])} if l else None,
+            "eventos": [e for e in mercado.eventos() if e["dia"] >= date.today().isoformat()][:30]}
+
+
+@app.get("/api/mercado/{fecha}")
+def get_mercado_dia(fecha: str, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    texto = mercado.informe(fecha)
+    if texto is None:
+        raise HTTPException(404, "No hay informe de ese día")
+    return {"fecha": fecha, "texto": texto}
 
 
 @app.get("/api/inversiones/review/{fecha}")

@@ -12,6 +12,15 @@ final class DatosCalendario {
 
     private(set) var calendarios: [CalendarioTom] = []
     private(set) var eventos: [EventoCal] = []
+    /// «Mercados» (BCE, Fed, resultados): aparte, y solo se ve con el interruptor (casi siempre apagado)
+    private(set) var mercado: [EventoCal] = []
+    var verMercado = Almacen.defaults.bool(forKey: "calMercado") {
+        didSet { Almacen.defaults.set(verMercado, forKey: "calMercado") }
+    }
+    /// Lo que se pinta: tus eventos y, con el interruptor, los de «Mercados».
+    var visibles: [EventoCal] {
+        verMercado ? (eventos + mercado).sorted { ($0.dia, $0.inicio) < ($1.dia, $1.inicio) } : eventos
+    }
     private(set) var tareas: [TareaCal] = []
     private(set) var hoy = UtilCal.hoy()
     /// Lo que hay cargado: de `desde` a `hasta`, los dos incluidos.
@@ -44,13 +53,15 @@ final class DatosCalendario {
         calendarios = x.calendarios ?? calendarios
         eventos = (x.eventos ?? []).sorted { ($0.dia, $0.inicio) < ($1.dia, $1.inicio) }
         tareas = x.tareas ?? []
+        mercado = x.mercado ?? []
         if let delServidor = x.hoy, !delServidor.isEmpty { hoy = delServidor }
         desde = d
         hasta = h
     }
 
     func color(_ cal: String) -> Color {
-        calendarios.first { $0.id == cal }?.tinta ?? Tema.acento
+        if cal == "mercado" { return Color(hex: "#64748B") }
+        return calendarios.first { $0.id == cal }?.tinta ?? Tema.acento
     }
 
     func calendario(_ id: String) -> CalendarioTom? { calendarios.first { $0.id == id } }
@@ -91,7 +102,7 @@ final class DatosCalendario {
     // MARK: lo de un día
 
     func elementos(_ dia: String) -> [ElementoDiaCal] {
-        let es = eventos.filter { $0.cubre(dia) }.map { ElementoDiaCal.evento($0) }
+        let es = visibles.filter { $0.cubre(dia) }.map { ElementoDiaCal.evento($0) }
         let ts = tareas.filter { $0.due == dia }.map { ElementoDiaCal.tarea($0) }
         return (es + ts).sorted { $0.orden < $1.orden }
     }
@@ -99,7 +110,7 @@ final class DatosCalendario {
     /// Los colores de los puntos de un día en la vista Mes (como mucho 4: uno por calendario, y uno para tareas).
     func puntos(_ dia: String) -> [Color] {
         var vistos: [String] = []
-        for e in eventos where e.cubre(dia) && !vistos.contains(e.cal) { vistos.append(e.cal) }
+        for e in visibles where e.cubre(dia) && !vistos.contains(e.cal) { vistos.append(e.cal) }
         var out = vistos.prefix(3).map { color($0) }
         if tareas.contains(where: { $0.due == dia && !$0.hecha }) { out.append(Tema.suave) }
         return Array(out.prefix(4))

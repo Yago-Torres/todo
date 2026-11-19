@@ -7,14 +7,21 @@ struct CarteraInversiones: View {
     @State private var datos = DatosInversiones.shared
     @State private var abierta: PosicionInv?
     @State private var actualizando = false
+    @State private var verAhora = false
+
+    /// «no mires» fuera del día de mirar: las cifras borrosas hasta «Ver igualmente»
+    private var tapa: Bool { !(inf.mirar ?? true) && !verAhora }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tema.Espacio.l) {
-            CifrasInv(inf: inf)
+            if tapa {
+                NoMiresInvCarta(perfil: inf.perfil) { withAnimation(Tema.Muelle.pantalla) { verAhora = true } }
+            }
+            CifrasInv(inf: inf).tapada(tapa)
             if let l = inf.leccion { LeccionInvCarta(leccion: l) }
-            GraficaEvolucionInv(inf: inf)
-            posiciones
-            if !inf.abiertas.isEmpty { GraficaRepartoInv(inf: inf) }
+            GraficaEvolucionInv(inf: inf).tapada(tapa)
+            posiciones.tapada(tapa)
+            if !inf.abiertas.isEmpty { GraficaRepartoInv(inf: inf).tapada(tapa) }
         }
         .sheet(item: $abierta) { p in
             HojaPosicionInv(posicion: p)
@@ -319,5 +326,14 @@ struct LeyendaInv: View {
                 }
             }
         }
+    }
+}
+
+private extension View {
+    /// Borroso y sin tocar (y oculto para VoiceOver), para el modo «no mires».
+    func tapada(_ si: Bool) -> some View {
+        self.blur(radius: si ? 10 : 0)
+            .allowsHitTesting(!si)
+            .accessibilityHidden(si)
     }
 }

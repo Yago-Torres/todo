@@ -43,7 +43,8 @@ OPERACIONES = ("compra", "venta", "dividendo")
 EUROPA = (".DE", ".F", ".AS", ".PA", ".MI", ".MC", ".SG", ".MU", ".BE")
 PERFIL = {"edad": None, "horizonte": "", "objetivo": "", "aportacion": 0, "estable": None, "emergencia": "",
           "tolerancia": "", "caida": "", "broker": "Trade Republic", "referencia": "VWCE.DE", "notas": "",
-          "regimen": "comun", "perdidas_previas": 0, "intereses": {}}
+          "regimen": "comun", "perdidas_previas": 0, "intereses": {}, "no_mires": False, "dia_mirar": 6,
+          "multas": {"activo": False, "fallo": 1, "racha": 5, "racha_min": 3, "desde": ""}}
 VACIO = {"perfil": PERFIL, "activos": [], "operaciones": [], "planes": [], "alertas": []}
 ALERTAS = ("bajo", "sobre", "cae")
 
@@ -65,6 +66,24 @@ def _id(v):
     return re.sub(r"[^a-z0-9-]", "", str(v or "").lower().replace(" ", "-"))[:40]
 
 
+def _multas(m):
+    """Cada hábito que fallas suma `fallo` € a lo que toca invertir; romper una racha de `racha_min` días o más, `racha` €."""
+    m = m if isinstance(m, dict) else {}
+    activo = m.get("activo") is True
+    try:
+        desde = date.fromisoformat(str(m.get("desde"))[:10]).isoformat()
+    except ValueError:
+        desde = date.today().isoformat() if activo else ""
+    return {"activo": activo, "fallo": f if (f := _num(m.get("fallo"), 0, 100)) is not None else 1,
+            "racha": r if (r := _num(m.get("racha"), 0, 500)) is not None else 5,
+            "racha_min": int(_num(m.get("racha_min"), 1, 365) or 3), "desde": desde}
+
+
+def mirar_hoy(perfil, hoy=None):
+    """Con «no mires», si hoy es el día de mirar."""
+    return not perfil["no_mires"] or (hoy or date.today()).weekday() == perfil["dia_mirar"]
+
+
 def limpia(d):
     d = d if isinstance(d, dict) else {}
     p = d.get("perfil") if isinstance(d.get("perfil"), dict) else {}
@@ -82,6 +101,10 @@ def limpia(d):
         # intereses de la cuenta del broker por año ({"2026": 31.2}): rendimientos del capital mobiliario
         "intereses": {k: n for k, v in (p.get("intereses") if isinstance(p.get("intereses"), dict) else {}).items()
                       if re.fullmatch(r"20\d\d", str(k)) and (n := _num(v, 0, 1e7))},
+        # «no mires»: el valor y lo del día solo se enseñan el día de mirar (0 lunes … 6 domingo, el de la review)
+        "no_mires": p.get("no_mires") is True,
+        "dia_mirar": int(x) if (x := _num(p.get("dia_mirar"), 0, 6)) is not None else 6,
+        "multas": _multas(p.get("multas")),
     }
     activos, vistos = [], set()
     for a in d.get("activos") or []:
@@ -368,6 +391,8 @@ def revisa_alertas(d, p, hoy=None):
         if precio is None:
             continue
         if x["tipo"] == "cae":
+            if d["perfil"]["no_mires"]:
+                continue
             if cambio is not None and cambio <= -x["valor"] and x["ultima"] != hoy:
                 x["ultima"] = hoy
                 caida = f"{abs(cambio):.1f}".replace(".", ",")
@@ -560,7 +585,7 @@ def informe(hoy=None):
     return {
         "perfil": d["perfil"], "activos": d["activos"], "operaciones": d["operaciones"], "posiciones": pos,
         "planes": [{**x, "proximo": proximo_plan(x, hoy)} for x in d["planes"]], "alertas": d["alertas"],
-        "leccion": leccion(),
+        "leccion": leccion(), "mirar": mirar_hoy(d["perfil"], hoy),
         "total": {"valor": valor, "coste": coste, "latente": round(valor - coste, 2),
                   "rent": round((valor / coste - 1) * 100, 2) if coste else None,
                   "realizado": round(sum(x["realizado"] for x in pos), 2), "dividendos": round(sum(x["dividendos"] for x in pos), 2),
@@ -1011,7 +1036,7 @@ def avisa(hoy, texto, inf):
     t = inf["total"]
     lec = leccion_de(texto)
     titulo = re.sub(r"\*\*(.+?)\*\*", r"\1", lec.splitlines()[0]) if lec else ""
-    if aviso.push(f"Review de inversiones · {_e(t['valor'], 0)}", ("Lección: " + titulo[:120]) if titulo else "Ya tienes la review del domingo",
+    if aviso.push("Review de inversiones" + (f" · {_e(t['valor'], 0)}" if mirar_hoy(inf["perfil"], hoy) else ""), ("Lección: " + titulo[:120]) if titulo else "Ya tienes la review del domingo",
                   "review", f"/inversiones.html?review={hoy.isoformat()}#review"):
         return
     resumen = re.search(r"(?ms)^## 1\..*?\n(.*?)(?=^## 2\.|\Z)", texto)
