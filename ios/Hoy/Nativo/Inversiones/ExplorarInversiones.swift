@@ -367,7 +367,7 @@ struct TarjetaIdea: View {
                             Text("FUENTES").font(Tema.fuente(.etiqueta, peso: .semibold)).foregroundStyle(Tema.suave)
                             ForEach(idea.fuentes, id: \.self) { u in
                                 if let url = URL(string: u) {
-                                    Link(url.host()?.replacingOccurrences(of: "www.", with: "") ?? u, destination: url)
+                                    Link(url.host?.replacingOccurrences(of: "www.", with: "") ?? u, destination: url)
                                         .font(Tema.fuente(.pequeno))
                                 }
                             }
@@ -383,7 +383,8 @@ struct TarjetaIdea: View {
 
             ScrollView(.horizontal) {
                 HStack(spacing: Tema.Espacio.s) {
-                    ForEach(Self.reacciones, id: \.0) { x in
+                    ForEach(Self.reacciones.indices, id: \.self) { n in
+                        let x = Self.reacciones[n]
                         let puesta = reaccion?.estado == x.0
                         Button { reacciona(x.0) } label: { Label(x.1, systemImage: x.2) }
                             .font(Tema.fuente(.pequeno))

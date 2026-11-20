@@ -206,7 +206,10 @@ final class Conversacion: NSObject, AVSpeechSynthesizerDelegate {
         let pendiente = fase == .escuchando ? parcial.trimmingCharacters(in: .whitespacesAndNewlines) : ""
         termina()
         guard !pendiente.isEmpty else { return }
-        Task { @MainActor in TomFondo.avisa(await TomFondo.pregunta(pendiente)) }
+        Task { @MainActor in
+            let respuesta = await TomFondo.pregunta(pendiente)
+            TomFondo.avisa(respuesta)
+        }
     }
 
     /// Para todo y cierra la hoja. Se puede llamar varias veces (Parar, cerrar, desaparecer).
