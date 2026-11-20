@@ -29,7 +29,7 @@ enum FrenoAvisos {
         UNNotificationCategory(
             identifier: categoria,
             actions: [UNNotificationAction(identifier: accionSalir, title: "Salir", options: [.foreground]),
-                      UNNotificationAction(identifier: accionMas, title: "\(Freno.minutosPase) min más", options: [])],
+                      UNNotificationAction(identifier: accionMas, title: "\(Freno.paseAhora) min más", options: [])],
             intentIdentifiers: [], options: [])
     }
 
@@ -86,7 +86,7 @@ enum FrenoAvisos {
               let app = AppFrenada(rawValue: nombre) else { return false }
         if respuesta.actionIdentifier == accionMas {
             Task {
-                await Freno.amplia(app, minutos: Freno.minutosPase)
+                await Freno.amplia(app, minutos: Freno.paseAhora)
                 fin()
             }
         } else {

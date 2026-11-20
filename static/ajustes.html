@@ -101,6 +101,13 @@
   .pantallas a { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; padding: 0 12px;
                  border-radius: var(--r-s); background: var(--carta-2); color: inherit; text-decoration: none; font-weight: 500; }
   .pantallas a small { color: var(--suave); font-weight: 400; font-size: var(--t-pequeno); }
+  .uso-lista { display: grid; gap: 6px; margin: 8px 0; }
+  .uso-fila { display: grid; grid-template-columns: minmax(0, 9.5em) 1fr auto; gap: 8px; align-items: center; font-size: var(--t-pequeno); }
+  .uso-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .uso-barra { height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--acento) var(--p), var(--linea) var(--p)); }
+  .uso-d { color: var(--suave); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .uso-horas { display: flex; align-items: flex-end; gap: 2px; height: 42px; margin: 10px 0 2px; }
+  .uso-horas i { flex: 1; background: var(--acento-suave); border-radius: 2px 2px 0 0; }
 </style>
 <body>
 
@@ -188,6 +195,17 @@
         <label><input type="checkbox" id="paseo"> Pasea por la web</label>
         <button class="c-btn mini" id="otra" type="button">Otra forma</button>
       </div>
+    </section>
+
+    <section class="carta c-carta" aria-labelledby="t-uso">
+      <h2 id="t-uso">Lo que usas</h2>
+      <p class="pista">Qué haces de verdad en la web, en Tom y en el bot (no lo que se actualiza solo), cuándo y desde dónde. Lo que no tocas, abajo: candidato a simplificar o quitar.</p>
+      <div class="fila-op" id="uso-dias"></div>
+      <p id="uso-resumen"></p>
+      <div id="uso-lista" class="uso-lista"></div>
+      <div class="uso-horas" id="uso-horas" aria-hidden="true"></div>
+      <p class="pista" id="uso-sin"></p>
+      <p class="pista" id="uso-avisos"></p>
     </section>
   </div>
 </div>
@@ -327,6 +345,30 @@ $("#f-clave").onsubmit = async e => {
   else puerta(true, r && r.status === 401 ? "Contraseña incorrecta" : "No se pudo conectar");
 };
 cargar();
+
+// ---------- lo que usas (/api/uso, uso.py) ----------
+let usoDias = 30;
+async function pintaUso() {
+  $("#uso-dias").replaceChildren(...[7, 30, 90].map(n => { const b = el("button", "c-btn mini" + (n === usoDias ? " pri" : ""), `${n} días`);
+    b.type = "button"; b.onclick = () => { usoDias = n; pintaUso(); }; return b; }));
+  let r;
+  try { r = await api(`/api/uso?dias=${usoDias}`); } catch { $("#uso-resumen").textContent = "No se pudo cargar."; return; }
+  if (!r.acciones) { $("#uso-resumen").textContent = "Aún no hay nada apuntado: se registra desde el 20/11."; return; }
+  $("#uso-resumen").textContent = `${r.acciones} cosas en ${r.dias_activos} de ${r.dias} días · ` + Object.entries(r.clientes).map(([k, v]) => `${k} ${v}`).join(" · ");
+  const max = Math.max(...r.funciones.map(f => f.dias), 1);
+  $("#uso-lista").replaceChildren(...r.funciones.map(f => {
+    const fila = el("div", "uso-fila");
+    const barra = el("span", "uso-barra"); barra.style.setProperty("--p", f.dias / max * 100 + "%");
+    fila.append(el("span", "uso-n", f.que), barra, el("span", "uso-d", `${f.dias} d · ${f.n} · ${f.franja}`));
+    fila.title = `Última: ${f.ultimo.replace("T", " ")} · desde ${Object.entries(f.desde).map(([k, v]) => `${k} ${v}`).join(", ")}`;
+    return fila;
+  }));
+  const hmax = Math.max(...r.horas, 1);
+  $("#uso-horas").replaceChildren(...r.horas.map((n, h) => { const i = el("i"); i.style.height = (4 + n / hmax * 36) + "px"; i.title = `${h}:00 · ${n}`; return i; }));
+  $("#uso-sin").textContent = r.sin_usar.length ? "Sin tocar en este tiempo: " + r.sin_usar.join(", ") + "." : "";
+  $("#uso-avisos").textContent = Object.keys(r.avisos).length ? "Avisos que te han llegado: " + Object.entries(r.avisos).map(([k, v]) => `${k} ${v}`).join(", ") + "." : "";
+}
+pintaUso();
 </script>
 <script>
 /* Apariencia y pantallas: catálogo /apariencia.json, se guarda en POST /api/apariencia y calma.js lo aplica al momento */

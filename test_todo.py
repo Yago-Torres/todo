@@ -982,6 +982,44 @@ def test_explorar():
     print("explorar ok")
 
 
+def test_uso():
+    import uso, tempfile
+    from pathlib import Path
+    uso.USO = Path(tempfile.mkdtemp()) / "uso.jsonl"
+    assert uso.de_peticion("GET", "/api/hoy", "Mozilla/5.0", "1.1.1.1", 200) is None   # sondeo: no es uso
+    assert uso.de_peticion("POST", "/api/marca", "Hoy/3 CFNetwork/1 Darwin/25", "172.20.0.3", 200) == "habitos:marcar"
+    assert uso.de_peticion("POST", "/api/inversiones/explorar/reaccion", "Mozilla/5.0 (iPhone)", "x", 200) == "inversiones:explorar"
+    assert uso.de_peticion("POST", "/api/marca", "Mozilla", "x", 409) is None
+    uso.de_peticion("POST", "/api/salud", "Shortcuts/1", "x", 200)   # atajo: se apunta como automático
+    uso.apunta("aviso:resumen", "telegram", auto=True, app="bot")
+    r = uso.informe(7)
+    assert [f["que"] for f in r["funciones"]] == ["habitos:marcar", "inversiones:explorar"], r["funciones"]
+    assert r["clientes"] == {"tom": 1, "web-movil": 1} and r["avisos"] == {"resumen": 1}
+    assert "pendientes" in r["sin_usar"] and uso.franja(7) == "mañana" and uso.franja(23) == "noche"
+    print("uso ok")
+
+
+def test_cobro_y_anio():
+    import cobro, anio
+    from datetime import date
+    g = {"ajustes": {"dia_cobro": 28, "ingreso": 1600, "inversion": 100},
+         "ingresos": [{"dia": "2026-11-10", "importe": 1500, "tipo": "extra"}, {"dia": "2026-11-11", "importe": 900, "tipo": "devuelve"}]}
+    assert cobro.toca(g, date(2026, 11, 28))[0] and not cobro.toca(g, date(2026, 11, 27))[0]
+    assert cobro.toca(g, date(2026, 11, 10))[0] and not cobro.toca(g, date(2026, 11, 11))[0]   # un reembolso no es el sueldo
+    assert cobro.dia_de_cobro({"dia_cobro": 31}, date(2027, 2, 10)) == date(2027, 2, 28)
+    m = [{"dia": "2026-10-27", "euros": 5}, {"dia": "2026-10-28", "euros": 1}, {"dia": "2026-11-27", "euros": 2}]
+    assert cobro.multas_del_ciclo(m, date(2026, 11, 28), g["ajustes"]) == 3
+    assert anio._racha_max(["2026-01-01", "2026-01-02", "2026-01-04", "2026-01-05", "2026-01-06"], 1) == 3
+    assert anio._racha_max(["2026-01-01", "2026-01-08", "2026-01-14"], 7) == 3
+    s = clean({"habits": [{"id": "a", "n": "Agua", "c": "#000", "goal": 7}], "log": {"2026-03-01": ["a"], "2026-03-02": ["a"]},
+               "peso": {"2026-03-01": 80, "2026-03-09": 79.2}})
+    d = anio.calcula(s, {"gastos": [{"dia": "2026-03-01", "importe": 10, "cat": "super", "comercio": "MERCADONA X"}]}, {}, {}, None,
+                     2026, hoy=date(2026, 12, 31))
+    assert d["habitos"]["marcas"] == 2 and d["cuerpo"]["peso"]["cambio"] == -0.8 and d["dinero"]["comercio_favorito"] == ("Mercadona", 1)
+    assert "Tu 2026" in anio.texto(d, {"titular": "Bien", "frases": ["a", "b", "c"]})
+    print("cobro y año ok")
+
+
 def test_multas():
     """Cada falta multa `fallo`; romper una racha de `racha_min` o más, `racha` además; el comodín salva; «aportar» no multa."""
     H = [{"id": "w", "n": "Agua", "goal": 7}, {"id": "aportar", "n": "Aportar", "goal": 1, "cada": 5}]
@@ -1275,6 +1313,8 @@ if __name__ == "__main__":
     test_inversiones()
     test_cubierto()
     test_explorar()
+    test_uso()
+    test_cobro_y_anio()
     test_multas()
     test_carrera_calendario()
     print("ok")

@@ -525,3 +525,12 @@ Lo que queda:
 - **Inversiones → Explorar**: ideas del mes (temas, fondos, empresas) con tesis, argumento en contra, cómo comprarlo y
   qué vigilar; «Me interesa», «Ya lo tengo» y «Descartar» afinan las siguientes; «Profundizar» lo pasa a Pregunta; y un
   comparador de dos fondos o acciones (`ExplorarInversiones.swift`).
+
+## 20/11 (2)
+
+- **Claude** (sección nueva de la barra, `Nativo/Claude/PantallaClaude.swift`): un Claude que sabe todo lo tuyo y puede
+  leer el vault y buscar en la web (`/api/charla`). Conversaciones con hilo; se contesta en el servidor y se mira cada 3 s.
+- **Tu año en números** (`Nativo/Anio/PantallaAnio.swift`, ruta `/anio.html` sin entrada en la barra): se abre tocando
+  «Tu año» en Hoy.
+- **Uso**: cada sección (y cada vista de Inversiones) que abres va a `POST /api/uso` (`Uso.apunta`, en Pestanas.swift).
+- **Freno de noche**: de 23 a 7 (Configurar → Freno), sin aperturas libres, espera doble y pases de 2 min.

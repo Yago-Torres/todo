@@ -15,6 +15,8 @@ enum RegistroNativo {
         ("/salud.html", { AnyView(PantallaSalud()) }),
         ("/documentos.html", { AnyView(PantallaDocumentos()) }),
         ("/inversiones.html", { AnyView(PantallaInversiones()) }),
+        ("/claude.html", { AnyView(PantallaClaude()) }),
+        ("/anio.html", { AnyView(PantallaAnio()) }),   // sin entrada en la barra: se abre tocando «Tu año» en Hoy
         ("/ajustes.html", { AnyView(PantallaAjustes()) }),
         // ← cada sección nueva, aquí (una línea, en el orden de la barra)
     ]

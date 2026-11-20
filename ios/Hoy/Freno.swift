@@ -112,6 +112,20 @@ enum Freno {
         Almacen.defaults.set(marcas, forKey: claveEntradas(app))
     }
     static var libresAlDia: Int { max(0, Almacen.defaults.object(forKey: "freno.libres") as? Int ?? 0) }
+
+    // MARK: modo noche (lo pidió Yago el 20/11): de noche el freno aprieta más
+    /// Entre «desde» y «hasta» (23-7 por defecto): sin aperturas libres, el doble de espera (mínimo 20 s, tope 60) y
+    /// pases de 2 minutos como mucho. Se apaga en Configurar → Freno.
+    static var nocheActiva: Bool { Almacen.defaults.object(forKey: "freno.noche") as? Bool ?? true }
+    static var nocheDesde: Int { Almacen.defaults.object(forKey: "freno.nocheDesde") as? Int ?? 23 }
+    static var nocheHasta: Int { Almacen.defaults.object(forKey: "freno.nocheHasta") as? Int ?? 7 }
+    static var esDeNoche: Bool {
+        guard nocheActiva else { return false }
+        let h = Calendar.current.component(.hour, from: Date())
+        return nocheDesde > nocheHasta ? (h >= nocheDesde || h < nocheHasta) : (h >= nocheDesde && h < nocheHasta)
+    }
+    /// Los minutos de pase que tocan ahora (de noche, 2 como mucho).
+    static var paseAhora: Int { esDeNoche ? min(2, minutosPase) : minutosPase }
     /// Minutos de uso real al día por app (0: sin límite). Pasado, la espera es la máxima y no hay aperturas libres.
     static var limiteDiario: Int { max(0, Almacen.defaults.object(forKey: "freno.limite") as? Int ?? 0) }
 
@@ -245,7 +259,7 @@ enum Freno {
         recuerda(app)
         if pase(app) != nil, enVentana(app) { marcaAbierta(app); return app.enlace }
         apunta(app) { $0.aperturas += 1 }
-        if deHoy(app).aperturas <= libresAlDia, !pasadoDeLimite(app) {
+        if deHoy(app).aperturas <= libresAlDia, !pasadoDeLimite(app), !esDeNoche {
             daPase(app, minutos: minutosPase)
             abreVentana(app)
             apunta(app) { $0.minutos += minutosPase }
@@ -297,7 +311,8 @@ enum Freno {
     /// Primera entrada de la hora: la espera inicial (5 s); cada entrada más en la misma hora, +3 s; tope 30.
     /// Al cambiar la hora vuelve a empezar. Pasado el límite diario, 30 directamente.
     static func espera(_ app: AppFrenada) -> Int {
-        pasadoDeLimite(app) ? 30 : min(30, esperaInicial + esperaPaso * entradasEnEstaHora(app))
+        let normal = pasadoDeLimite(app) ? 30 : min(30, esperaInicial + esperaPaso * entradasEnEstaHora(app))
+        return esDeNoche ? min(60, max(20, normal * 2)) : normal
     }
 
     static func entra(_ app: AppFrenada, minutos: Int) {
@@ -426,6 +441,11 @@ struct PantallaFreno: View {
             .accessibilityElement(children: .combine)
             Text(queda > 0 ? (respira ? "Suelta el aire…" : "Coge aire…") : "Respira y decide")
                 .foregroundStyle(.secondary)
+            if Freno.esDeNoche {
+                Label("Modo noche: más espera y pases de \(Freno.paseAhora) min. Mañana lo verás igual.", systemImage: "moon.stars")
+                    .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+            }
             Spacer()
             VStack(spacing: 12) {
                 Button {
@@ -440,10 +460,10 @@ struct PantallaFreno: View {
                 .controlSize(.large)
 
                 Button {
-                    if revision { Freno.sigue(app, minutos: Freno.minutosPase) } else { Freno.entra(app, minutos: Freno.minutosPase) }
+                    if revision { Freno.sigue(app, minutos: Freno.paseAhora) } else { Freno.entra(app, minutos: Freno.paseAhora) }
                     cerrar()
                 } label: {
-                    Text(revision ? "Seguir \(Freno.minutosPase) min más" : "Entrar \(Freno.minutosPase) min")
+                    Text(revision ? "Seguir \(Freno.paseAhora) min más" : "Entrar \(Freno.paseAhora) min")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
@@ -493,11 +513,19 @@ struct SeccionFreno: View {
     @AppStorage("freno.avisos", store: Almacen.defaults) private var avisos = true
     @AppStorage("freno.avisoCada", store: Almacen.defaults) private var avisoCada = 5
     @AppStorage("freno.avisoVeces", store: Almacen.defaults) private var avisoVeces = 3
+    @AppStorage("freno.noche", store: Almacen.defaults) private var noche = true
+    @AppStorage("freno.nocheDesde", store: Almacen.defaults) private var nocheDesde = 23
+    @AppStorage("freno.nocheHasta", store: Almacen.defaults) private var nocheHasta = 7
     @State private var ayuda = false
 
     var body: some View {
         Section {
             Stepper("Pase al entrar: \(minutos) min", value: $minutos, in: 1...60)
+            Toggle("Modo noche: más estricto", isOn: $noche)
+            if noche {
+                Stepper("Desde las \(nocheDesde):00", value: $nocheDesde, in: 18...23)
+                Stepper("Hasta las \(nocheHasta):00", value: $nocheHasta, in: 4...10)
+            }
             Stepper("Espera inicial: \(esperaInicial) s", value: $esperaInicial, in: 1...30)
             Stepper("Cada vez más: +\(esperaPaso) s", value: $esperaPaso, in: 0...10)
             Stepper("Aperturas libres al día: \(libres)", value: $libres, in: 0...20)

@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="es" data-vt>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#F2F2F2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)">
+<title>Tu año</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.json" crossorigin="use-credentials">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Tu año">
+<link rel="preload" href="/fuentes/instrument-sans-normal-latin.woff2?v=1" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/calma.css?v=230f1260">
+<script src="/calma.js?v=230f1260"></script>
+<style>
+  @view-transition { navigation: auto; }
+  @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }
+  /* Tu año en números (anio.py, /api/anio): una tarjeta por cosa, la cifra grande y el detalle debajo. */
+  body { padding: 16px; padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px)); }
+  .app { max-width: 760px; margin: 0 auto; display: grid; gap: 14px; }
+  .top { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 4px 2px 0; }
+  h1 { margin: 0; font-size: var(--t-titulo); font-weight: 700; letter-spacing: -.02em; }
+  .top nav { margin-left: auto; display: flex; gap: 6px; }
+  .top nav a { text-decoration: none; }
+  #estado { font-size: var(--t-pequeno); color: var(--suave); }
+  .carta { padding: 18px; min-width: 0; }
+  .titular { font-size: clamp(1.5rem, 5vw, 2.2rem); font-weight: 700; letter-spacing: -.02em; line-height: 1.15; margin: 0 0 10px; }
+  .frases p { margin: 8px 0; line-height: 1.5; }
+  .rejilla { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+  .cifra { font-size: 2.4rem; font-weight: 700; letter-spacing: -.03em; font-variant-numeric: tabular-nums; line-height: 1; margin: 6px 0 4px; }
+  .cifra small { font-size: 1rem; font-weight: 500; color: var(--suave); margin-left: 4px; }
+  .et { font-size: var(--t-etiqueta); font-weight: 650; text-transform: uppercase; letter-spacing: .05em; color: var(--suave); }
+  .det { margin: 6px 0 0; color: var(--suave); font-size: var(--t-pequeno); line-height: 1.5; }
+  .det b { color: var(--texto); font-weight: 600; }
+  .puntos { display: grid; grid-template-rows: repeat(7, auto); grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 2px; margin-top: 10px; }
+  .puntos i { aspect-ratio: 1; border-radius: 2px; background: var(--carta-2); }
+  .puntos i[data-n="1"] { background: color-mix(in srgb, var(--acento) 35%, var(--carta-2)); }
+  .puntos i[data-n="2"] { background: color-mix(in srgb, var(--acento) 68%, var(--carta-2)); }
+  .puntos i[data-n="3"] { background: var(--acento); }
+  .vacio { color: var(--suave); }
+  [hidden] { display: none !important; }
+  .puerta input, .puerta button { width: 100%; }
+  @media (prefers-reduced-motion: no-preference) {
+    .entra { animation: entra .5s cubic-bezier(.2, .8, .2, 1) both; }
+    @keyframes entra { from { opacity: 0; transform: translateY(12px); } }
+  }
+</style>
+<body>
+<div class="puerta c-puerta" id="puerta">
+  <form id="f-clave">
+    <h2>Tu año</h2>
+    <p id="puerta-msg">Contraseña de todo</p>
+    <input class="c-campo" type="password" name="pass" required autocomplete="current-password" aria-label="Contraseña">
+    <button class="c-btn pri" type="submit">Entrar</button>
+  </form>
+</div>
+
+<div class="app">
+  <header class="top">
+    <h1 id="h1">Tu año</h1>
+    <span id="estado">Cargando…</span>
+    <nav><a class="c-btn mini" href="/">Hoy</a><button class="c-btn mini" id="b-lectura" type="button" hidden>Pedir el titular a Claude</button></nav>
+  </header>
+  <section class="carta c-carta entra" id="lectura" hidden></section>
+  <section class="carta c-carta entra" id="c-puntos"><span class="et">El año en puntos</span><div class="puntos" id="puntos" aria-hidden="true"></div></section>
+  <div class="rejilla" id="rejilla"></div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const el = (t, cls, txt) => { const e = document.createElement(t); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+const n = (x, d = 0) => (x ?? 0).toLocaleString("es-ES", {minimumFractionDigits: d, maximumFractionDigits: d});
+const hm = m => `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`;
+const anio = +(new URLSearchParams(location.search).get("anio") || new Date().getFullYear());
+
+function puerta(mostrar, msg) {
+  $("#puerta").toggleAttribute("data-on", mostrar);
+  $("#puerta-msg").textContent = msg || "Contraseña de todo";
+  if (mostrar) $("#puerta input").focus();
+}
+async function api(url, cuerpo) {
+  const r = await fetch(url, cuerpo === undefined ? {} : {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(cuerpo)});
+  if (r.status === 401) { puerta(true); throw new Error("401"); }
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.status);
+  return r.json();
+}
+
+// una tarjeta: etiqueta, cifra grande (con unidad) y el detalle (HTML con <b>; los textos ya vienen escapados)
+function tarjeta(et, cifra, unidad, det, i) {
+  const c = el("section", "carta c-carta entra");
+  c.style.animationDelay = `${i * 60}ms`;
+  const cf = el("div", "cifra", cifra);
+  if (unidad) cf.append(el("small", null, unidad));
+  c.append(el("span", "et", et), cf);
+  if (det) { const p = el("p", "det"); p.innerHTML = det; c.append(p); }
+  return c;
+}
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
+
+function pintaLectura(l) {
+  const c = $("#lectura");
+  c.hidden = !l;
+  $("#b-lectura").hidden = !!l;
+  if (!l) return;
+  c.replaceChildren(el("p", "titular", `«${l.titular}»`), ...l.frases.map(f => el("p", null, f)));
+  c.classList.add("frases");
+  c.append(el("p", "det", `Escrito por Claude el ${l.cuando.replace("T", " a las ")}. El 31 de diciembre se rehace con el año entero.`));
+}
+
+async function cargar() {
+  let r;
+  try { r = await api(`/api/anio?anio=${anio}`); puerta(false); } catch (e) { if (e.message !== "401") $("#estado").textContent = "Sin conexión"; return; }
+  const d = r.datos;
+  $("#h1").textContent = `Tu ${d.anio}`;
+  document.title = `Tu ${d.anio}`;
+  $("#estado").textContent = `del ${d.desde.slice(8)}/${d.desde.slice(5, 7)} al ${d.hasta.slice(8)}/${d.hasta.slice(5, 7)}`;
+  pintaLectura(r.lectura);
+  $("#puntos").replaceChildren(...r.puntos.map(v => { const i = el("i"); i.dataset.n = v; return i; }));
+  const h = d.habitos || {}, g = d.gimnasio || {}, a = d.actividad || {}, c = d.cuerpo || {}, m = d.movil || {}, din = d.dinero || {}, inv = d.inversion || {};
+  const t = [];
+  if (h.marcas) t.push(["Hábitos", n(h.marcas), "hechos",
+    `En <b>${h.dias_con_algo}</b> días. Mejor racha: <b>${h.mejor_racha?.racha_max}</b> en «${esc(h.mejor_racha?.n)}». ` +
+    (h.mejor_mes ? `Tu mejor mes, <b>${h.mejor_mes.mes}</b>. ` : "") + (h.top || []).slice(0, 3).map(x => `${esc(x.n)} ${x.veces}`).join(" · ") +
+    (h.olvidados?.length ? `<br>Casi sin tocar: ${h.olvidados.map(esc).join(", ")}.` : "")]);
+  if (g.sesiones) t.push(["Gimnasio", n(g.toneladas, 1), "toneladas",
+    `En <b>${g.sesiones}</b> ${g.sesiones === 1 ? "sesión" : "sesiones"}.` + (g.mas_mejora?.length ? ` Lo que más ha subido: ${g.mas_mejora.map(x => `<b>${esc(x.ej)}</b> +${x.pct} %`).join(", ")}.` : "")]);
+  if (a.carreras) t.push(["Correr", n(a.km, 1), "km", `<b>${a.carreras}</b> ${a.carreras === 1 ? "carrera" : "carreras"}; la más larga, ${n(a.mas_larga, 1)} km` + (a.mejor_ritmo ? `; mejor ritmo <b>${a.mejor_ritmo}</b>` : "") + "."]);
+  if (a.escalada) t.push(["Escalada", n(a.escalada), a.escalada === 1 ? "día" : "días", ""]);
+  if (c.peso) t.push(["Peso", `${c.peso.cambio > 0 ? "+" : ""}${n(c.peso.cambio, 1)}`, "kg", `De <b>${n(c.peso.inicio, 1)}</b> a <b>${n(c.peso.fin, 1)}</b> kg; el mínimo, ${n(c.peso.min, 1)}.`]);
+  if (c.sueno_medio) t.push(["Sueño", hm(c.sueno_medio), "de media", `En ${c.noches} noches con datos.`]);
+  if (c.pasos) t.push(["Pasos", n(c.pasos), "", `<b>${n(c.pasos_medios)}</b> al día de media.` + (c.mejor_dia_pasos ? ` Tu mejor día, el ${c.mejor_dia_pasos[0].slice(8)}/${c.mejor_dia_pasos[0].slice(5, 7)}: ${n(c.mejor_dia_pasos[1])}.` : "")]);
+  if (m.horas) t.push(["Móvil", n(m.horas), "horas", `En las apps que vigilas, <b>${m.media_min}</b> min al día. ` + (m.top || []).map(x => `${esc(x.app)} ${n(x.horas, 1)} h`).join(" · ")]);
+  if (din.gastado) t.push(["Gastos", n(din.gastado, 0), "€", `En <b>${din.tickets}</b> compras; ${n(din.al_dia_variable, 2)} € al día sin casa ni suscripciones. ` +
+    (din.top_cats || []).map(x => `${esc(x.cat)} ${n(x.eur, 0)} €`).join(" · ") + (din.mes_mas_caro ? `. Mes más caro: <b>${din.mes_mas_caro.mes}</b>.` : "") +
+    (din.comercio_favorito ? ` Donde más vuelves: ${esc(din.comercio_favorito[0])} (${din.comercio_favorito[1]}).` : "")]);
+  if (inv.operaciones) t.push(["Inversión", n(inv.aportado, 0), "€ invertidos", `${inv.operaciones} ${inv.operaciones === 1 ? "operación" : "operaciones"}, ${inv.posiciones} ${inv.posiciones === 1 ? "posición" : "posiciones"}.` + (inv.valor != null ? ` Vale <b>${n(inv.valor, 0)} €</b> (${inv.rent > 0 ? "+" : ""}${n(inv.rent, 1)} %).` : "")]);
+  if (d.claude?.llamadas) t.push(["Claude", n(d.claude.llamadas), "veces", "Ha trabajado para ti: " + (d.claude.para || []).map(([q, k]) => `${esc(q)} ${k}`).join(" · ")]);
+  if (d.uso?.acciones) t.push(["Tú en la app", n(d.uso.dias_activos), "días", `${n(d.uso.acciones)} cosas hechas; lo que más usas: <b>${esc(d.uso.favorita)}</b>.`]);
+  $("#rejilla").replaceChildren(...(t.length ? t.map((x, i) => tarjeta(...x, i)) : [el("p", "vacio", "Todavía no hay datos de este año.")]));
+}
+
+$("#b-lectura").onclick = async () => {
+  const b = $("#b-lectura");
+  b.disabled = true; b.textContent = "Pensando…";
+  try { pintaLectura(await api("/api/anio/lectura", {anio})); } catch (e) { b.textContent = `No salió: ${e.message}`; }
+  b.disabled = false;
+};
+$("#f-clave").onsubmit = async e => {
+  e.preventDefault();
+  const inp = e.target.pass;
+  const r = await fetch("/api/login", {method: "POST", headers: {"Content-Type": "application/json"},
+                                       body: JSON.stringify({pass: inp.value})}).catch(() => null);
+  if (r && r.ok) { inp.value = ""; await cargar(); }
+  else puerta(true, r && r.status === 401 ? "Contraseña incorrecta" : "No se pudo conectar");
+};
+cargar();
+</script>
+</body>
+</html>

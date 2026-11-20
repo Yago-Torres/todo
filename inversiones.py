@@ -1188,6 +1188,18 @@ def pregunta(q, tipo="", titulo=""):
     return p
 
 
+def apunta_pregunta(q, r, tipo="", titulo=""):
+    """Una respuesta ya hecha a la lista de preguntas (el informe del día de cobro, cobro.py)."""
+    with _cerrojo_preguntas:
+        l = preguntas()
+        p = {"id": "q" + str(time.time_ns())[-12:], "q": q, "r": r[:12000], "estado": "lista", "t": time.time(),
+             "cuando": datetime.now().isoformat(timespec="minutes")}
+        if tipo:
+            p.update(tipo=tipo, titulo=" ".join(str(titulo).split())[:200])
+        _escribe(PREGUNTAS, ([p] + l)[:50])
+    return p
+
+
 def borra_pregunta(id_):
     with _cerrojo_preguntas:
         _escribe(PREGUNTAS, [x for x in preguntas() if x["id"] != id_])

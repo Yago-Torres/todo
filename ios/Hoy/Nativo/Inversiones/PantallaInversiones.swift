@@ -54,6 +54,7 @@ struct PantallaInversiones: View {
         .tostada(datos.aviso) { datos.quitaAviso() }
         .task { await datos.carga() }
         .environment(\.locale, FechasES.locale)
+        .onChange(of: vista) { _, v in Uso.apunta("inversiones:\(v)") }
         .onChange(of: navegador.reviewInversiones, initial: true) { _, fecha in
             guard let fecha else { return }
             navegador.reviewInversiones = nil

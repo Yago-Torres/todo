@@ -50,8 +50,13 @@ struct Pestanas: View {
             Task { await DatosNativos.shared.marca(id, hecho: true) }
         }
         .onChange(of: fase) { _, nueva in
-            if nueva == .active { Task { await DatosNativos.shared.carga(margen: 60) } }
+            if nueva == .active {
+                Task { await DatosNativos.shared.carga(margen: 60) }
+                Uso.apunta(navegador.pestana)
+            }
         }
+        // el registro de uso del servidor (uso.py): qué secciones abres y cuándo
+        .onChange(of: navegador.pestana, initial: true) { _, p in Uso.apunta(p) }
     }
 
     /// Solo arrastres claramente horizontales; en las listas con filas que se deslizan (completar, borrar…),
@@ -121,4 +126,14 @@ private struct SinDeslizarSeccion: ViewModifier {
 extension View {
     /// Para un ScrollView horizontal dentro de una sección: arrastrar ahí no pasa a la sección de al lado.
     func sinDeslizarSeccion() -> some View { modifier(SinDeslizarSeccion()) }
+}
+
+/// El registro de uso del servidor (uso.py, POST /api/uso): la sección o la vista que abres. Sin esperar ni reintentar:
+/// si no hay red, ese apunte se pierde y no pasa nada.
+enum Uso {
+    static func apunta(_ que: String) {
+        Task.detached(priority: .background) {
+            _ = try? await API.datos("/api/uso", metodo: "POST", json: ["que": que])
+        }
+    }
 }

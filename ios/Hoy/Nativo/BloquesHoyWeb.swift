@@ -39,6 +39,7 @@ struct BloqueAnioHoy: View {
                     Text("Tu año").font(Tema.fuente(.seccion)).foregroundStyle(Tema.texto)
                     Spacer()
                     Text("\(completos) días completos").font(Tema.fuente(.pequeno)).monospacedDigit().foregroundStyle(Tema.suave)
+                    Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(Tema.tenue)
                 }
                 Rejilla(anio: anio, hoy: hoy)
                     .aspectRatio(53.0 / 7.0, contentMode: .fit)
@@ -50,6 +51,10 @@ struct BloqueAnioHoy: View {
                 .font(Tema.fuente(.etiqueta)).foregroundStyle(Tema.suave)
             }
             .carta()
+            .contentShape(Rectangle())
+            .onTapGesture { Navegador.shared.toca("/anio.html") }   // tu año en números (PantallaAnio)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityHint("Abre tu año en números")
         }
     }
 

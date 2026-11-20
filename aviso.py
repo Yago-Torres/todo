@@ -83,7 +83,14 @@ def avisa(titulo, cuerpo, tag, url="/", largo=None, ver=False):
         print(f"[aviso {tag}] {titulo} — {cuerpo} -> {url}")
         return "nada"
     if push(titulo, cuerpo, tag, url):
-        return "push"
-    enlace = f"https://todo.yagotg.dev{url}" if url.startswith("/") else url
-    texto = largo or f"<b>{html.escape(titulo)}</b>\n{html.escape(cuerpo)}\n{enlace}"
-    return "telegram" if telegram(texto) else "nada"
+        via = "push"
+    else:
+        enlace = f"https://todo.yagotg.dev{url}" if url.startswith("/") else url
+        texto = largo or f"<b>{html.escape(titulo)}</b>\n{html.escape(cuerpo)}\n{enlace}"
+        via = "telegram" if telegram(texto) else "nada"
+    try:
+        import uso
+        uso.apunta(f"aviso:{tag}", via, auto=True, app="aviso")
+    except Exception:
+        pass
+    return via

@@ -12,7 +12,7 @@ import urllib.request
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from fastapi import Body, Cookie, FastAPI, Header, HTTPException, Request, Response
+from fastapi import Body, Cookie, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -21,6 +21,9 @@ import carrera
 import inversiones
 import mercado
 import explorar
+import uso
+import charla
+import anio
 import agenda
 import vault
 
@@ -856,6 +859,42 @@ def telegram_todo(texto):
         except Exception as ex:
             print("telegram:", ex, flush=True)
     threading.Thread(target=manda, daemon=True).start()
+
+
+# ---------- uso (uso.py): qué usas, qué no y cuándo ----------
+@app.middleware("http")
+async def apunta_uso(request: Request, call_next):
+    r = await call_next(request)
+    try:
+        uso.de_peticion(request.method, request.url.path, request.headers.get("user-agent"),
+                        request.client.host if request.client else "", r.status_code)
+    except Exception:
+        pass
+    return r
+
+
+@app.on_event("startup")
+def poda_uso():
+    uso.poda()
+
+
+@app.post("/api/uso")
+def apunta_uso_tom(a: dict, request: Request, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """Tom: {que} al abrir una pantalla (pinta su copia sin pedir nada al servidor): la ruta de la sección
+    («/inversiones.html», con el mismo nombre que en la web) o un nombre («inversiones:explorar»)."""
+    exige(todo_sesion, authorization)
+    que = " ".join(str(a.get("que") or "").split())[:60]
+    if que.startswith("/"):
+        que = uso.funcion(que.split("?")[0]) or que
+    if que:
+        uso.apunta(que, uso.cliente(request.headers.get("user-agent"), request.client.host if request.client else ""))
+    return {"ok": True}
+
+
+@app.get("/api/uso")
+def informe_uso(dias: int = 30, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    return uso.informe(max(1, min(dias, 365)))
 
 
 @app.post("/api/pantalla/dias")
@@ -1928,6 +1967,116 @@ def portada(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
         "leer": trozo(lambda: len(vault.lecturas())),
         "gastos": trozo(hoy_gastos),
     }
+
+
+# ---------- Claude con todo tu contexto (charla.py, la sección «Claude» de Tom) ----------
+def contexto_yo():
+    """Todo lo tuyo en un dict compacto para el prompt de charla.py. Cada trozo, por su cuenta: si uno falla, sale el resto."""
+    s = clean(dct(json.loads(DB.read_text("utf-8")))) if DB.exists() else clean({})
+    h0 = date.today()
+    hoy = h0.isoformat()
+    nombre = {h["id"]: h["n"] for h in s["habits"]}
+    rutina = {r["id"]: r["n"] for r in s["rutinas"]}
+    dias = lambda a, b: [(h0 + timedelta(days=i)).isoformat() for i in range(a, b)]
+
+    def habitos():
+        r = rachas(s, hoy)
+        return [{"n": h["n"], "meta": f"{x['goal']}/sem" + (f" cada {x['cada']} sem" if x["cada"] > 1 else ""),
+                 "racha": h["racha"], "hoy": "hecho" if h["hecho"] else "cubierto" if h["cubierto"] else h["libre"] or
+                 ("toca" if h["exigido"] else "libre"),
+                 "ultimos_28_dias": sum(h["id"] in s["log"].get(d, []) for d in dias(-27, 1))}
+                for h, x in zip(r["habitos"], s["habits"])]
+
+    def plan():
+        return {d: [rutina.get(s["sesion"].get(d, {}).get(h)) or nombre.get(h, h) for h in s["plan"].get(d, [])]
+                for d in dias(-7, 8) if s["plan"].get(d)}
+
+    def hecho():
+        return {d: [nombre.get(h, h) for h in s["log"][d]] for d in dias(-14, 1) if s["log"].get(d)}
+
+    def semanas():
+        lunes = h0 - timedelta(days=h0.weekday())
+        return [{k: v for k, v in semana_de(s, l, hoy).items() if k != "habitos"} for l in (lunes - timedelta(days=7), lunes)]
+
+    def proximos():
+        return [{"dia": e["dia"], "hora": e.get("inicio") or "", "t": e["t"], "cal": e.get("cal")}
+                for e in agenda.rango(hoy, (h0 + timedelta(days=21)).isoformat())][:40]
+
+    def tareas():
+        ts = vault.tareas()
+        corte = (h0 + timedelta(days=21)).isoformat()
+        con = [{"t": x["t"], "due": x["due"], "grupo": x.get("grupo")} for x in ts if x["due"] and x["due"] <= corte]
+        return {"con_fecha": sorted(con, key=lambda x: x["due"])[:40], "sin_fecha": len([x for x in ts if not x["due"]])}
+
+    def cartera():
+        inf = inversiones.informe(h0)
+        return {"posiciones": [{"n": x["nombre"], "tipo": x["tipo"], "peso": x["peso"],
+                                **({"rent": x.get("rent")} if inf["mirar"] else {})} for x in inf["posiciones"] if x["cantidad"] > 0],
+                "planes": inf["planes"], "perfil": {k: inf["perfil"].get(k) for k in ("horizonte", "objetivo", "aportacion", "tolerancia")},
+                "no_mires": not inf["mirar"],
+                "explorar": (explorar.lee()["informes"] or [{}])[0].get("resumen")}
+
+    return {
+        "habitos": trozo(habitos), "plan_y_sesiones": trozo(plan), "hecho_14_dias": trozo(hecho), "semanas": trozo(semanas),
+        "entreno_hoy": trozo(lambda: hoy_entreno(s, hoy)), "carrera": trozo(lambda: hoy_carrera(s, hoy)),
+        "peso": dict(sorted(s["peso"].items())[-20:]), "salud_14_dias": {d: {k: v for k, v in s["salud"][d].items() if k != "fases"} for d in dias(-13, 1) if d in s["salud"]},
+        "movil": trozo(lambda: resumen_pantalla(lee_pantalla(), hoy)), "gastos_ciclo": trozo(lambda: de_otra("gastos", "resumen")),
+        "cartera": trozo(cartera), "calendario_21_dias": trozo(proximos), "pendientes": trozo(tareas),
+        "lo_que_usa_30_dias": trozo(lambda: uso.lineas(30)), "comodines": s["comodines"],
+    }
+
+
+# ---------- tu año en números (anio.py) ----------
+def datos_anio(n):
+    s = clean(dct(json.loads(DB.read_text("utf-8")))) if DB.exists() else clean({})
+    try:
+        g = de_otra("gastos", "estado")
+    except Exception:
+        g = {}
+    return anio.calcula(s, g, lee_pantalla(), inversiones.informe(), uso.informe(365), n)
+
+
+@app.get("/api/anio")
+def tu_anio(anio_: int = Query(None, alias="anio"), todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    n = anio_ or date.today().year
+    return {"datos": datos_anio(n), "lectura": anio.lectura_guardada(n), "puntos": hoy_anio(
+        clean(dct(json.loads(DB.read_text("utf-8")))) if DB.exists() else clean({}), min(f"{n}-12-31", date.today().isoformat()))}
+
+
+@app.post("/api/anio/lectura")
+def tu_anio_lectura(d: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """Pide (o rehace) el titular y las tres frases de Claude. Tarda unos 20 s."""
+    exige(todo_sesion, authorization)
+    n = int(d.get("anio") or date.today().year)
+    try:
+        return anio.lectura(datos_anio(n), forzar=bool(d.get("forzar")))
+    except Exception as e:
+        raise HTTPException(502, f"Claude no ha contestado: {str(e)[:200]}")
+
+
+@app.get("/api/charla")
+def charla_lista(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    return {"hilos": charla.hilos()}
+
+
+@app.post("/api/charla")
+def charla_pregunta(d: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """{q, hilo?}: sin hilo empieza una conversación nueva."""
+    exige(todo_sesion, authorization)
+    try:
+        return charla.pregunta(d.get("q"), d.get("hilo"), contexto_yo)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/charla/borra")
+def charla_borra(d: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """{id} un mensaje o {hilo} la conversación entera."""
+    exige(todo_sesion, authorization)
+    charla.borra(str(d.get("id") or ""), str(d.get("hilo") or ""))
+    return {"ok": True}
 
 
 # ---------- resumen semanal (GET /api/semana) ----------
