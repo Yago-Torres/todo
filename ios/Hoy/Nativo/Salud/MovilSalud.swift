@@ -71,6 +71,11 @@ struct CartaMovil: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private func color(_ minutos: Double, _ lim: Double?) -> Color {
+        if let lim, minutos * 60 > lim { return Tema.peligro }
+        return Tema.acento
+    }
+
     @ViewBuilder
     private func grafica(_ r: RespuestaPantalla, _ lim: Double?) -> some View {
         let dias = (r.dias30 ?? []).compactMap { d -> (Date, String, Double)? in
@@ -82,7 +87,7 @@ struct CartaMovil: View {
                 ForEach(dias, id: \.1) { d in
                     BarMark(x: .value("Día", d.0, unit: .day), y: .value("Minutos", d.2))
                         .cornerRadius(3)
-                        .foregroundStyle(lim.map { d.2 * 60 > $0 } ?? false ? Tema.peligro : Tema.acento)
+                        .foregroundStyle(color(d.2, lim))
                 }
                 if let lim {
                     RuleMark(y: .value("Límite", lim / 60))
@@ -110,26 +115,7 @@ struct CartaMovil: View {
         let top = Double(max(1, lista.map(\.s).max() ?? 1))
         return VStack(alignment: .leading, spacing: Tema.Espacio.s) {
             ForEach(lista, id: \.self) { a in
-                let limite = r.limites[a.app]
-                let excesos = r.excesos[a.app] ?? 0
-                let veces = a.n == 1 ? "vez" : "veces"
-                let extra = limite.map { " · límite " + String($0) + " min, pasado " + String(excesos) + " de 7 días" } ?? ""
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack {
-                        Text(a.app).font(Tema.fuente(.pequeno, peso: .semibold)).foregroundStyle(Tema.texto)
-                        Spacer()
-                        Text(hm(Double(a.s) / 7) + "/día").font(Tema.fuente(.pequeno)).monospacedDigit().foregroundStyle(Tema.suave)
-                    }
-                    GeometryReader { g in
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(Tema.linea)
-                            Capsule().fill(Tema.acento).frame(width: g.size.width * Double(a.s) / top)
-                        }
-                    }
-                    .frame(height: 7)
-                    Text("Esta semana: " + String(a.n) + " " + veces + " · no entré " + String(a.no) + extra)
-                        .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
-                }
+                FilaAppMovil(app: a, top: top, limite: r.limites[a.app], excesos: r.excesos[a.app] ?? 0)
             }
         }
     }
@@ -138,6 +124,46 @@ struct CartaMovil: View {
         guard let d = try? await API.datos("/api/pantalla") else { return }
         if let x = try? JSONDecoder().decode(RespuestaPantalla.self, from: d) {
             withAnimation(Tema.Muelle.pantalla) { r = x }
+        }
+    }
+}
+
+/// Una app de la semana: su rato al día, la barra y el detalle (aparte: en una sola expresión el compilador no podía).
+private struct FilaAppMovil: View {
+    let app: RespuestaPantalla.App
+    let top: Double
+    let limite: Int?
+    let excesos: Int
+
+    private var alDia: String {
+        let m = Int((Double(app.s) / 7 / 60).rounded())
+        return String(m / 60) + " h " + (m % 60 < 10 ? "0" : "") + String(m % 60) + "/día"
+    }
+
+    private var detalle: String {
+        var t = "Esta semana: " + String(app.n) + (app.n == 1 ? " vez" : " veces") + " · no entré " + String(app.no)
+        if let limite {
+            t += " · límite " + String(limite) + " min, pasado " + String(excesos) + " de 7 días"
+        }
+        return t
+    }
+
+    var body: some View {
+        let parte: Double = Double(app.s) / top
+        VStack(alignment: .leading, spacing: 3) {
+            HStack {
+                Text(app.app).font(Tema.fuente(.pequeno, peso: .semibold)).foregroundStyle(Tema.texto)
+                Spacer()
+                Text(alDia).font(Tema.fuente(.pequeno)).monospacedDigit().foregroundStyle(Tema.suave)
+            }
+            GeometryReader { g in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Tema.linea)
+                    Capsule().fill(Tema.acento).frame(width: g.size.width * parte)
+                }
+            }
+            .frame(height: 7)
+            Text(detalle).font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
         }
     }
 }
