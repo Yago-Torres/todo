@@ -41,7 +41,7 @@ base del ahorro; los traspasos sin tributar solo valen entre fondos, no entre ET
 
 Mi cartera ahora:
 {cartera}
-
+{mirar}
 Lo que respondí a ideas de otros meses (aprende de esto: profundiza en lo que me interesa, no repitas lo descartado ni
 lo muy parecido, y lo que ya tengo cuenta como cartera):
 {reacciones}
@@ -178,7 +178,9 @@ def prompt(hoy=None, d=None):
         merc = "\n".join(re.findall(r"(?ms)^## *5\..*?(?=^## *\d+\.|\Z)", t or ""))[:2500] or "(no hay)"
     except Exception:
         merc = "(no disponible)"
-    return PROMPT.format(edad=p["edad"] or "?", broker=p["broker"] or "?", horizonte=p["horizonte"] or "?",
+    mirar = "" if inf["mirar"] else ("Tengo activo el modo «no mires»: no me digas cuánto ha subido o bajado lo que ya tengo "
+                                     "(ni su precio de hoy); de las ideas nuevas, sí.\n")
+    return PROMPT.format(mirar=mirar, edad=p["edad"] or "?", broker=p["broker"] or "?", horizonte=p["horizonte"] or "?",
                          tolerancia=p["tolerancia"] or "?", aportacion=p["aportacion"], objetivo=p.get("objetivo") or "?",
                          hoy=hoy.isoformat(), cartera=cartera, reacciones=reacciones, previas=previas, mercado=merc)
 
