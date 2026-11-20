@@ -911,8 +911,10 @@ def pantalla_dias(a: dict, todo_sesion: str = Cookie(None), authorization: str =
             if not (isinstance(d, str) and len(d) == 10 and desde <= d <= hoy):
                 continue
             dia = dct(p["dias"].get(d))
+            claves = {re.sub(r"\W", "", k.lower()): k for k in lee_ajustes()["limites"]}
             for nombre, x in dct(apps).items():
                 x = dct(x)
+                nombre = claves.get(re.sub(r"\W", "", str(nombre).lower()), nombre)   # «Brawl Stars» de Tom = «BrawlStars» del límite
                 s = int(x.get("s") or 0)
                 if 0 <= s < 24 * 3600:
                     dia[" ".join(str(nombre).split())[:30]] = {"n": int(x.get("n") or 0), "s": s, "no": int(x.get("no") or 0)}
@@ -931,6 +933,11 @@ def get_pantalla(todo_sesion: str = Cookie(None), authorization: str = Header(No
     # cuántos de los últimos 7 días se pasó de cada límite
     r["excesos"] = {a: sum(dct(dct(p["dias"].get(d)).get(a)).get("s", 0) > n * 60 for d in dias) for a, n in lims.items()}
     r["limites"] = lims
+    # para Salud → Móvil: los últimos 30 días (None si ese día no llegó nada) y el límite del hábito del móvil
+    d30 = [(date.fromisoformat(hoy) - timedelta(days=i)).isoformat() for i in range(29, -1, -1)]
+    r["dias30"] = [{"dia": d, "s": segundos_dia(p, d) if d in p["dias"] else None} for d in d30]
+    s = clean(dct(json.loads(DB.read_text("utf-8")))) if DB.exists() else clean({})
+    r["limite_habito"] = next((lim for _, lim in habitos_movil(s["habits"]).values()), None)
     return r
 
 

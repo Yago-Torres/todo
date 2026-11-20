@@ -52,7 +52,7 @@ private struct Leyenda: View {
 }
 
 /// La línea de abajo de cada gráfica: lo que hay bajo el dedo, o una pista.
-private struct Lectura: View {
+struct Lectura: View {
     let texto: String
 
     var body: some View {

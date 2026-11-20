@@ -70,6 +70,18 @@
   details.como p { font-size: var(--t-texto); color: var(--suave); margin: 8px 0 0; }
   details.como summary { cursor: pointer; font-weight: 600; }
   .puerta input, .puerta button { width: 100%; }
+  .mov-cifras { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 4px 0 10px; }
+  .mov-cifras div { display: grid; gap: 2px; }
+  .mov-cifras b { font-size: 1.5rem; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .mov-cifras b.mal { color: var(--peligro); }
+  .mov-cifras span { font-size: var(--t-pequeno); color: var(--suave); }
+  .mov-apps { display: grid; gap: 8px; margin-top: 12px; }
+  .mov-app { display: grid; grid-template-columns: minmax(0, 7.5em) 1fr auto; gap: 8px; align-items: center; font-size: var(--t-pequeno); }
+  .mov-app .barra { height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--acento) var(--p), var(--linea) var(--p)); }
+  .mov-app .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  .mov-app .d { color: var(--suave); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .mov-app small { grid-column: 1 / -1; color: var(--suave); margin-top: -4px; }
+  .mov-nota { font-size: var(--t-pequeno); color: var(--suave); margin: 10px 0 0; }
 </style>
 <body>
 
@@ -152,6 +164,14 @@
       <div class="lienzo bajo-h"><canvas id="g-pasos" role="img" aria-label="Pasos por día"></canvas></div>
       <details class="datos"><summary>Ver los datos</summary><div class="scroll" id="t-pasos-d"></div></details>
     </section>
+
+    <section class="carta c-carta" aria-labelledby="t-movil">
+      <h2 id="t-movil">Móvil <span class="der c-eti" id="movil-lim"></span></h2>
+      <div class="mov-cifras" id="mov-cifras"></div>
+      <div class="lienzo bajo-h"><canvas id="g-movil" role="img" aria-label="Minutos al día en las apps que vigilas, últimos 30 días"></canvas></div>
+      <div id="mov-apps" class="mov-apps"></div>
+      <p class="mov-nota">Las apps que frenas en Tom (Freno). «No entré» son las veces que te lo pensaste y saliste.</p>
+    </section>
   </div>
 </div>
 
@@ -188,6 +208,7 @@ async function cargar() {
     $("#estado").textContent = "";
     pinta();
     anima.entrada();
+    cargaMovil();
   } catch (e) {
     $("#estado").textContent = "Sin conexión";
   }
@@ -349,7 +370,7 @@ function traza(id, color, carta) {
 function tokens() {
   const s = getComputedStyle(document.documentElement), v = n => s.getPropertyValue(n).trim();
   return {texto: v("--texto"), suave: v("--suave"), tenue: v("--tenue"), linea: v("--linea"), acento: v("--acento"),
-          carta: v("--carta"), fuente: v("--fuente"), fase: Object.fromEntries(FASES.map(([k]) => [k, v(`--f-${k}`)]))};
+          carta: v("--carta"), fuente: v("--fuente"), peligro: v("--peligro"), fase: Object.fromEntries(FASES.map(([k]) => [k, v(`--f-${k}`)]))};
 }
 function base(t, yfmt) {
   return {
@@ -478,6 +499,44 @@ function graficas() {
   }
 }
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", graficas);
+
+// ---------- móvil (/api/pantalla: lo que cuenta el Freno de Tom) ----------
+let M = null;
+async function cargaMovil() {
+  const r = await fetch("/api/pantalla").catch(() => null);
+  if (!r || !r.ok) return;
+  M = await r.json();
+  pintaMovil();
+}
+function pintaMovil() {
+  if (!M || !window.Chart) return;
+  const t = tokens(), min = s => s == null ? null : Math.round(s / 60), lim = M.limite_habito ? M.limite_habito / 60 : null;
+  $("#movil-lim").textContent = lim ? `límite ${hm(lim)} al día` : "";
+  const sem = M.semana.s / 7, pas = M.pasada.s / 7, dif = pas ? Math.round((sem - pas) / pas * 100) : null;
+  const cifra = (n, et, mal) => { const d = el("div"); d.append(el("b", mal ? "mal" : "", n), el("span", null, et)); return d; };
+  $("#mov-cifras").replaceChildren(
+    cifra(hm(min(M.hoy.s)), "hoy", lim && M.hoy.s / 60 > lim),
+    cifra(hm(min(M.ayer.s)), "ayer", lim && M.ayer.s / 60 > lim),
+    cifra(hm(min(sem)), dif == null ? "al día esta semana" : `al día esta semana (${dif > 0 ? "+" : ""}${dif} % vs la pasada)`, lim && sem / 60 > lim));
+  const D = M.dias30, o = base(t, v => v ? `${v / 60} h` : "0");
+  o.scales.y.beginAtZero = true;
+  o.scales.y.ticks.stepSize = 60;   // de hora en hora
+  o.plugins.tooltip.callbacks = {title: c => larga(D[c[0].dataIndex].dia), label: c => c.raw == null ? null : `${c.dataset.label}: ${hm(c.raw)}`};
+  const datasets = [{label: "En las apps", data: D.map(d => min(d.s)), borderRadius: 3, borderSkipped: "start", barPercentage: .75,
+    backgroundColor: D.map(d => lim && d.s != null && d.s / 60 > lim ? t.peligro : t.acento)}];
+  if (lim) datasets.push({type: "line", label: "Límite", data: D.map(() => lim), borderColor: t.tenue, borderDash: [4, 4], borderWidth: 1.5, pointRadius: 0});
+  dibuja("g-movil", {type: "bar", options: o, data: {labels: D.map(d => corta(d.dia)), datasets}});
+  const apps = M.semana.apps.filter(a => a.s || a.n), top = Math.max(1, ...apps.map(a => a.s));
+  $("#mov-apps").replaceChildren(...apps.map(a => {
+    const f = el("div", "mov-app"), b = el("span", "barra");
+    b.style.setProperty("--p", a.s / top * 100 + "%");
+    f.append(el("span", "n", a.app), b, el("span", "d", `${hm(min(a.s / 7))}/día`));
+    const l = M.limites[a.app], x = M.excesos[a.app];
+    f.append(el("small", null, `Esta semana: ${a.n} ${a.n === 1 ? "vez" : "veces"} · no entré ${a.no}` + (l ? ` · límite ${l} min, pasado ${x || 0} de 7 días` : "")));
+    return f;
+  }));
+}
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", pintaMovil);
 
 $("#f-clave").onsubmit = async e => {
   e.preventDefault();

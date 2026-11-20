@@ -7,7 +7,7 @@ struct PantallaSalud: View {
     /// Los bloques (ids estables: se guardan en la disposición «app-salud»).
     static let bloques: [(String, String)] = [
         ("anoche", "Anoche"), ("noche", "La noche"), ("fases", "Fases por noche"), ("puntuacion", "Puntuación"),
-        ("peso", "Peso"), ("composicion", "Composición"), ("pasos", "Pasos"), ("como", "Cómo se calcula"),
+        ("peso", "Peso"), ("composicion", "Composición"), ("pasos", "Pasos"), ("movil", "Móvil"), ("como", "Cómo se calcula"),
     ]
 
     @State private var datos = DatosSalud.shared
@@ -38,7 +38,7 @@ struct PantallaSalud: View {
         VStack(alignment: .leading, spacing: Tema.Espacio.m) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Sueño, pasos y peso").estiloEtiqueta().foregroundStyle(Tema.suave)
+                    Text("Sueño, pasos, peso y móvil").estiloEtiqueta().foregroundStyle(Tema.suave)
                     Text("Salud").font(Tema.fuente(.titulo)).foregroundStyle(Tema.texto)
                 }
                 Spacer()
@@ -77,6 +77,7 @@ struct PantallaSalud: View {
             case "peso": CartaPeso(datos: datos, periodo: periodo)
             case "composicion": CartaComposicion(datos: datos, periodo: periodo)
             case "pasos": CartaPasos(noches: datos.noches(periodo), periodo: periodo)
+            case "movil": CartaMovil()
             case "como": ComoSeCalcula()
             default: EmptyView()
             }
