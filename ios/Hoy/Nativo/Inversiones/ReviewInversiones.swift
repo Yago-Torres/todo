@@ -203,6 +203,7 @@ struct MarkdownInv: View {
             Text(LectorMD.enLinea(t))
                 .font(Tema.fuente(nivel <= 2 ? .seccion : nivel == 3 ? .destacado : .texto, peso: .semibold))
                 .foregroundStyle(Tema.texto)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, nivel <= 2 ? Tema.Espacio.m : Tema.Espacio.xs)
         case .parrafo(let t):
             Text(LectorMD.enLinea(t))
@@ -240,14 +241,25 @@ private struct TablaMD: View {
     let cabecera: [String]
     let filas: [[String]]
 
+    /// Ancho fijo por columna (por lo largo de su texto, de 80 a 220 pt). Con minWidth/maxWidth, dentro del scroll
+    /// horizontal el Grid medía cada celda con un ancho y la colocaba con otro: el texto partido en varias líneas se
+    /// salía de su fila y se montaba encima de la siguiente (informe de mercado en Tom, 20/11).
+    private func ancho(_ j: Int) -> CGFloat {
+        let largo = ([cabecera] + filas).map { j < $0.count ? $0[j].replacingOccurrences(of: "*", with: "").count : 0 }.max() ?? 0
+        return min(220, max(80, CGFloat(largo) * 7.5))
+    }
+
     var body: some View {
         let n = max(cabecera.count, filas.map(\.count).max() ?? 0)
+        let anchos = (0..<n).map(ancho)
         ScrollView(.horizontal) {
             Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 8) {
-                GridRow {
+                GridRow(alignment: .top) {
                     ForEach(0..<n, id: \.self) { j in
                         Text(LectorMD.enLinea(j < cabecera.count ? cabecera[j] : ""))
                             .font(Tema.fuente(.pequeno, peso: .semibold)).foregroundStyle(Tema.suave)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(width: anchos[j], alignment: .leading)
                     }
                 }
                 Divider().overlay(Tema.linea)
@@ -257,8 +269,8 @@ private struct TablaMD: View {
                             Text(LectorMD.enLinea(j < f.count ? f[j] : ""))
                                 .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.texto)
                                 .monospacedDigit()
-                                .frame(minWidth: 70, maxWidth: 220, alignment: .leading)
                                 .fixedSize(horizontal: false, vertical: true)
+                                .frame(width: anchos[j], alignment: .leading)
                         }
                     }
                 }
