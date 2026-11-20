@@ -10,6 +10,9 @@ struct PreguntaInv: Decodable, Identifiable, Hashable {
     var r: String
     var estado: String
     var cuando: String
+    /// «compara» para las del comparador de Explorar (con su `titulo`, «A frente a B»); nada en las de siempre.
+    var tipo: String? = nil
+    var titulo: String? = nil
 }
 
 extension DatosInversiones {
@@ -84,7 +87,7 @@ struct PreguntaInversiones: View {
             }
             ForEach(lista) { p in
                 VStack(alignment: .leading, spacing: Tema.Espacio.s) {
-                    Text(p.q).font(Tema.fuente(.texto, peso: .semibold)).foregroundStyle(Tema.texto)
+                    Text(p.titulo ?? p.q).font(Tema.fuente(.texto, peso: .semibold)).foregroundStyle(Tema.texto)
                     switch p.estado {
                     case "pensando":
                         HStack(spacing: Tema.Espacio.s) {

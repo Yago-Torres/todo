@@ -118,6 +118,8 @@
   .fila[aria-pressed="true"] .nom { color: var(--suave); text-decoration: line-through; text-decoration-color: var(--tenue); }
   .fila .n { font-weight: 600; font-variant-numeric: tabular-nums; }
   .fila .u { font-size: var(--t-pequeno); color: var(--suave); }
+  .fila.cubierto .bx { opacity: .5; }
+  .fila .plan.cub { background: var(--linea); color: var(--suave); }
   .fila .plan { font-size: var(--t-etiqueta); font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--acento-suave); color: var(--acento); }
 
   /* ---------- tareas (legado, sin interfaz desde el 21/10) ---------- */
@@ -407,6 +409,17 @@ const hecho = (d, h) => (S.log[d] || []).includes(h);
 const hechos = d => S.log[d] || [];
 const planeado = (d, h) => (S.plan[d] || []).includes(h);
 const planeados = d => S.plan[d] || [];
+// Un hábito de 1 vez por semana o menos, hecho hace poco: cuenta como hecho hasta el día antes de que vuelva a
+// tocar (la misma regla que «cubierto» en /api/rachas). Devuelve ese último día o null.
+function cubierto(d, h) {
+  const v = Math.ceil(7 * (h.cada || 1) / h.goal), f = new Date(d + "T12:00");
+  if (v < 7 || hecho(d, h.id)) return null;
+  if (Array.from({length: 7}, (_, k) => iso(add(lunes(f), k))).some(x => planeado(x, h.id))) return null;   // con plan manda el plan
+  for (let k = 1; k <= v - 2; k++) {
+    if (hecho(iso(add(f, -k)), h.id)) return iso(add(f, v - 2 - k));
+  }
+  return null;
+}
 
 // ---------- animaciones (anime.js) ----------
 // Solo de adorno: sin anime.js o con "reducir movimiento" en el sistema, todo funciona igual y quieto.
@@ -593,14 +606,14 @@ function habitos() {
   c.replaceChildren();
   $("#hb-dia").textContent = sel === HOY ? "hoy" : `${+sel.slice(8)} ${MES[+sel.slice(5, 7) - 1].slice(0, 3)}`;
   $("#hb-hoy").hidden = sel === HOY;
-  $("#hb-n").textContent = S.habits.length ? `${hechos(sel).length}/${S.habits.length}` : "0/0";
+  $("#hb-n").textContent = S.habits.length ? `${S.habits.filter(h => hecho(sel, h.id) || cubierto(sel, h)).length}/${S.habits.length}` : "0/0";
 
   if (!S.habits.length) {
     c.append(Object.assign(el("p", "vacio"), {textContent: "Sin hábitos. Añade uno abajo ↓"}));
     return;
   }
   for (const h of S.habits) {
-    const on = hecho(sel, h.id), n = enSemana(h.id, new Date(sel + "T12:00"));
+    const on = hecho(sel, h.id), n = enSemana(h.id, new Date(sel + "T12:00")), cub = cubierto(sel, h);
     const b = el("button", "fila");
     b.style.setProperty("--c", h.c);
     b.dataset.h = h.id;
@@ -608,10 +621,15 @@ function habitos() {
     b.setAttribute("aria-label", `${h.n}, ${on ? "hecho" : "sin hacer"}`);
     b.append(
       el("span", "cua"),
-      Object.assign(el("span", "bx liq"), {innerHTML: mov.circulo(on)}),
+      Object.assign(el("span", "bx liq"), {innerHTML: mov.circulo(on || !!cub)}),
       Object.assign(el("span", "nom"), {textContent: h.n}),
     );
-    if (planeado(sel, h.id)) b.append(Object.assign(el("span", "plan"), {textContent: "plan"}));
+    if (cub) {
+      const f = new Date(cub + "T12:00");
+      b.classList.add("cubierto");
+      b.setAttribute("aria-label", `${h.n}, hecho hace poco: no vuelve a tocar hasta el ${f.getDate()}/${f.getMonth() + 1}`);
+      b.append(Object.assign(el("span", "plan cub"), {textContent: `hecho · hasta el ${f.getDate()}/${f.getMonth() + 1}`}));
+    } else if (planeado(sel, h.id)) b.append(Object.assign(el("span", "plan"), {textContent: "plan"}));
     b.append(
       numRacha("span", "n rn", racha(h.id)),
       Object.assign(el("span", "u"), {textContent: "racha"}),

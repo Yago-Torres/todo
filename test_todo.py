@@ -941,6 +941,47 @@ def test_carrera_calendario():
     assert agenda.carrera_deseada({**s, "rutinas": []}, "2026-11-19") == {}   # sin el plan aplicado (Aitana), nada
 
 
+def test_cubierto():
+    """Un hábito de 1 vez por semana o menos, hecho hace poco, cuenta como hecho hasta que vuelve a tocar."""
+    base = {"habits": [{"id": "l", "n": "Limpiar", "c": "#000", "goal": 1, "cada": 1},
+                       {"id": "e", "n": "Escalar", "c": "#000", "goal": 1, "cada": 2},
+                       {"id": "a", "n": "Agua", "c": "#000", "goal": 7, "cada": 1}],
+            "log": {"2026-11-16": ["l", "e", "a"]}}
+    r = lambda s, hoy: {x["id"]: x["cubierto"] for x in main.rachas(clean(s), hoy)["habitos"]}
+    assert r(base, "2026-11-17") == {"l": "2026-11-21", "e": "2026-11-28", "a": None}
+    assert r(base, "2026-11-22")["l"] is None and r(base, "2026-11-22")["e"] == "2026-11-28"   # el domingo, Limpiar toca
+    assert r(base, "2026-11-16") == {"l": None, "e": None, "a": None}   # hecho hoy: es «hecho», no cubierto
+    plan = {**base, "plan": {"2026-11-27": ["e"]}}   # una semana con plan manda el plan
+    assert r(plan, "2026-11-24")["e"] is None
+    print("cubierto ok")
+
+
+def test_explorar():
+    import explorar, tempfile
+    from pathlib import Path
+    explorar.FICHERO = Path(tempfile.mkdtemp()) / "explorar.json"
+    crudo = """Aquí va:
+```json
+{"resumen": "Todo en un ETF", "huecos": [{"t": "Nada en emergentes", "por_que": "0 %"}, {"x": 1}],
+ "ideas": [{"tipo": "fondo", "nombre": "MSCI EM IMI", "isin": "ie00bkm4gz66", "riesgo": 9, "fuentes": ["https://a.es", "javascript:x"]},
+           {"tipo": "raro", "nombre": "Uranio"}, {"nombre": ""}],
+ "aprender": {"titulo": "TER", "texto": "…"}}
+```"""
+    x = explorar.limpia_informe(explorar.saca_json(crudo))
+    assert [i["nombre"] for i in x["ideas"]] == ["MSCI EM IMI", "Uranio"] and x["ideas"][1]["tipo"] == "tema"
+    i = x["ideas"][0]
+    assert i["isin"] == "IE00BKM4GZ66" and i["riesgo"] == 5 and i["fuentes"] == ["https://a.es"] and len(x["huecos"]) == 1
+    explorar._guarda({"informes": [{"id": "e1", "fecha": "2026-11-20", "t": 0, "estado": "listo", **x}], "reacciones": {}})
+    assert explorar.reacciona(i["id"], "descarta", "muy volátil")["estado"] == "descarta"
+    try:
+        explorar.reacciona("nope", "interesa"); assert False
+    except KeyError:
+        pass
+    explorar.reacciona(i["id"], "")
+    assert explorar.lee()["reacciones"] == {}
+    print("explorar ok")
+
+
 def test_multas():
     """Cada falta multa `fallo`; romper una racha de `racha_min` o más, `racha` además; el comodín salva; «aportar» no multa."""
     H = [{"id": "w", "n": "Agua", "goal": 7}, {"id": "aportar", "n": "Aportar", "goal": 1, "cada": 5}]
@@ -1232,6 +1273,8 @@ if __name__ == "__main__":
     test_escalada()
     test_aparato()
     test_inversiones()
+    test_cubierto()
+    test_explorar()
     test_multas()
     test_carrera_calendario()
     print("ok")

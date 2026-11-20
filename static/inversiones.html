@@ -116,6 +116,34 @@
   .md h2:first-child { margin-top: 0; }
   .md h3 { margin: 18px 0 6px; font-size: var(--t-destacado); }
   .md h4 { margin: 14px 0 4px; font-size: var(--t-texto); }
+  /* Explorar */
+  .ex-cab { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .huecos { display: grid; gap: 8px; margin-top: 10px; }
+  .hueco { padding: 8px 10px; border-radius: 10px; background: var(--acento-suave); }
+  .hueco b { display: block; color: var(--acento); }
+  .idea { display: grid; gap: 8px; }
+  .idea.descarta { opacity: .55; }
+  .idea .tit { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .idea .tit h3 { margin: 0; font-size: var(--t-destacado); }
+  .idea .cod { font-size: var(--t-pequeno); color: var(--suave); font-variant-numeric: tabular-nums; }
+  .chip { font-size: var(--t-etiqueta); font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--linea); color: var(--suave); }
+  .chip.tema { background: var(--acento-suave); color: var(--acento); }
+  .riesgo { display: inline-flex; gap: 3px; align-items: center; font-size: var(--t-pequeno); color: var(--suave); }
+  .riesgo i { width: 7px; height: 7px; border-radius: 50%; background: var(--linea); }
+  .riesgo i.on { background: var(--peligro); }
+  .idea .gancho { margin: 0; font-weight: 550; }
+  .idea .tu { margin: 0; color: var(--suave); }
+  .idea details { border-top: 1px solid var(--linea); padding-top: 6px; }
+  .idea summary { cursor: pointer; color: var(--acento); font-size: var(--t-pequeno); font-weight: 600; }
+  .idea dl { margin: 8px 0 0; display: grid; gap: 8px; }
+  .idea dt { font-size: var(--t-etiqueta); font-weight: 650; text-transform: uppercase; letter-spacing: .04em; color: var(--suave); }
+  .idea dd { margin: 2px 0 0; line-height: 1.5; }
+  .idea dd.contra { border-left: 3px solid var(--peligro); padding-left: 8px; }
+  .idea .acc { display: flex; gap: 6px; flex-wrap: wrap; }
+  .idea .acc .c-btn[aria-pressed="true"] { background: var(--acento); color: var(--acento-texto); border-color: var(--acento); }
+  .compara { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; }
+  .compara input { min-width: 0; font: inherit; padding: .5rem .6rem; border-radius: 10px; border: 1px solid var(--linea); background: transparent; color: inherit; }
+  @media (max-width: 560px) { .compara { grid-template-columns: 1fr; } }
   .md p, .md ul, .md ol { margin: 8px 0; }
   .md ul, .md ol { padding-left: 22px; }
   .md li { margin: 3px 0; }
@@ -173,6 +201,7 @@
     <button role="tab" data-v="mercado">Mercado</button>
     <button role="tab" data-v="impuestos">Impuestos</button>
     <button role="tab" data-v="review">Review</button>
+    <button role="tab" data-v="explorar">Explorar</button>
     <button role="tab" data-v="pregunta">Pregunta</button>
     <button role="tab" data-v="perfil">Perfil</button>
   </div>
@@ -398,6 +427,29 @@
     </section>
   </section>
 
+  <!-- EXPLORAR -->
+  <section class="vista" id="v-explorar" hidden>
+    <section class="carta c-carta">
+      <div class="ex-cab">
+        <h2 style="margin:0">Ideas para estudiar</h2>
+        <button class="c-btn pri" id="b-explorar" type="button">Ideas nuevas</button>
+      </div>
+      <p class="nota-p">Temas, fondos y empresas que encajan con tu perfil y con lo que le falta a tu cartera, cada uno con el porqué, el mejor argumento en contra y cómo se compraría. Llegan el primer sábado de cada mes (o cuando las pidas). Lo que respondas a cada idea afina las siguientes. Son cosas para estudiar, no órdenes de compra.</p>
+      <div class="fechas" id="ex-fechas"></div>
+    </section>
+    <div id="explorar"></div>
+    <section class="carta c-carta">
+      <h2>Comparar dos fondos o acciones</h2>
+      <p class="nota-p">Costes, qué llevan dentro, cuánto se solapan entre sí y con tu cartera, impuestos en España y cuál te encaja mejor. Nombre, ticker o ISIN.</p>
+      <form id="f-compara" class="compara">
+        <input id="ca" placeholder="p. ej. IE00B4L5Y983" aria-label="Primero" maxlength="80">
+        <input id="cb" placeholder="p. ej. VWCE" aria-label="Segundo" maxlength="80">
+        <button class="c-btn pri" id="b-compara">Comparar</button>
+      </form>
+    </section>
+    <div id="comparas"></div>
+  </section>
+
   <!-- PREGUNTA -->
   <section class="vista" id="v-pregunta" hidden>
     <section class="carta c-carta">
@@ -486,11 +538,11 @@ $("#toast-btn").onclick = async () => { $("#toast").removeAttribute("data-on"); 
 
 // ---------- pestañas (la elegida va en el #, así un enlace o recargar vuelve a ella) ----------
 function vista(v) {
-  if (!["cartera", "operaciones", "planes", "mercado", "impuestos", "review", "pregunta", "perfil"].includes(v)) v = "cartera";
+  if (!["cartera", "operaciones", "planes", "mercado", "impuestos", "review", "explorar", "pregunta", "perfil"].includes(v)) v = "cartera";
   document.querySelectorAll("#pestanas button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.v === v)));
   document.querySelectorAll(".vista").forEach(s => s.hidden = s.id !== `v-${v}`);
   history.replaceState(null, "", `${location.pathname}${location.search}#${v}`);
-  if (I) ({cartera: pintaCartera, operaciones: pintaOps, planes: pintaPlanes, mercado: pintaMercado, impuestos: pintaImpuestos, review: pintaReview, pregunta: pintaPreguntas, perfil: pintaPerfil})[v]();
+  if (I) ({cartera: pintaCartera, operaciones: pintaOps, planes: pintaPlanes, mercado: pintaMercado, impuestos: pintaImpuestos, review: pintaReview, explorar: pintaExplorar, pregunta: pintaPreguntas, perfil: pintaPerfil})[v]();
 }
 $("#pestanas").onclick = e => { const b = e.target.closest("button"); if (b) vista(b.dataset.v); };
 
@@ -799,7 +851,7 @@ async function pintaPreguntas() {
     if (p.estado === "pensando") r.append(el("p", "vacio", "Pensando… (puede buscar en la web)"));
     else if (p.estado === "error") r.append(el("p", "vacio", p.r));
     else md(r, p.r);
-    c.append(el("p", "q", p.q), r, meta);
+    c.append(el("p", "q", p.titulo || p.q), r, meta);
     return c;
   }));
   if (l.some(p => p.estado === "pensando") && location.hash === "#pregunta") relojPreguntas = setTimeout(pintaPreguntas, 3000);
@@ -813,6 +865,139 @@ $("#f-pregunta").onsubmit = async e => {
   catch (err) { toast(err.message); }
   $("#b-preguntar").disabled = false;
   pintaPreguntas();
+};
+
+// ---------- Explorar (explorar.py): ideas del mes con lo que respondes a cada una ----------
+let exVista = null, relojExplorar = null;
+const TIPO_IDEA = {tema: "Tema", fondo: "Fondo / ETF", empresa: "Empresa"};
+const REAC = [["interesa", "Me interesa"], ["tengo", "Ya lo tengo"], ["descarta", "Descartar"]];
+async function pintaExplorar() {
+  clearTimeout(relojExplorar);
+  let d;
+  try { d = await api("/api/inversiones/explorar"); } catch (e) { $("#explorar").replaceChildren(el("p", "vacio", `No se pudo cargar: ${e.message}`)); return; }
+  const infs = d.informes;
+  if (!exVista || !infs.some(x => x.id === exVista)) exVista = infs[0]?.id;
+  $("#ex-fechas").replaceChildren(...infs.slice(0, 12).map(x => {
+    const b = el("button", "c-btn mini" + (x.id === exVista ? " pri" : ""), x.estado === "generando" ? "Pensando…" : corta(x.fecha));
+    b.type = "button"; b.setAttribute("aria-pressed", String(x.id === exVista));
+    b.onclick = () => { exVista = x.id; pintaExplorar(); };
+    return b;
+  }));
+  const pensando = infs.some(x => x.estado === "generando");
+  $("#b-explorar").disabled = pensando;
+  $("#b-explorar").textContent = pensando ? "Pensando… (unos minutos)" : "Ideas nuevas";
+  const inf = infs.find(x => x.id === exVista), caja = $("#explorar");
+  if (!inf) caja.replaceChildren(el("p", "vacio", "Aún no hay ideas. Pide las primeras: tarda unos minutos porque busca datos de hoy en la web."));
+  else if (inf.estado === "generando") caja.replaceChildren(el("p", "vacio", "Buscando ideas que encajen contigo… puedes irte y volver."));
+  else if (inf.estado === "error") caja.replaceChildren(el("p", "vacio", inf.error || "No salió"));
+  else caja.replaceChildren(...pintaInforme(inf, d.reacciones));
+  pintaComparas(d.comparas);
+  if ((pensando || d.comparas.some(p => p.estado === "pensando")) && location.hash === "#explorar") relojExplorar = setTimeout(pintaExplorar, 4000);
+}
+function pintaInforme(inf, reac) {
+  const out = [];
+  const cab = el("section", "carta c-carta");
+  cab.append(el("h2", null, "Este mes"), el("p", null, inf.resumen));
+  if (inf.huecos?.length) {
+    const h = el("div", "huecos");
+    h.append(...inf.huecos.map(x => { const d = el("div", "hueco"); d.append(el("b", null, x.t), el("span", null, x.por_que)); return d; }));
+    cab.append(el("h3", null, "Lo que le falta a tu cartera"), h);
+  }
+  out.push(cab);
+  // lo descartado, al final
+  const ideas = [...inf.ideas].sort((a, b) => (reac[a.id]?.estado === "descarta") - (reac[b.id]?.estado === "descarta"));
+  for (const i of ideas) out.push(tarjetaIdea(i, reac[i.id]));
+  if (inf.seguimiento?.length) {
+    const s = el("section", "carta c-carta");
+    s.append(el("h2", null, "Lo que te interesó: qué ha pasado"));
+    for (const x of inf.seguimiento) {
+      const p = el("p"); p.append(el("b", null, `${x.nombre} ${x.sigue ? "· sigue en pie" : "· ya no lo veo"}: `), x.que_ha_pasado);
+      s.append(p);
+    }
+    out.push(s);
+  }
+  if (inf.aprender) {
+    const a = el("section", "carta c-carta");
+    a.append(el("h2", null, `Para aprender: ${inf.aprender.titulo}`), el("p", null, inf.aprender.texto));
+    out.push(a);
+  }
+  return out;
+}
+function tarjetaIdea(i, r) {
+  const c = el("section", "carta c-carta idea" + (r?.estado === "descarta" ? " descarta" : ""));
+  const tit = el("div", "tit");
+  tit.append(el("span", "chip" + (i.tipo === "tema" ? " tema" : ""), TIPO_IDEA[i.tipo]), el("h3", null, i.nombre));
+  const cod = [i.ticker, i.isin].filter(Boolean).join(" · ");
+  if (cod) tit.append(el("span", "cod", cod));
+  const rg = el("span", "riesgo"); rg.title = `Riesgo ${i.riesgo} de 5`;
+  rg.append("riesgo ", ...[1, 2, 3, 4, 5].map(n => el("i", n <= i.riesgo ? "on" : "")));
+  if (i.horizonte) rg.append(` · ${i.horizonte}`);
+  tit.append(rg);
+  c.append(tit, el("p", "gancho", i.gancho), el("p", "tu", i.por_que_tu));
+  const det = el("details"), dl = el("dl");
+  det.append(el("summary", null, "La tesis, el argumento en contra y cómo se compraría"));
+  const fila = (t, v, cls) => { if (!v || (Array.isArray(v) && !v.length)) return; const dd = el("dd", cls);
+    if (Array.isArray(v)) { const ul = el("ul"); ul.append(...v.map(x => el("li", null, x))); dd.append(ul); } else dd.textContent = v;
+    dl.append(el("dt", null, t), dd); };
+  fila("La tesis", i.tesis); fila("En contra", i.contra, "contra"); fila("Riesgos", i.riesgos); fila("Cómo tenerlo", i.como);
+  fila("En tu cartera", i.encaje); fila("Qué vigilar", i.senales); fila("Un dato de hoy", i.dato);
+  if (i.fuentes?.length) {
+    const dd = el("dd");
+    i.fuentes.forEach((u, k) => { const a = el("a", null, (() => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return u; } })());
+      a.href = u; a.target = "_blank"; a.rel = "noopener"; dd.append(...(k ? [" · "] : []), a); });
+    dl.append(el("dt", null, "Fuentes"), dd);
+  }
+  det.append(dl);
+  c.append(det);
+  const acc = el("div", "acc");
+  for (const [k, t] of REAC) {
+    const b = el("button", "c-btn mini", t); b.type = "button"; b.setAttribute("aria-pressed", String(r?.estado === k));
+    b.onclick = async () => {
+      const quitar = r?.estado === k;
+      let nota = "";
+      if (k === "descarta" && !quitar) nota = prompt("¿Por qué no? (opcional: ayuda a afinar las próximas)") ?? "";
+      try { await api("/api/inversiones/explorar/reaccion", {id: i.id, estado: quitar ? "" : k, nota}); } catch (e) { toast(e.message); }
+      pintaExplorar();
+    };
+    acc.append(b);
+  }
+  const prof = el("button", "c-btn mini", "Profundizar"); prof.type = "button";
+  prof.onclick = async () => {
+    try { await api("/api/inversiones/pregunta", {q: `Profundiza en «${i.nombre}»${cod ? ` (${cod})` : ""} para mí: cómo funciona por dentro, si de verdad encaja con mi cartera y mi perfil, qué % tendría sentido, cómo lo compraría con mi broker y qué tendría que pasar para descartarlo.`}); vista("pregunta"); }
+    catch (e) { toast(e.message); }
+  };
+  acc.append(prof);
+  if (r?.nota) acc.append(el("span", "cod", `Motivo: ${r.nota}`));
+  c.append(acc);
+  return c;
+}
+function pintaComparas(l) {
+  $("#comparas").replaceChildren(...l.map(p => {
+    const c = el("section", "carta c-carta qa"), r = el("article", "md"), meta = el("div", "meta");
+    if (p.estado === "pensando") r.append(el("p", "vacio", "Comparando… (busca los datos de hoy)"));
+    else if (p.estado === "error") r.append(el("p", "vacio", p.r));
+    else md(r, p.r);
+    meta.append(el("span", null, p.cuando.replace("T", " · ")));
+    const x = el("button", "c-btn mini", "Borrar"); x.type = "button";
+    x.onclick = async () => { await api("/api/inversiones/pregunta/borra", {id: p.id}); pintaExplorar(); };
+    meta.append(x);
+    c.append(el("p", "q", p.titulo || p.q), r, meta);
+    return c;
+  }));
+}
+$("#b-explorar").onclick = async () => {
+  $("#b-explorar").disabled = true;
+  try { const x = await api("/api/inversiones/explorar/genera", {}); exVista = x.id; } catch (e) { toast(e.message); }
+  pintaExplorar();
+};
+$("#f-compara").onsubmit = async e => {
+  e.preventDefault();
+  const a = $("#ca").value.trim(), b = $("#cb").value.trim();
+  if (!a || !b) return toast("Pon los dos");
+  $("#b-compara").disabled = true;
+  try { await api("/api/inversiones/compara", {a, b}); $("#ca").value = ""; $("#cb").value = ""; } catch (err) { toast(err.message); }
+  $("#b-compara").disabled = false;
+  pintaExplorar();
 };
 
 async function pintaReview() {

@@ -23,7 +23,7 @@ struct PantallaHoy: View {
     private var progreso: Double {
         let hs = datos.habitosDeHoy
         guard !hs.isEmpty else { return 0 }
-        return Double(hs.filter(\.hecho).count) / Double(hs.count)
+        return Double(hs.filter(\.listo).count) / Double(hs.count)
     }
 
     var body: some View {
@@ -135,7 +135,7 @@ struct PantallaHoy: View {
         if Tema.juno { return AnyView(vumetros(pasos: pasos, sueno: sueno, hs: hs)) }
         if Tema.solar || Tema.plano || Tema.conserje {
             // Solarpunk: arcos de sol; Plano: cotas; Conserje: medallones (como en la web)
-            let hechos = hs.filter(\.hecho).count
+            let hechos = hs.filter(\.listo).count
             let ms: [(Double, String, String, Color)] = [
                 (progreso, "\(hechos)/\(hs.count)", "hábitos", Tema.acento),
                 (Double(pasos ?? 0) / 10_000, pasos.map(Self.miles) ?? "—", "pasos ayer", Color(hex: "#E8A93A")),
@@ -169,7 +169,7 @@ struct PantallaHoy: View {
                     .frame(width: 56, height: 56)
             }
             VStack(alignment: .leading, spacing: Tema.Espacio.s) {
-                filaAnillo(Tema.acento, "Hábitos", "\(hs.filter(\.hecho).count) de \(hs.count)")
+                filaAnillo(Tema.acento, "Hábitos", "\(hs.filter(\.listo).count) de \(hs.count)")
                 filaAnillo(Tema.aviso, "Pasos ayer", pasos.map(Self.miles) ?? "—")
                 filaAnillo(Color(hex: "#3B5C92"), "Dormido", sueno.map(Self.hm) ?? "—")
             }
@@ -181,7 +181,7 @@ struct PantallaHoy: View {
     /// juno1980: los tres anillos son vúmetros de aguja con su cifra en la pantalla LCD (como hoy.html).
     private func vumetros(pasos: Int?, sueno: Int?, hs: [Habito]) -> some View {
         let lcd = Letras.lista("Share Tech Mono"), ambar = Letras.lista("VT323")
-        let hechos = hs.filter(\.hecho).count
+        let hechos = hs.filter(\.listo).count
         let medidores: [(Double, String, String, String)] = [
             (progreso, "HAB", "\(hechos)/\(hs.count)", "Hábitos"),
             (Double(pasos ?? 0) / 10_000, "PAS", pasos.map(Self.miles) ?? "—", "Pasos ayer"),
@@ -219,7 +219,7 @@ struct PantallaHoy: View {
 
     private var seccionHabitos: some View {
         VStack(alignment: .leading, spacing: Tema.Espacio.s) {
-            encabezado("Hábitos", chip: datos.habitosDeHoy.isEmpty ? nil : "\(datos.habitosDeHoy.filter(\.hecho).count)/\(datos.habitosDeHoy.count)",
+            encabezado("Hábitos", chip: datos.habitosDeHoy.isEmpty ? nil : "\(datos.habitosDeHoy.filter(\.listo).count)/\(datos.habitosDeHoy.count)",
                        enlace: ("Semana", "/habitos.html"))
             VStack(spacing: 0) {
                 if datos.habitosDeHoy.isEmpty {
@@ -228,7 +228,7 @@ struct PantallaHoy: View {
                         .padding(.vertical, Tema.Espacio.m)
                 }
                 // lo que falta, arriba; lo hecho baja con muelle
-                ForEach(datos.habitosDeHoy.sorted { !$0.hecho && $1.hecho }) { h in
+                ForEach(datos.habitosDeHoy.sorted { !$0.listo && $1.listo }) { h in
                     FilaHabito(habito: h) { marca(h) }
                     if h.id != datos.habitosDeHoy.last?.id { Divider().overlay(Tema.linea) }
                 }
@@ -263,7 +263,7 @@ struct PantallaHoy: View {
         let nuevo = !h.hecho
         Haptica.shared.toca(nuevo ? .marcar : .desmarcar)
         Task { await datos.marca(h.id, hecho: nuevo) }
-        if nuevo, datos.habitosDeHoy.filter({ !$0.hecho && $0.id != h.id }).isEmpty, h.plan { toques += 1 }
+        if nuevo, datos.habitosDeHoy.filter({ !$0.listo && $0.id != h.id }).isEmpty, h.plan { toques += 1 }
     }
 
     // MARK: entreno
@@ -489,14 +489,21 @@ struct FilaHabito: View {
     let habito: Habito
     let toca: () -> Void
 
+    /// "2026-11-28" → "28/11".
+    static func corto(_ dia: String) -> String {
+        let p = dia.split(separator: "-")
+        guard p.count == 3, let d = Int(p[2]), let m = Int(p[1]) else { return dia }
+        return "\(d)/\(m)"
+    }
+
     var body: some View {
         Button(action: toca) {
             HStack(spacing: Tema.Espacio.m) {
                 ZStack {
                     Circle()
-                        .strokeBorder(habito.hecho ? Color.clear : Color(hex: habito.c), lineWidth: 2)
-                        .background(Circle().fill(habito.hecho ? Color(hex: habito.c) : Color.clear))
-                    if habito.hecho {
+                        .strokeBorder(habito.listo ? Color.clear : Color(hex: habito.c), lineWidth: 2)
+                        .background(Circle().fill(habito.listo ? Color(hex: habito.c).opacity(habito.hecho ? 1 : 0.5) : Color.clear))
+                    if habito.listo {
                         Image(systemName: "checkmark")
                             .font(.system(size: 12, weight: .bold))
                             .foregroundStyle(.white)
@@ -513,7 +520,14 @@ struct FilaHabito: View {
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                 Spacer(minLength: Tema.Espacio.s)
-                if let libre = habito.libre, !habito.hecho {
+                if let hasta = habito.cubierto, !habito.hecho {
+                    // hecho hace poco: no vuelve a tocar hasta ese día
+                    Text("hecho · hasta el \(Self.corto(hasta))")
+                        .estiloEtiqueta()
+                        .foregroundStyle(Tema.suave)
+                        .padding(.horizontal, 8).padding(.vertical, 2)
+                        .background(Tema.linea, in: Capsule())
+                } else if let libre = habito.libre, !habito.hecho {
                     // descansa hoy: su icono (hoja, cama, sombrilla o copo) y la racha congelada
                     Image(systemName: DatosRachas.icono(libre))
                         .font(.system(size: 12, weight: .semibold))
@@ -538,7 +552,7 @@ struct FilaHabito: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(EstiloHundir())
-        .accessibilityLabel("\(habito.n), \(habito.hecho ? "hecho" : habito.libre != nil ? "descansa hoy" : "sin hacer")"
+        .accessibilityLabel("\(habito.n), \(habito.hecho ? "hecho" : habito.cubierto != nil ? "hecho hace poco, aún no toca" : habito.libre != nil ? "descansa hoy" : "sin hacer")"
                             + (habito.racha > 1 ? ", racha de \(habito.racha) días" + (habito.arriesga ? " en juego" : "") : ""))
         .accessibilityHint(habito.hecho ? "Toca para desmarcar" : "Toca para marcar")
     }

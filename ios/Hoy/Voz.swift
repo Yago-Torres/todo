@@ -1,14 +1,19 @@
 import SwiftUI
+import UIKit
 import Speech
 import AVFoundation
 import WidgetKit
 import Observation
+import UserNotifications
 
 /// El modo voz de Tom: escucha (es-ES, en el iPhone si se puede), manda lo dicho a /api/tom, lee la respuesta en
 /// voz alta y vuelve a escuchar. Se cierra con Parar o tras un rato sin decir nada. Lo abren «Habla con Tom» (Siri),
 /// el botón del centro de control y hoy://voz.
+/// Salir (la X, cambiar de sección o irte de la app) no pierde nada: lo que estabas diciendo se manda igual, iOS da
+/// tiempo extra para acabar (TomFondo) y la respuesta llega como aviso. Solo «Parar» descarta la frase a medias.
 struct Voz: View {
     @Environment(\.dismiss) private var cerrar
+    @Environment(\.scenePhase) private var escena
     @Environment(\.accessibilityReduceMotion) private var sinMovimiento
     @State private var charla = Conversacion()
 
@@ -21,7 +26,7 @@ struct Voz: View {
                 HStack {
                     Spacer()
                     Button {
-                        charla.termina()
+                        charla.sal()
                     } label: {
                         Image(systemName: "xmark")
                             .font(.title3.weight(.semibold))
@@ -72,7 +77,10 @@ struct Voz: View {
             Navegador.shared.olvidaVoz()
             await charla.empieza()
         }
-        .onDisappear { charla.termina() }
+        .onDisappear { charla.sal() }
+        .onChange(of: escena) { _, e in
+            if e == .background { charla.sal() }
+        }
         .onChange(of: charla.cerrada) { _, cerrada in
             if cerrada { cerrar() }
         }
@@ -190,6 +198,15 @@ final class Conversacion: NSObject, AVSpeechSynthesizerDelegate {
         fase = .preparando
         guard await permisos() else { return }
         escucha()
+    }
+
+    /// Salir sin «Parar»: si estabas a media frase, se manda igual y la respuesta llega como aviso.
+    func sal() {
+        guard !cerrada else { return }
+        let pendiente = fase == .escuchando ? parcial.trimmingCharacters(in: .whitespacesAndNewlines) : ""
+        termina()
+        guard !pendiente.isEmpty else { return }
+        Task { @MainActor in TomFondo.avisa(await TomFondo.pregunta(pendiente)) }
     }
 
     /// Para todo y cierra la hoja. Se puede llamar varias veces (Parar, cerrar, desaparecer).
@@ -386,14 +403,12 @@ final class Conversacion: NSObject, AVSpeechSynthesizerDelegate {
     }
 
     private func pregunta(_ dicho: String) async {
-        let respuesta: String
-        do {
-            respuesta = try await API.tom(dicho).texto
-            WidgetCenter.shared.reloadAllTimelines()
-        } catch {
-            respuesta = error.localizedDescription
+        let respuesta = await TomFondo.pregunta(dicho)
+        // te has ido mientras pensaba (o has dado a Parar): lo hecho, hecho está; la respuesta, como aviso
+        guard activa, UIApplication.shared.applicationState == .active else {
+            TomFondo.avisa(respuesta)
+            return
         }
-        guard activa else { return }
         turnos.append(Turno(deTom: true, texto: respuesta))
         habla(respuesta)
     }
@@ -453,5 +468,35 @@ extension Conversacion.Fase {
         case .hablando: return "speaker.wave.2.fill"
         case .parada: return "mic.slash"
         }
+    }
+}
+
+/// Lo que se le manda a Tom sigue aunque salgas: iOS da unos 30 s más a la app (beginBackgroundTask), y el servidor,
+/// si el iPhone ya no espera la respuesta, la manda por Telegram. Lo que pide (mover, apuntar…) se hace igual.
+@MainActor
+enum TomFondo {
+    static func pregunta(_ dicho: String) async -> String {
+        let fondo = TareaFondo()
+        fondo.id = UIApplication.shared.beginBackgroundTask(withName: "Mensaje a Tom") {
+            MainActor.assumeIsolated { fondo.acaba() }
+        }
+        defer { fondo.acaba() }
+        do {
+            let r = try await API.tom(dicho).texto
+            WidgetCenter.shared.reloadAllTimelines()
+            return r
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    /// La respuesta de Tom como aviso del iPhone (cuando ya no estás en la voz).
+    static func avisa(_ texto: String) {
+        let c = UNMutableNotificationContent()
+        c.title = "Tom"
+        c.body = texto
+        c.sound = .default
+        c.threadIdentifier = "tom.voz"
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "tom.voz.\(UUID().uuidString)", content: c, trigger: nil))
     }
 }

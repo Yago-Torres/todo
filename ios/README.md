@@ -101,7 +101,7 @@ El iPhone 15 (sin Apple Intelligence) no entiende frases libres: Siri solo recon
 
 **Dile a Tom** (texto libre, con Claude, como un mensaje al bot de Telegram): «Dile a Tom», «Pregunta a Tom» o «Pregúntale a Tom». Siri pregunta «¿Qué le digo a Tom?» y le dices lo que quieras: «mueve el de pierna al sábado», «recuérdame llamar al dentista el jueves a las 10», «he gastado 12 en la cena», «¿cuánto llevo de proteína?». Tarda unos 10 segundos. Lo que reorganiza la semana te lo propone y pregunta «¿Lo aplico?»: contesta «vale» o «no». Tom se acuerda de lo último que le has dicho durante 10 minutos, así que después puedes decir «y el de pierna al sábado».
 
-**Habla con Tom** (modo voz): «Habla con Tom» abre la app en una pantalla que escucha, contesta en voz alta y vuelve a escuchar, como una llamada. Para con el botón **Parar** o quedándote callado unos segundos. La primera vez pide permiso para el micrófono y el reconocimiento de voz.
+**Habla con Tom** (modo voz): «Habla con Tom» abre la app en una pantalla que escucha, contesta en voz alta y vuelve a escuchar, como una llamada. Para con el botón **Parar** o quedándote callado unos segundos. Si sales (la X, otra sección u otra app) a media frase o mientras Tom piensa, no se pierde: lo dicho se manda igual y la respuesta llega como aviso del iPhone (o por Telegram si iOS ya cortó la conexión). Solo **Parar** descarta la frase a medias. La primera vez pide permiso para el micrófono y el reconocimiento de voz.
 
 Si una frase no la pilla, mira en la app **Atajos > Tom**: ahí salen todas, y desde ahí se pueden lanzar o añadir a la pantalla de inicio.
 
@@ -515,3 +515,13 @@ Lo que queda:
 | Web | Falta | Esfuerzo |
 |---|---|---|
 | Gastos | Sin red, cambiar ingreso, día de cobro, hucha o viajes no recalcula las cuentas del ciclo hasta que llega (las calcula el servidor) | Medio: recalcular `resumen()` en el iPhone |
+
+## 20/11
+
+- **Hábitos de 1 vez por semana o menos** (Limpiar, Regar, Escalar quincenal, Aportar): al marcarlos cuentan como hechos
+  hasta el día antes de que vuelvan a tocar (`cubierto` en `/api/hoy`; círculo tenue y «hecho · hasta el 28/11»).
+- **El hábito del móvil se marca solo con el Freno**: `Freno.sincroniza()` manda el rato de cada app frenada de los
+  últimos 8 días a `POST /api/pantalla/dias` al cerrar una app («App cerrada») y al abrir Tom.
+- **Inversiones → Explorar**: ideas del mes (temas, fondos, empresas) con tesis, argumento en contra, cómo comprarlo y
+  qué vigilar; «Me interesa», «Ya lo tengo» y «Descartar» afinan las siguientes; «Profundizar» lo pasa a Pregunta; y un
+  comparador de dos fondos o acciones (`ExplorarInversiones.swift`).

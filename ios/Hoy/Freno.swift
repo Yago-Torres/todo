@@ -159,6 +159,27 @@ enum Freno {
         apunta(app) { $0.segundos += segundos }
     }
 
+    /// Manda al servidor el rato de cada app de los últimos 8 días (POST /api/pantalla/dias): con eso se marca solo el
+    /// hábito del móvil («< 2 horas de móvil inútil»). Los días desde el primero con registro van todos, aunque sea
+    /// sin uso (un día sin nada es un día bueno); los de antes no, que entonces el freno aún no contaba.
+    static func sincroniza() async {
+        let r = registro()
+        guard let primero = r.keys.min() else { return }
+        let nombres = apps()
+        var dias: [String: [String: [String: Int]]] = [:]
+        for atras in 0..<8 {
+            guard let fecha = Calendar.current.date(byAdding: .day, value: -atras, to: Date()) else { continue }
+            let d = Fecha.dia(fecha)
+            guard d >= primero else { continue }
+            var dia: [String: [String: Int]] = [:]
+            for (clave, c) in r[d] ?? [:] where c.segundos > 0 || c.entradas > 0 {
+                dia[nombres[clave]?.nombre ?? clave] = ["n": max(c.entradas, 1), "s": c.segundos, "no": c.renuncias]
+            }
+            dias[d] = dia
+        }
+        _ = try? await API.datos("/api/pantalla/dias", metodo: "POST", json: ["dias": dias])
+    }
+
     private static var hoy: String { Fecha.dia(Date()) }
 
     /// Las apps que han pasado por la acción, para que la pantalla de freno sepa su nombre y su enlace.
@@ -349,6 +370,7 @@ struct FrenoCerradaIntent: AppIntent {
             ?? AppFrenada(rawValue: clave, nombre: app, esquema: "")
         Freno.alCerrar(frenada)
         await MainActor.run { Isla.terminaPase() }
+        await Freno.sincroniza()
         return .result()
     }
 }

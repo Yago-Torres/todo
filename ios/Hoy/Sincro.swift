@@ -114,6 +114,7 @@ enum Sincro {
     static func alActivar() async {
         await vacia()
         await precarga()
+        await Freno.sincroniza()   // el rato en las apps frenadas: marca solo el hábito del móvil
     }
 
     // MARK: la cola

@@ -152,7 +152,7 @@ final class DatosNativos {
     /// «Día en la isla» (si está activado): los anillos de hoy.
     func actualizaIsla() {
         let hs = habitosDeHoy
-        let hechos = hs.filter(\.hecho).count
+        let hechos = hs.filter(\.listo).count
         let pasos = Double(hoy?.salud?.pasos?.ultimo ?? 0) / 10_000
         let sueno = Double(hoy?.salud?.sueno?.ultimo ?? 0) / 480
         Isla.dia(habitos: hs.isEmpty ? 0 : Double(hechos) / Double(hs.count), pasos: pasos, sueno: sueno,
@@ -162,8 +162,8 @@ final class DatosNativos {
     // MARK: lo que se pinta
 
     /// Lo de hoy: lo planificado o ya hecho (como la portada web); el resto va aparte.
-    var habitosDeHoy: [Habito] { (hoy?.habitos ?? []).filter { $0.plan || $0.hecho } }
-    var otrosHabitos: [Habito] { (hoy?.habitos ?? []).filter { !$0.plan && !$0.hecho } }
+    var habitosDeHoy: [Habito] { (hoy?.habitos ?? []).filter { $0.plan || $0.listo } }
+    var otrosHabitos: [Habito] { (hoy?.habitos ?? []).filter { !$0.plan && !$0.listo } }
 
     var tareasDeHoy: [Tarea] {
         (hoy?.tareas ?? []).filter { t in t.id.map { !tareasHechas.contains($0) } ?? true }

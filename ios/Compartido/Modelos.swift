@@ -30,6 +30,11 @@ struct Habito: Codable, Identifiable, Hashable {
     var juego: Bool? = nil
     /// Hoy descansa: "descanso", "vacaciones", "enfermedad" o "comodin". La racha está congelada.
     var libre: String? = nil
+    /// Hecho hace poco y aún no le toca (1 vez por semana o menos): cuenta como hecho hasta este día ("yyyy-MM-dd").
+    var cubierto: String? = nil
+
+    /// Hecho hoy o cubierto: lo que cuenta en «3 de 5».
+    var listo: Bool { hecho || cubierto != nil }
 
     /// La racha está en juego hoy (sin los campos nuevos, como antes: 2 días o más sin hacer).
     var arriesga: Bool { !hecho && libre == nil && (juego ?? true) && racha >= 2 }

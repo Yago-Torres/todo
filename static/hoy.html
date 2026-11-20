@@ -125,6 +125,8 @@
   .fila .plan.libre { background: var(--linea); color: var(--suave); }
   .fila.libre .rn { color: var(--suave); }
   .fila.libre .llama { display: none; }
+  /* hecho hace poco y aún no toca (1 vez por semana o menos): el círculo lleno pero tenue, y hasta cuándo */
+  .fila.cubierto .bx { opacity: .5; }
   .fila.peligro .rn { color: var(--aviso); animation: late-racha 1.3s ease-in-out infinite; }
   .fila.peligro .llama { fill: var(--aviso); }
   .fila.peligro .bx { border-color: var(--aviso); animation: aura 1.3s ease-in-out infinite; }
@@ -461,7 +463,7 @@ const fallo = (caja, x) => x && x.error ? (caja.replaceChildren(el("p", "error",
 // ---------- anillos y saludo ----------
 function anillo(id, p) { $(id).setAttribute("stroke-dasharray", `${Math.max(0, Math.min(100, p * 100))} 100`); }
 function dia_() {
-  const hs = H.habitos, hechos = hs.filter(h => h.hecho).length, p = hs.length ? hechos / hs.length : 0;
+  const hs = H.habitos, hechos = hs.filter(listo).length, p = hs.length ? hechos / hs.length : 0;
   $("#saludo").style.fontWeight = Math.round(300 + 500 * p);   // el saludo engorda con el día
   anillo("#a-hab", p);
   $("#l-hab").replaceChildren(String(hechos), el("span", null, ` / ${hs.length}`));
@@ -503,8 +505,13 @@ addEventListener("calma-tema", () => { if (H) dia_(); });
 
 // ---------- hábitos ----------
 const LIBRE = {descanso: "descanso", vacaciones: "vacaciones", enfermedad: "enfermo", comodin: "comodín"};
+const SEM = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+// «hasta el dom» si es esta semana; si no, la fecha
+const hasta = d => { const f = new Date(d + "T12:00"), dias = (f - new Date()) / 864e5;
+  return dias < 6 ? `hasta el ${SEM[f.getDay()]}` : `hasta el ${f.getDate()}/${f.getMonth() + 1}`; };
+function listo(h) { return h.hecho || !!h.cubierto; }
 function habitos() {
-  const hs = H.habitos, hechos = hs.filter(h => h.hecho).length;
+  const hs = H.habitos, hechos = hs.filter(listo).length;
   $("#n-hab").textContent = `${hechos}/${hs.length}`;
   $("#b-hab").style.setProperty("--p", (hs.length ? hechos / hs.length * 100 : 0) + "%");
   const fila = h => {
@@ -528,15 +535,21 @@ function habitos() {
     }
     if (h.racha >= 3 || enJuego) rn.insertAdjacentHTML("beforeend", LLAMA);
     rn.append(el("span", "rc", String(h.racha)));
-    b.append(Object.assign(el("span", "bx liq"), {innerHTML: mov.circulo(h.hecho)}), el("span", "nom", h.n));
-    if (h.plan) b.append(el("span", "plan", "plan"));
+    const cub = h.cubierto && !h.hecho;
+    if (cub) {
+      b.classList.add("cubierto");
+      b.setAttribute("aria-label", `${h.n}, hecho hace poco: no vuelve a tocar ${hasta(h.cubierto)}`);
+    }
+    b.append(Object.assign(el("span", "bx liq"), {innerHTML: mov.circulo(h.hecho || cub)}), el("span", "nom", h.n));
+    if (cub) b.append(el("span", "plan libre", "hecho · " + hasta(h.cubierto)));
+    else if (h.plan) b.append(el("span", "plan", "plan"));
     if (h.libre && !h.hecho) b.append(el("span", "plan libre", LIBRE[h.libre] || "descanso"));
     b.append(rn);
     b.onclick = () => marca(h);
     return b;
   };
   // lo de hoy a la vista (lo hecho, abajo); el resto, plegado
-  const orden = mov.ordena(hs), hoy = orden.filter(h => h.plan || h.hecho), resto = orden.filter(h => !h.plan && !h.hecho);
+  const orden = mov.ordena(hs), hoy = orden.filter(h => h.plan || listo(h)), resto = orden.filter(h => !h.plan && !listo(h));
   const caja = $("#habitos");
   caja.replaceChildren(...(hoy.length ? hoy : hs).map(fila));
   if (hoy.length && resto.length) {

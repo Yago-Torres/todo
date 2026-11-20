@@ -1170,8 +1170,9 @@ def _contesta(id_, q):
         _guarda_pregunta(id_, estado="error", r=f"No he podido contestar: {str(e)[:300]}")
 
 
-def pregunta(q):
-    q = " ".join(str(q or "").split())[:1000]
+def pregunta(q, tipo="", titulo=""):
+    """tipo «compara» (el comparador de Explorar): q es el encargo entero y `titulo` lo que se enseña en la lista."""
+    q = " ".join(str(q or "").split())[:2000 if tipo else 1000]
     if not q:
         raise ValueError("¿Qué le pregunto?")
     with _cerrojo_preguntas:
@@ -1180,6 +1181,8 @@ def pregunta(q):
             raise ValueError("Ya hay dos preguntas pensándose: espera a que acaben")
         p = {"id": "q" + str(time.time_ns())[-12:], "q": q, "r": "", "estado": "pensando", "t": time.time(),
              "cuando": datetime.now().isoformat(timespec="minutes")}
+        if tipo:
+            p.update(tipo=tipo, titulo=" ".join(str(titulo).split())[:200])
         _escribe(PREGUNTAS, ([p] + l)[:50])
     __import__("threading").Thread(target=_contesta, args=(p["id"], q), daemon=True).start()
     return p

@@ -20,6 +20,7 @@ from fastapi.staticfiles import StaticFiles
 import carrera
 import inversiones
 import mercado
+import explorar
 import agenda
 import vault
 
@@ -857,6 +858,31 @@ def telegram_todo(texto):
     threading.Thread(target=manda, daemon=True).start()
 
 
+@app.post("/api/pantalla/dias")
+def pantalla_dias(a: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """El Freno de Tom manda lo que lleva contado en el iPhone: {dias: {día: {app: {n, s}}}}. Desde el 12/11 los
+    ratos los cuenta Tom (automatizaciones «Frenar app» y «App cerrada»), no el atajo de abre/cierra. Lo de Tom
+    manda en las apps que trae; un día sin apps es un día medido sin uso. Luego se revisa el hábito del móvil."""
+    exige(todo_sesion, authorization)
+    hoy = date.today().isoformat()
+    desde = (date.fromisoformat(hoy) - timedelta(days=30)).isoformat()
+    with cerrojo_pantalla:
+        p = lee_pantalla()
+        for d, apps in dct(a.get("dias")).items():
+            if not (isinstance(d, str) and len(d) == 10 and desde <= d <= hoy):
+                continue
+            dia = dct(p["dias"].get(d))
+            for nombre, x in dct(apps).items():
+                x = dct(x)
+                s = int(x.get("s") or 0)
+                if 0 <= s < 24 * 3600:
+                    dia[" ".join(str(nombre).split())[:30]] = {"n": int(x.get("n") or 0), "s": s, "no": int(x.get("no") or 0)}
+            p["dias"][d] = dia
+        guarda(PANTALLA, json.dumps(p, ensure_ascii=False))
+    r = aplica_movil(p, hoy)
+    return {"cambios": r["cambios"]}
+
+
 @app.get("/api/pantalla")
 def get_pantalla(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
     exige(todo_sesion, authorization)
@@ -1655,11 +1681,18 @@ def rachas(s, hoy):
         if hecho or m or exigido:
             dias_h[hoy] = "hecho" if hecho else m or "pendiente"
         siguiente = next((x for x in HITOS if x > n), None)
+        # hecho hace poco y aún no le toca (1 vez por semana o menos): cuenta como hecho hasta que vuelva a pedirse
+        cubierto = None
+        if not hecho and not m and not exigido and ventana(h) >= 7 and (hid, lunes_de(hoy)) not in planificadas:
+            ultimo = next((k for k in sorted(s["log"], reverse=True) if k < hoy and hid in s["log"][k]), None)
+            if ultimo:
+                hasta = date.fromisoformat(ultimo) + timedelta(days=ventana(h) - 2)
+                cubierto = hasta.isoformat() if hasta >= h0 else None
         habitos.append({
             "id": hid, "n": h["n"], "c": h["c"], "racha": n, "base": e["n"], "hecho": hecho,
             # la que se rompió ayer (la planta de Hoy se mustia con ella)
             "rota": e["rompio"][1] if e["rompio"] and e["rompio"][0] == ayer else 0,
-            "exigido": exigido, "en_juego": exigido and e["n"] > 0, "libre": m,
+            "exigido": exigido, "cubierto": cubierto, "en_juego": exigido and e["n"] > 0, "libre": m,
             "hito": n if hecho and n in HITOS else None, "siguiente": siguiente, "falta": siguiente - n if siguiente else None,
             # mañana la pide (para los avisos de mañana; si hoy está en juego, eso va antes)
             "manana": not libre(s, hid, manana, manana in manual) and exige(h, manana, hueco),
@@ -1789,8 +1822,9 @@ def hoy_habitos(s, hoy):
     # base: la racha sin contar hoy (marcar suma uno); juego: hoy la pide y hay racha; libre: descansa hoy (y por qué)
     habitos = [{"id": h["id"], "n": h["n"], "c": h["c"], "plan": h["id"] in plan, "hecho": h["id"] in hecho,
                 "racha": r[h["id"]]["racha"], "base": r[h["id"]]["base"], "rota": r[h["id"]]["rota"],
-                "juego": r[h["id"]]["en_juego"], "libre": r[h["id"]]["libre"], "orden": i} for i, h in enumerate(s["habits"])]
-    habitos.sort(key=lambda h: (not h["plan"], h["hecho"]))   # lo planificado y sin hacer, primero
+                "juego": r[h["id"]]["en_juego"], "libre": r[h["id"]]["libre"],
+                "cubierto": r[h["id"]]["cubierto"], "orden": i} for i, h in enumerate(s["habits"])]
+    habitos.sort(key=lambda h: (not h["plan"], h["hecho"] or bool(h["cubierto"])))   # lo planificado y sin hacer, primero
     pesos = sorted(s["peso"].items())
     semana = [kg for d, kg in pesos if d > (date.fromisoformat(hoy) - timedelta(days=7)).isoformat()]
     return {"habitos": habitos,
@@ -2130,8 +2164,9 @@ def presupuesto(todo_sesion: str = Cookie(None), authorization: str = Header(Non
 
 
 @app.post("/api/tom")
-async def tom(a: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
-    """{texto, conv?}: lo que le dices a Tom. El bot recuerda los últimos turnos de cada conv 10 minutos."""
+async def tom(a: dict, request: Request, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """{texto, conv?}: lo que le dices a Tom. El bot recuerda los últimos turnos de cada conv 10 minutos.
+    Si el iPhone ya no espera (saliste de la app y iOS cortó), lo pedido se hace igual y la respuesta va por Telegram."""
     exige(todo_sesion, authorization)
     texto = str(a.get("texto") or "").strip()[:1000]
     if not texto:
@@ -2143,6 +2178,11 @@ async def tom(a: dict, todo_sesion: str = Cookie(None), authorization: str = Hea
         raise HTTPException(502, "Tom no responde: el bot de Telegram está parado")
     if estado == 401:
         raise HTTPException(502, "El bot no acepta la clave de todo (TODO_PASS distinta)")
+    if estado == 200 and await request.is_disconnected():
+        try:
+            telegram_todo("🎙️ Tom (lo que le dijiste al salir de la app):\n«" + texto[:200] + "»\n\n" + json.loads(r)["texto"])
+        except (ValueError, KeyError, TypeError):
+            pass
     return Response(r, status_code=estado, media_type="application/json")
 
 
@@ -2710,6 +2750,53 @@ def inv_pregunta_borra(d: dict, todo_sesion: str = Cookie(None), authorization: 
     exige(todo_sesion, authorization)
     inversiones.borra_pregunta(str(d.get("id") or ""))
     return {"ok": True}
+
+
+# ---------- Explorar (explorar.py): ideas del mes que estudiar, con lo que respondes a cada una ----------
+@app.get("/api/inversiones/explorar")
+def inv_explorar(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    d = explorar.lee()
+    comparas = [x for x in inversiones.preguntas() if x.get("tipo") == "compara"]
+    return {**d, "comparas": comparas}
+
+
+@app.post("/api/inversiones/explorar/genera")
+def inv_explorar_genera(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    try:
+        return explorar.genera()
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/inversiones/explorar/reaccion")
+def inv_explorar_reaccion(d: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """{id, estado: interesa|descarta|tengo|"" (quitar), nota?}"""
+    exige(todo_sesion, authorization)
+    try:
+        return {"reaccion": explorar.reacciona(str(d.get("id") or ""), str(d.get("estado") or ""), d.get("nota") or "")}
+    except KeyError:
+        raise HTTPException(404, "Esa idea ya no está")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/inversiones/explorar/borra")
+def inv_explorar_borra(d: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    explorar.borra(str(d.get("id") or ""))
+    return {"ok": True}
+
+
+@app.post("/api/inversiones/compara")
+def inv_compara(d: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """{a, b}: dos fondos, ETFs o acciones (nombre, ticker o ISIN). Va como una Pregunta de tipo «compara»."""
+    exige(todo_sesion, authorization)
+    try:
+        return explorar.compara(d.get("a"), d.get("b"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @app.get("/api/inversiones/review/{fecha}")
