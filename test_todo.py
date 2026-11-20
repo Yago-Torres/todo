@@ -999,6 +999,55 @@ def test_uso():
     print("uso ok")
 
 
+def _fit_de_prueba(km=3, pausa=60):
+    """Un .fit mínimo hecho a mano: un punto por segundo a 4 m/s (4:10 /km) con una pausa en medio, y la sesión."""
+    import struct
+    cuerpo = bytearray()
+    # definición local 0 = record (20): ts, lat, lon, m, fc
+    cuerpo += bytes([0x40, 0, 0]) + struct.pack("<HB", 20, 5) + bytes([253, 4, 0x86, 0, 4, 0x85, 1, 4, 0x85, 5, 4, 0x86, 3, 1, 2])
+    ts, m = 1100000000, 0.0
+    for i in range(int(km * 250) + 1):
+        if i == 300:
+            ts += pausa          # el reloj deja de grabar en la pausa
+        cuerpo += bytes([0]) + struct.pack("<IiiIB", ts, int(41.65 / (180 / 2**31)) + i * 50, int(-0.88 / (180 / 2**31)), int(m * 100), 150)
+        ts += 1; m += 4
+    # definición local 1 = session (18): inicio, deporte, seg (timer), m, fc, sube
+    cuerpo += bytes([0x41, 0, 0]) + struct.pack("<HB", 18, 6) + bytes([2, 4, 0x86, 5, 1, 0, 8, 4, 0x86, 9, 4, 0x86, 16, 1, 2, 22, 2, 0x84])
+    cuerpo += bytes([1]) + struct.pack("<IBIIBH", 1100000000, 1, int(km * 250) * 1000, int(km * 1000 * 100), 150, 12)
+    cab = struct.pack("<BBHI4s", 12, 0x20, 2100, len(cuerpo), b".FIT")
+    return cab + bytes(cuerpo) + b"\0\0"
+
+
+def test_fit():
+    import json, tempfile, fit
+    from pathlib import Path
+    r = fit.resume(fit.lee(_fit_de_prueba()))
+    a = r["actividad"]
+    assert (a["t"], a["km"], a["seg"], a["ritmo"], a["fc"], a["sube"]) == ("Correr", 3, 750, "4:10 /km", 150, 12), a
+    # la pausa no cuenta en el parcial: los tres km a 4:10
+    assert all(249 <= x["seg"] <= 251 for x in a["parciales"]) and len(a["parciales"]) == 3, a["parciales"]
+    assert r["traza"]["puntos"][1][1] and len(r["traza"]["puntos"]) < 200
+    try:
+        fit.lee(b"no soy un fit en absoluto")
+        assert False
+    except fit.ErrorFit:
+        pass
+    # por la API: marca el hábito, sustituye a la del atajo de ese día y guarda la traza aparte
+    main.PASS, main.SECRET = "x", b"s"
+    d = Path(tempfile.mkdtemp())
+    main.DB, main.TRAZAS = d / "data.json", d / "actividades"
+    dia = r["dia"]
+    main.DB.write_text(json.dumps({"habits": [{"id": "c", "n": "Correr", "goal": 3}],
+                                   "actividad": {dia: [{"id": "atajo", "t": "Correr", "km": 3.1, "seg": 760, "src": "ios"}]}}))
+    out = main.apunta_fit(_fit_de_prueba())
+    s = json.loads(main.DB.read_text())
+    assert [x["id"] for x in s["actividad"][dia]] == [out["id"]] and "c" in s["log"][dia] and "sustituye" in out["texto"], out
+    assert s["actividad"][dia][0]["parciales"][0]["fc"] == 150          # clean() no se come lo nuevo
+    assert main.una_actividad(out["id"], None, "Bearer x")["traza"]["puntos"]
+    assert main.apunta_fit(_fit_de_prueba())["nueva"] is False            # subirla dos veces no la duplica
+    print("fit ok")
+
+
 def test_cobro_y_anio():
     import cobro, anio
     from datetime import date
@@ -1315,6 +1364,7 @@ if __name__ == "__main__":
     test_explorar()
     test_uso()
     test_cobro_y_anio()
+    test_fit()
     test_multas()
     test_carrera_calendario()
     print("ok")

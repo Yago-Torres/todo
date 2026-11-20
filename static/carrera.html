@@ -82,6 +82,15 @@
   details.datos th:first-child, details.datos td:first-child { text-align: left; }
   details.como p { font-size: var(--t-texto); color: var(--suave); margin: 8px 0 0; }
   details.como summary { cursor: pointer; font-weight: 600; }
+  .acts { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .acts a { display: grid; grid-template-columns: 4.2em minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px;
+            border-radius: var(--r-s); background: var(--carta-2); color: inherit; text-decoration: none; }
+  .acts a:active { transform: scale(.98); }
+  .acts .d { font-size: var(--t-pequeno); font-weight: 600; color: var(--suave); }
+  .acts .n { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .acts .n small { font-weight: 400; color: var(--suave); margin-left: 6px; }
+  .acts .x { font-size: var(--t-pequeno); color: var(--suave); white-space: nowrap; }
+  #b-fit { cursor: pointer; }
   .puerta input { width: 100%; }
   .puerta button { width: 100%; }
 </style>
@@ -121,6 +130,12 @@
       <h2 id="t-semana"><span id="sem-tit">Esta semana</span> <span id="sem-chips"></span></h2>
       <ul class="ses" id="ses"></ul>
       <ul class="ins" id="notas"></ul>
+    </section>
+
+    <section class="carta c-carta" aria-labelledby="t-acts">
+      <h2 id="t-acts">Tus carreras <label class="der c-btn mini" id="b-fit">Subir .fit<input type="file" accept=".fit" id="f-fit" hidden></label></h2>
+      <ul class="acts" id="acts"></ul>
+      <p class="bajo" id="fit-msg" style="margin:10px 0 0">Desde la app del COROS: la actividad → Compartir → exportar .fit, y súbelo aquí o mándaselo al bot.</p>
     </section>
 
     <section class="carta c-carta" aria-labelledby="t-ritmos">
@@ -197,6 +212,7 @@ async function cargar() {
     puerta(false);
     $("#estado").textContent = "";
     pinta();
+    actividades();
     anima.entrada();
   } catch (e) {
     $("#estado").textContent = "Sin conexión";
@@ -249,6 +265,33 @@ function pinta() {
   }));
   graficas();
 }
+
+// ---------- las carreras apuntadas (las del COROS con mapa y parciales: /actividad.html) ----------
+async function actividades() {
+  const r = await fetch("/api/actividades?dias=120").catch(() => null);
+  if (!r || !r.ok) return;
+  const L = (await r.json()).filter(a => /correr|run/i.test(a.t) || a.km).slice(0, 8);
+  $("#acts").replaceChildren(...(L.length ? L.map(a => {
+    const li = el("li"), x = el("a"), n = el("span", "n", a.km ? `${String(a.km).replace(".", ",")} km` : a.t);
+    x.href = "/actividad.html?id=" + encodeURIComponent(a.id);
+    if (a.ritmo) n.append(el("small", null, a.ritmo));
+    x.append(el("span", "d", `${DIAS[fecha(a.dia).getDay()]} ${fecha(a.dia).getDate()}`), n,
+             el("span", "x", [a.fc && `${a.fc} ppm`, a.mapa ? "mapa" : a.src === "coros" ? "" : "atajo"].filter(Boolean).join(" · ")));
+    li.append(x);
+    return li;
+  }) : [el("p", "vacio", "Aún no hay carreras apuntadas.")]));
+}
+
+$("#f-fit").onchange = async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  $("#fit-msg").textContent = "Subiendo…";
+  const r = await fetch("/api/actividad/fit", {method: "POST", headers: {"Content-Type": "application/octet-stream"}, body: f}).catch(() => null);
+  const j = r ? await r.json().catch(() => ({})) : {};
+  $("#fit-msg").textContent = r && r.ok ? j.texto : (j.detail || "No se pudo subir");
+  e.target.value = "";
+  if (r && r.ok) { await cargar(); }
+};
 
 // ---------- gráficas (Chart.js; sin la librería la página funciona igual) ----------
 const graf = {};

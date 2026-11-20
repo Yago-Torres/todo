@@ -245,6 +245,9 @@ PantallaEditable(pantalla: "app-entreno", titulo: "Entreno",
   entreno.html (un script de node que los evalúa). Si cambian en la web, hay que regenerarlos.
 - `/carrera.html` abre su pantalla (`PantallaCarrera`) con Entreno marcado en la barra; desde Entreno, la tarjeta de
   Carrera la abre en hoja.
+- **Carreras del COROS** (`Actividades.swift`): la carta «Tus carreras», «Subir .fit» y el detalle (`PantallaActividad`:
+  cifras, mapa de MapKit, ritmo y pulso, km a km). Info.plist declara el tipo `com.garmin.fit`, así Tom sale en Compartir
+  de la app del COROS; el fichero llega por `onOpenURL` (HoyApp) y `CarrerasFit.sube` lo manda a `/api/actividad/fit`.
 
 ## Sin red: la cola de operaciones
 

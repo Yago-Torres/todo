@@ -180,6 +180,7 @@ struct ContenidoCarrera: View {
             if let r = datos.informe {
                 CartaEstimacion(r: r)
                 CartaSemanaCarrera(r: r)
+                CartaActividades()
                 CartaRitmos(r: r)
                 CartaComoSeAjusta()
                 GraficaCamino(r: r)

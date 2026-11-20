@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="es" data-vt>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#F2F2F2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)">
+<title>Actividad</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.json" crossorigin="use-credentials">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preload" href="/fuentes/instrument-sans-normal-latin.woff2?v=1" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/calma.css?v=230f1260">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="/calma.js?v=230f1260"></script>
+<style>
+  /* Una actividad (sobre todo las del COROS, con su .fit): cifras, ruta, ritmo y pulso por distancia, parciales. */
+  @view-transition { navigation: auto; }
+  @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }
+  body { padding: 16px; padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px)); }
+  .app { max-width: 1120px; margin: 0 auto; display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+  .col { display: grid; gap: 14px; align-content: start; min-width: 0; }
+  @media (min-width: 920px) { .app { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); } }
+  .top { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 4px 2px 0; }
+  h1 { margin: 0; font-size: var(--t-titulo); font-weight: 700; letter-spacing: -.02em; }
+  .top nav { margin-left: auto; display: flex; gap: 6px; }
+  .top nav a { text-decoration: none; }
+  #estado { font-size: var(--t-pequeno); color: var(--suave); }
+  .carta { padding: 16px; min-width: 0; }
+  .carta h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .carta h2 .der { margin-left: auto; font-weight: 400; }
+  .vacio { margin: 0; padding: 8px 2px; font-size: var(--t-texto); color: var(--suave); }
+
+  .grandes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .grandes small, .mini small { display: block; font-size: var(--t-pequeno); color: var(--suave); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .grandes b { font-size: 30px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .grandes b i { font-style: normal; font-size: var(--t-texto); font-weight: 500; color: var(--suave); margin-left: 3px; }
+  .mini { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; margin-top: 14px; }
+  .mini div { background: var(--carta-2); border-radius: var(--r-s); padding: 10px; min-width: 0; }
+  .mini b { font-size: var(--t-destacado); font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .ruta { width: 100%; height: auto; display: block; aspect-ratio: 1 / 1; max-height: 420px; }
+  .ruta .base { fill: none; stroke: var(--linea); stroke-width: 9; stroke-linecap: round; stroke-linejoin: round; }
+  .ruta circle { stroke: var(--carta); stroke-width: 3; }
+  .lienzo { position: relative; height: 230px; width: 100%; min-width: 0; overflow: hidden; }
+  .lienzo.bajo { height: 130px; }
+  .leyenda { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: -4px 0 10px; font-size: var(--t-pequeno); color: var(--suave); }
+  .leyenda span { display: inline-flex; align-items: center; gap: 6px; }
+  .leyenda s { display: inline-block; width: 16px; height: 0; border-top: 2px solid var(--c); text-decoration: none; }
+
+  table.parc { width: 100%; border-collapse: collapse; font-size: var(--t-texto); font-variant-numeric: tabular-nums; }
+  table.parc th { font-size: var(--t-pequeno); color: var(--suave); font-weight: 400; text-align: right; padding: 0 6px 6px; }
+  table.parc td { padding: 7px 6px; border-top: 1px solid var(--linea); text-align: right; white-space: nowrap; }
+  table.parc th:first-child, table.parc td:first-child { text-align: left; width: 2.5em; }
+  table.parc td.barra { width: 45%; padding-right: 0; }
+  table.parc td.barra span { display: block; height: 8px; border-radius: 4px; background: var(--acento); min-width: 4px; }
+  table.parc tr.mejor td:nth-child(2) { color: var(--acento); font-weight: 650; }
+  .pie { font-size: var(--t-pequeno); color: var(--tenue); margin: 10px 0 0; }
+  .puerta input, .puerta button { width: 100%; }
+</style>
+<body data-fondo="curvas">
+<div class="puerta c-puerta" id="puerta">
+  <form id="f-clave">
+    <p id="puerta-msg">Contraseña de todo</p>
+    <input class="c-campo" type="password" name="pass" required autocomplete="current-password" aria-label="Contraseña">
+    <button class="c-btn pri" type="submit">Entrar</button>
+  </form>
+</div>
+
+<div class="app">
+  <header class="top">
+    <h1 id="titulo">Actividad</h1>
+    <span id="estado">Cargando…</span>
+    <nav><a class="c-btn mini" href="/carrera.html">Carrera</a><a class="c-btn mini" href="/">Hoy</a></nav>
+  </header>
+
+  <div class="col">
+    <section class="carta c-carta" aria-label="Resumen">
+      <div class="grandes" id="grandes"></div>
+      <div class="mini" id="mini"></div>
+    </section>
+    <section class="carta c-carta" id="c-ruta" hidden aria-labelledby="t-ruta">
+      <h2 id="t-ruta">Ruta <span class="der c-eti">más intenso, más rápido</span></h2>
+      <svg class="ruta" id="ruta" role="img" aria-label="Recorrido de la carrera"></svg>
+    </section>
+  </div>
+
+  <div class="col">
+    <section class="carta c-carta" id="c-graf" hidden aria-labelledby="t-graf">
+      <h2 id="t-graf">Ritmo y pulso</h2>
+      <div class="leyenda" id="ley"></div>
+      <div class="lienzo"><canvas id="g-ritmo" role="img" aria-label="Ritmo y frecuencia cardiaca a lo largo de la carrera"></canvas></div>
+      <div class="lienzo bajo" id="l-alt"><canvas id="g-alt" role="img" aria-label="Altitud a lo largo de la carrera"></canvas></div>
+    </section>
+    <section class="carta c-carta" id="c-parc" hidden aria-labelledby="t-parc">
+      <h2 id="t-parc">Kilómetro a kilómetro</h2>
+      <table class="parc" id="parc"></table>
+      <p class="pie">Tiempo en movimiento: las pausas no cuentan.</p>
+    </section>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const el = (t, cls, txt) => { const e = document.createElement(t); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+const fecha = s => new Date(s + "T12:00:00");
+const mmss = s => s == null ? "—" : `${Math.floor(Math.round(s) / 60)}:${String(Math.round(s) % 60).padStart(2, "0")}`;
+const hms = s => s >= 3600 ? `${Math.floor(s / 3600)}:${mmss(s % 3600).padStart(5, "0")}` : mmss(s);
+const coma = (x, d = 1) => Number(x).toLocaleString("es-ES", {maximumFractionDigits: d});
+const ID = new URLSearchParams(location.search).get("id") || "";
+let A = null;
+
+function puerta(mostrar, msg) {
+  $("#puerta").toggleAttribute("data-on", mostrar);
+  $("#puerta-msg").textContent = msg || "Contraseña de todo";
+  if (mostrar) $("#puerta input").focus();
+}
+
+async function cargar() {
+  try {
+    const r = await fetch("/api/actividad/" + encodeURIComponent(ID));
+    if (r.status === 401) { $("#estado").textContent = ""; return puerta(true); }
+    if (r.status === 404) { $("#estado").textContent = "Esta actividad ya no existe"; return; }
+    if (!r.ok) throw new Error(r.status);
+    A = await r.json();
+    puerta(false);
+    $("#estado").textContent = "";
+    pinta();
+  } catch (e) {
+    $("#estado").textContent = "Sin conexión";
+  }
+}
+
+function pinta() {
+  const d = fecha(A.dia);
+  $("#titulo").textContent = `${A.t || "Actividad"} · ${d.getDate()} de ${MESES[d.getMonth()]}`;
+  document.title = $("#titulo").textContent;
+  $("#estado").textContent = DIAS[d.getDay()] + (A.hora ? ` a las ${A.hora}` : "") + (A.src === "coros" ? " · COROS" : "");
+  const g = [["Distancia", A.km ? coma(A.km, 2) : "—", "km"], ["Tiempo", hms(A.seg || A.min * 60), ""], ["Ritmo", (A.ritmo || "—").replace(" /km", ""), "/km"]];
+  $("#grandes").replaceChildren(...g.map(([e, v, u]) => {
+    const x = el("div"), b = el("b", null, v);
+    if (u) b.append(el("i", null, u));
+    x.append(el("small", null, e), b);
+    return x;
+  }));
+  const m = [
+    A.fc && ["Pulso medio", `${A.fc} ppm`], A.fc_max && ["Pulso máximo", `${A.fc_max} ppm`],
+    A.cad && ["Cadencia", `${A.cad} ppm`], A.sube != null && ["Desnivel", `+${A.sube} / −${A.baja ?? 0} m`],
+    A.pot && ["Potencia", `${A.pot} W`], A.kcal && ["Calorías", `${A.kcal} kcal`],
+    A.total && A.total - A.seg > 30 && ["Con pausas", hms(A.total)],
+    A.vel_max && ["Más rápido", `${mmss(1000 / A.vel_max)} /km`],
+    A.efecto && ["Efecto aeróbico", coma(A.efecto)], A.efecto_ana && ["Efecto anaeróbico", coma(A.efecto_ana)],
+  ].filter(Boolean);
+  $("#mini").replaceChildren(...m.map(([e, v]) => { const x = el("div"); x.append(el("small", null, e), el("b", null, v)); return x; }));
+  $("#mini").hidden = !m.length;
+  parciales();
+  ruta();
+  graficas();
+}
+
+function parciales() {
+  const P = A.parciales || [];
+  if (!P.length) return;
+  $("#c-parc").hidden = false;
+  const lento = Math.max(...P.map(p => p.seg)), rapido = Math.min(...P.map(p => p.seg));
+  const cab = el("tr");
+  ["Km", "Ritmo", "", "Pulso", "Desn."].forEach(t => cab.append(el("th", null, t)));
+  $("#parc").replaceChildren(cab, ...P.map(p => {
+    const tr = el("tr", p.seg === rapido && P.length > 1 ? "mejor" : null);
+    const barra = el("td", "barra"), s = el("span");
+    // la barra: más larga, más rápido (relativo al km más lento de esta carrera)
+    s.style.width = `${Math.max(8, 100 - (p.seg - rapido) / Math.max(1, lento - rapido) * 70)}%`;
+    barra.append(s);
+    tr.append(el("td", null, p.km), el("td", null, mmss(p.seg)), barra, el("td", null, p.fc ?? "—"),
+              el("td", null, p.dalt == null ? "—" : (p.dalt > 0 ? "+" : "") + p.dalt));
+    return tr;
+  }));
+}
+
+// ---------- la traza: [t, lat, lon, m, alt, fc, vel, cad] cada 5 s ----------
+const C = {t: 0, lat: 1, lon: 2, m: 3, alt: 4, fc: 5, vel: 6, cad: 7};
+function puntos() { return (A.traza && A.traza.puntos) || []; }
+
+// ritmo suavizado (30 s) en s/km; parado = null, y nada más lento de 10:00 para que la gráfica no se vaya
+function ritmos(P) {
+  return P.map((_, i) => {
+    const v = P.slice(Math.max(0, i - 3), i + 3).map(p => p[C.vel]).filter(x => x > 0.5);
+    if (!v.length) return null;
+    return Math.min(600, 1000 / (v.reduce((a, b) => a + b) / v.length));
+  });
+}
+
+function ruta() {
+  const P = puntos().filter(p => p[C.lat] != null);
+  if (P.length < 2) return;
+  $("#c-ruta").hidden = false;
+  const lat0 = P.reduce((a, p) => a + p[C.lat], 0) / P.length, k = Math.cos(lat0 * Math.PI / 180);
+  const xs = P.map(p => p[C.lon] * k), ys = P.map(p => -p[C.lat]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const L = 1000, pad = 40, esc = (L - 2 * pad) / Math.max(x1 - x0, y1 - y0, 1e-6);
+  const ox = (L - (x1 - x0) * esc) / 2, oy = (L - (y1 - y0) * esc) / 2;
+  const X = i => (ox + (xs[i] - x0) * esc).toFixed(1), Y = i => (oy + (ys[i] - y0) * esc).toFixed(1);
+  const svg = $("#ruta"), NS = "http://www.w3.org/2000/svg", mk = (t, a) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); return e; };
+  svg.setAttribute("viewBox", `0 0 ${L} ${L}`);
+  svg.replaceChildren(mk("polyline", {class: "base", points: P.map((_, i) => X(i) + "," + Y(i)).join(" ")}));
+  // cada tramo con la opacidad de su ritmo: lo rápido sale intenso
+  const r = ritmos(P), validos = r.filter(x => x), lo = Math.min(...validos), hi = Math.max(...validos);
+  const acento = getComputedStyle(document.documentElement).getPropertyValue("--acento").trim();
+  for (let i = 1; i < P.length; i++) {
+    const q = r[i] == null ? 0 : 1 - (r[i] - lo) / Math.max(1, hi - lo);
+    svg.append(mk("line", {x1: X(i - 1), y1: Y(i - 1), x2: X(i), y2: Y(i), stroke: acento, "stroke-width": 6,
+                           "stroke-linecap": "round", "stroke-opacity": (0.25 + 0.75 * q).toFixed(2)}));
+  }
+  svg.append(mk("circle", {cx: X(0), cy: Y(0), r: 11, fill: "var(--serie-2)"}),
+             mk("circle", {cx: X(P.length - 1), cy: Y(P.length - 1), r: 11, fill: "var(--texto)"}));
+  svg.setAttribute("aria-label", `Recorrido de ${coma(A.km, 2)} km; el punto verde es la salida`);
+}
+
+const graf = {};
+function graficas() {
+  const P = puntos().filter(p => p[C.m] != null);
+  if (P.length < 5 || !window.Chart) return;
+  $("#c-graf").hidden = false;
+  const s = getComputedStyle(document.documentElement), v = n => s.getPropertyValue(n).trim();
+  const t = {texto: v("--texto"), suave: v("--suave"), tenue: v("--tenue"), linea: v("--linea"), acento: v("--acento"),
+             fc: v("--peligro"), fuente: v("--fuente")};
+  const r = ritmos(P), km = P.map(p => p[C.m] / 1000);
+  const ejeX = {type: "linear", min: 0, max: km.at(-1), grid: {display: false}, border: {color: t.linea},
+                ticks: {color: t.tenue, font: {family: t.fuente, size: 11}, stepSize: 1, autoSkip: true, callback: x => Number.isInteger(x) ? `${x} km` : ""}};
+  const tic = {color: t.tenue, font: {family: t.fuente, size: 11}};
+  const base = {responsive: true, maintainAspectRatio: false, animation: false, parsing: false, normalized: true,
+                interaction: {mode: "index", intersect: false},
+                plugins: {legend: {display: false}, tooltip: {callbacks: {title: c => `${coma(c[0].parsed.x, 2)} km`}}}};
+  const hayFc = P.some(p => p[C.fc]);
+  // el eje del ritmo, sin la arrancada ni las paradas: del 5 % más rápido al 95 %, con margen
+  const orden = r.filter(x => x).sort((a, b) => a - b), q = f => orden[Math.floor(f * (orden.length - 1))];
+  const yMin = Math.max(120, Math.floor((q(.03) - 20) / 30) * 30), yMax = Math.min(600, Math.ceil((q(.97) + 20) / 30) * 30);
+  graf.r?.destroy();
+  graf.r = new Chart($("#g-ritmo"), {type: "line", options: {...base,
+    scales: {x: ejeX,
+             y: {reverse: true, min: yMin, max: yMax, grid: {color: t.linea}, border: {display: false}, ticks: {...tic, callback: mmss, stepSize: yMax - yMin > 180 ? 60 : 30}},
+             y2: {display: hayFc, position: "right", grid: {display: false}, border: {display: false}, ticks: {...tic, maxTicksLimit: 6}}},
+    plugins: {...base.plugins, tooltip: {callbacks: {title: base.plugins.tooltip.callbacks.title,
+      label: c => c.dataset.yAxisID === "y2" ? `Pulso ${c.parsed.y} ppm` : `Ritmo ${mmss(c.parsed.y)} /km`}}}},
+    data: {datasets: [
+      {label: "Ritmo", data: P.map((_, i) => ({x: km[i], y: r[i] == null ? null : Math.min(yMax, r[i])})), borderColor: t.acento, borderWidth: 2, pointRadius: 0, spanGaps: false, tension: .3},
+      hayFc && {label: "Pulso", yAxisID: "y2", data: P.filter(p => p[C.fc]).map(p => ({x: p[C.m] / 1000, y: p[C.fc]})),
+                borderColor: t.fc, borderWidth: 1.5, pointRadius: 0, tension: .3},
+    ].filter(Boolean)}});
+  $("#ley").replaceChildren(...[["Ritmo (arriba, más rápido)", t.acento], hayFc && ["Pulso", t.fc]].filter(Boolean).map(([n, c]) => {
+    const x = el("span"), m = el("s"); m.style.setProperty("--c", c); x.append(m, n); return x;
+  }));
+  const alt = P.filter(p => p[C.alt] != null);
+  $("#l-alt").hidden = alt.length < 5;
+  if (alt.length >= 5) {
+    graf.a?.destroy();
+    graf.a = new Chart($("#g-alt"), {type: "line", options: {...base,
+      scales: {x: ejeX, y: {grid: {color: t.linea}, border: {display: false}, ticks: {...tic, maxTicksLimit: 3, callback: x => `${x} m`}}},
+      plugins: {...base.plugins, tooltip: {callbacks: {title: base.plugins.tooltip.callbacks.title, label: c => `Altitud ${Math.round(c.parsed.y)} m`}}}},
+      data: {datasets: [{data: alt.map(p => ({x: p[C.m] / 1000, y: p[C.alt]})), borderColor: t.suave, backgroundColor: t.tenue + "33",
+                         fill: "start", borderWidth: 1.5, pointRadius: 0, tension: .3}]}});
+  }
+}
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => A && (ruta(), graficas()));
+
+$("#f-clave").onsubmit = async e => {
+  e.preventDefault();
+  const inp = e.target.pass;
+  const r = await fetch("/api/login", {method: "POST", headers: {"Content-Type": "application/json"},
+                                       body: JSON.stringify({pass: inp.value})}).catch(() => null);
+  if (r && r.ok) { inp.value = ""; await cargar(); }
+  else puerta(true, r && r.status === 401 ? "Contraseña incorrecta" : "No se pudo conectar");
+};
+cargar();
+</script>
+</body>
+</html>

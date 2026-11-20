@@ -40,7 +40,13 @@ struct HoyApp: App {
     /// hoy://configurar abre Configurar (sin claves ya está delante).
     /// hoy://apuntar?tipo=nota|tarea abre la caja rápida de apuntar (el widget «Apuntar»).
     /// hoy://calendario abre el Calendario.
+    /// Un .fit del COROS (su app → Compartir → Tom): se sube y se abre su carrera en Carrera (Actividades.swift).
     private func abre(_ url: URL) {
+        if url.isFileURL && url.pathExtension.lowercased() == "fit" {
+            Navegador.shared.abre("/carrera.html")
+            Task { await CarrerasFit.shared.sube(url) }
+            return
+        }
         guard url.scheme == "hoy" else { return }
         if url.host == "apuntar" {
             let tipo = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "tipo" }?.value

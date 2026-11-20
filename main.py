@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import json
+from struct import error as struct_error
 import os
 import re
 import threading
@@ -18,6 +19,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 import carrera
+import fit
 import inversiones
 import mercado
 import explorar
@@ -123,6 +125,31 @@ def entero(v, lo, hi, por_defecto):
         return min(hi, max(lo, int(v)))
     except (TypeError, ValueError):
         return por_defecto
+
+
+# Lo que trae de más una carrera subida del COROS (.fit): FC, cadencia, desnivel, parciales... La traza
+# (los puntos) no va aquí sino en actividades/<id>.json, que si no data.json crecería 30 kB por carrera.
+EXTRA_ACT = {"hora": (0, 0), "total": (0, 86400), "fc": (30, 230), "fc_max": (30, 240), "cad": (0, 260),
+             "sube": (0, 9000), "baja": (0, 9000), "kcal": (0, 20000), "pot": (0, 2000),
+             "efecto": (0, 5), "efecto_ana": (0, 5), "vel_max": (0, 15)}
+
+
+def extra_actividad(a):
+    out = {}
+    for k, (lo, hi) in EXTRA_ACT.items():
+        if k == "hora":
+            if re.fullmatch(r"\d\d:\d\d", str(a.get(k) or "")):
+                out[k] = a[k]
+        elif (n := real(a.get(k), lo, hi)) is not None:
+            out[k] = n if k in ("efecto", "efecto_ana", "vel_max") else round(n)
+    if isinstance(a.get("parciales"), list):
+        out["parciales"] = [
+            {"km": entero(x.get("km"), 1, 500, 1), "seg": entero(x.get("seg"), 0, 7200, 0),
+             "ritmo": str(x.get("ritmo") or "")[:12],
+             **({"fc": round(n)} if (n := real(x.get("fc"), 30, 240)) is not None else {}),
+             **({"dalt": round(n)} if (n := real(x.get("dalt"), -2000, 2000)) is not None else {})}
+            for x in a["parciales"][:300] if isinstance(x, dict)]
+    return out
 
 
 def real(v, lo, hi):
@@ -288,7 +315,8 @@ def clean(state):
                         # los minutos redondeados no valen para un 5k: el plan de carrera usa esto
                         "seg": entero(a.get("seg"), 0, 86400, 0),
                         "ritmo":str(a.get("ritmo") or "")[:12],  # "5:58 /km"
-                        "src": str(a.get("src") or "")[:8],  # ios | strava
+                        "src": str(a.get("src") or "")[:8],  # ios | coros
+                        **extra_actividad(a),
                     }
                     for a in lst(v)[:10]
                     if isinstance(a, dict) and a.get("id")
@@ -1408,6 +1436,86 @@ def registra_entreno(a: dict, todo_sesion: str = Cookie(None), authorization: st
         # lo que se lee en la notificación al acabar de correr: cómo queda tu 5k
         trozos.append(f"5k estimado {carrera.mmss(carrera.informe(estado)['estimacion']['seg'])}")
     return {"texto": "Apuntado · " + " · ".join(trozos), "habito": h["id"], "dia": dia}
+
+
+# ---------- carreras del COROS (.fit) ----------
+# La app del COROS exporta el .fit (Compartir → Telegram al bot, o subirlo en Carrera / Tom). Se guarda el resumen en
+# `actividad` como cualquier entreno (marca el hábito igual que el atajo) y los puntos en actividades/<id>.json.
+TRAZAS = HERE / "actividades"
+
+
+def apunta_fit(datos: bytes):
+    from zoneinfo import ZoneInfo
+    try:
+        r = fit.resume(fit.lee(datos), ZoneInfo("Europe/Madrid"))
+    except (fit.ErrorFit, struct_error, IndexError, ValueError) as e:
+        raise HTTPException(400, f"No he podido leer el .fit: {e}")
+    estado = clean(dct(json.loads(DB.read_text("utf-8")))) if DB.exists() else clean({})
+    act, dia = r["actividad"], r["dia"]
+    h = que_habito(act["t"], estado["habits"])
+    if not h:
+        raise HTTPException(400, f"Es «{act['t']}» y no tengo un hábito para eso (correr, gimnasio, escalar)")
+    # Si el atajo de iOS ya la apuntó ese día (mismo deporte, km parecidos), la del reloj la sustituye: trae más.
+    antes = estado["actividad"].get(dia, [])
+    repetida = [x for x in antes if x["id"] != act["id"] and x.get("src") != "coros"
+                and que_habito(x.get("t"), estado["habits"]) == h
+                and (not x.get("km") or abs(x["km"] - act["km"]) <= max(0.5, act["km"] * 0.15))]
+    nueva = act["id"] not in {x["id"] for x in antes}
+    estado["actividad"][dia] = [x for x in antes if x["id"] != act["id"] and x not in repetida] + [act]
+    if h["id"] not in estado["log"].get(dia, []):
+        estado["log"][dia] = sorted(set(estado["log"].get(dia, []) + [h["id"]]))
+    TRAZAS.mkdir(exist_ok=True)
+    tmp = TRAZAS / (act["id"] + ".tmp")
+    tmp.write_text(json.dumps({"dia": dia, **r["traza"]}, separators=(",", ":")), "utf-8")
+    os.replace(tmp, TRAZAS / (act["id"] + ".json"))
+    estado = clean(estado)
+    guarda(DB, json.dumps(estado, ensure_ascii=False))
+    trozos = [f"{act['km']:g} km", act["ritmo"], f"FC {act['fc']}" if act.get("fc") else "",
+              f"+{act['sube']:g} m" if act.get("sube") else ""]
+    texto = ("Apuntada" if nueva else "Actualizada") + f" · {h['n']} {dia[8:]}/{dia[5:7]} · " + " · ".join(x for x in trozos if x)
+    if repetida:
+        texto += " (sustituye a la del atajo)"
+    if h["id"] == carrera.habito_correr(estado) and act["km"]:
+        texto += f" · 5k estimado {carrera.mmss(carrera.informe(estado)['estimacion']['seg'])}"
+    return {"texto": texto, "dia": dia, "id": act["id"], "habito": h["id"], "nueva": nueva}
+
+
+@app.post("/api/actividad/fit")
+async def sube_fit(request: Request, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """El .fit va tal cual en el cuerpo (como /api/documentos: sin multipart)."""
+    exige(todo_sesion, authorization)
+    datos = await request.body()
+    if not datos:
+        raise HTTPException(400, "Falta el fichero")
+    if len(datos) > 20 * 2**20:
+        raise HTTPException(413, "Más de 20 MB no es un .fit de una carrera")
+    return await run_in_threadpool(apunta_fit, datos)
+
+
+@app.get("/api/actividad/{i}")
+def una_actividad(i: str, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """Una actividad con su traza (si vino del reloj): para el detalle con mapa y gráficas."""
+    exige(todo_sesion, authorization)
+    estado = clean(dct(json.loads(DB.read_text("utf-8")))) if DB.exists() else clean({})
+    for dia, acts in estado["actividad"].items():
+        for a in acts:
+            if a["id"] == i:
+                f = TRAZAS / (i + ".json") if re.fullmatch(r"[\w-]{1,20}", i) else None
+                traza = json.loads(f.read_text("utf-8")) if f and f.exists() else None
+                return {"dia": dia, **a, "traza": traza}
+    raise HTTPException(404, "No existe")
+
+
+@app.get("/api/actividades")
+def actividades(dias: int = 365, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """Todas las actividades, la más nueva primero, sin la traza (con `mapa`: si hay traza que pintar)."""
+    exige(todo_sesion, authorization)
+    estado = clean(dct(json.loads(DB.read_text("utf-8")))) if DB.exists() else clean({})
+    desde = (date.today() - timedelta(days=max(1, min(dias, 3650)))).isoformat()
+    out = [{"dia": d, **{k: v for k, v in a.items() if k != "parciales"}, "parciales": len(a.get("parciales", [])),
+            "mapa": (TRAZAS / (a["id"] + ".json")).exists()}
+           for d, acts in estado["actividad"].items() if d >= desde for a in acts]
+    return sorted(out, key=lambda a: (a["dia"], a.get("hora", "")), reverse=True)
 
 
 # ---------- sueño y pasos (atajo de Salud cada mañana) ----------
