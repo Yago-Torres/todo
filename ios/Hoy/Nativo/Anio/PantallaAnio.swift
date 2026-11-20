@@ -58,8 +58,13 @@ struct PantallaAnio: View {
     private var cabecera: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(rango).estiloEtiqueta().foregroundStyle(Tema.suave)
-            Text("Tu \(datos["anio"].map { "\($0)" } ?? "año")").font(Tema.fuente(.titulo)).foregroundStyle(Tema.texto)
+            Text(titulo).font(Tema.fuente(.titulo)).foregroundStyle(Tema.texto)
         }
+    }
+
+    private var titulo: String {
+        if let x = num(datos["anio"]) { return "Tu " + String(Int(x)) }
+        return "Tu año"
     }
 
     private var rango: String {
@@ -69,7 +74,7 @@ struct PantallaAnio: View {
 
     private func titular(_ l: [String: Any]) -> some View {
         VStack(alignment: .leading, spacing: Tema.Espacio.s) {
-            Text("«\(l["titular"] as? String ?? "")»").font(.system(size: 26, weight: .bold)).foregroundStyle(Tema.texto)
+            Text("«" + cad(l["titular"]) + "»").font(.system(size: 26, weight: .bold)).foregroundStyle(Tema.texto)
                 .fixedSize(horizontal: false, vertical: true)
             ForEach((l["frases"] as? [String]) ?? [], id: \.self) { f in
                 Text(f).font(Tema.fuente(.texto)).foregroundStyle(Tema.texto).fixedSize(horizontal: false, vertical: true)
@@ -89,64 +94,77 @@ struct PantallaAnio: View {
         return v.formatted(.number.precision(.fractionLength(dec)).locale(FechasES.locale))
     }
 
+    private func cad(_ v: Any?) -> String { v as? String ?? "" }
+    private func plural(_ x: Double, _ uno: String, _ varios: String) -> String { x == 1 ? uno : varios }
+    private func lista(_ v: Any?) -> [[String: Any]] { v as? [[String: Any]] ?? [] }
+
+    // Sin literales dentro de las interpolaciones: el compilador de Xcode se perdía (20/11).
     private var tarjetas: [Tarjeta] {
         var t: [Tarjeta] = []
-        let h = dic("habitos"), g = dic("gimnasio"), a = dic("actividad"), c = dic("cuerpo"), m = dic("movil"), din = dic("dinero"),
-            inv = dic("inversion"), cl = dic("claude")
+        let h = dic("habitos"), g = dic("gimnasio"), a = dic("actividad"), c = dic("cuerpo"), m = dic("movil"), din = dic("dinero")
+        let inv = dic("inversion"), cl = dic("claude")
+
         if let marcas = num(h["marcas"]), marcas > 0 {
-            let r = h["mejor_racha"] as? [String: Any]
-            let mes = (h["mejor_mes"] as? [String: Any])?["mes"] as? String
+            let r = h["mejor_racha"] as? [String: Any] ?? [:]
+            let dias = n(num(h["dias_con_algo"]))
+            let racha = n(num(r["racha_max"]))
+            let nombre = cad(r["n"])
+            var det = "En " + dias + " días. Mejor racha: " + racha + " en «" + nombre + "»."
+            if let mes = (h["mejor_mes"] as? [String: Any])?["mes"] as? String { det += " Tu mejor mes, " + mes + "." }
             let olvidados = (h["olvidados"] as? [String]) ?? []
-            t.append(Tarjeta(et: "Hábitos", cifra: n(marcas), unidad: "hechos",
-                             det: "En \(n(num(h["dias_con_algo"]))) días. Mejor racha: \(n(num(r?["racha_max"]))) en «\(r?["n"] as? String ?? "")»."
-                                + (mes.map { " Tu mejor mes, \($0)." } ?? "")
-                                + (olvidados.isEmpty ? "" : "\nCasi sin tocar: \(olvidados.joined(separator: ", "))."))
+            if !olvidados.isEmpty { det += "\nCasi sin tocar: " + olvidados.joined(separator: ", ") + "." }
+            t.append(Tarjeta(et: "Hábitos", cifra: n(marcas), unidad: "hechos", det: det))
         }
         if let s = num(g["sesiones"]), s > 0 {
-            let mejoras = ((g["mas_mejora"] as? [[String: Any]]) ?? []).map { "\($0["ej"] as? String ?? "") +\(n(num($0["pct"])))%" }
-            t.append(Tarjeta(et: "Gimnasio", cifra: n(num(g["toneladas"]), 1), unidad: "toneladas",
-                             det: "En \(n(s)) \(s == 1 ? "sesión" : "sesiones")." + (mejoras.isEmpty ? "" : " Lo que más ha subido: \(mejoras.joined(separator: ", ")).")))
+            let mejoras = lista(g["mas_mejora"]).map { x in cad(x["ej"]) + " +" + n(num(x["pct"])) + " %" }
+            var det = "En " + n(s) + " " + plural(s, "sesión", "sesiones") + "."
+            if !mejoras.isEmpty { det += " Lo que más ha subido: " + mejoras.joined(separator: ", ") + "." }
+            t.append(Tarjeta(et: "Gimnasio", cifra: n(num(g["toneladas"]), 1), unidad: "toneladas", det: det))
         }
         if let k = num(a["carreras"]), k > 0 {
-            t.append(Tarjeta(et: "Correr", cifra: n(num(a["km"]), 1), unidad: "km",
-                             det: "\(n(k)) \(k == 1 ? "carrera" : "carreras"); la más larga, \(n(num(a["mas_larga"]), 1)) km"
-                                + ((a["mejor_ritmo"] as? String).map { "; mejor ritmo \($0)" } ?? "") + "."))
+            var det = n(k) + " " + plural(k, "carrera", "carreras") + "; la más larga, " + n(num(a["mas_larga"]), 1) + " km"
+            if let ritmo = a["mejor_ritmo"] as? String { det += "; mejor ritmo " + ritmo }
+            t.append(Tarjeta(et: "Correr", cifra: n(num(a["km"]), 1), unidad: "km", det: det + "."))
         }
-        if let e = num(a["escalada"]), e > 0 { t.append(Tarjeta(et: "Escalada", cifra: n(e), unidad: e == 1 ? "día" : "días", det: "")) }
+        if let e = num(a["escalada"]), e > 0 {
+            t.append(Tarjeta(et: "Escalada", cifra: n(e), unidad: plural(e, "día", "días"), det: ""))
+        }
         if let p = c["peso"] as? [String: Any], let cambio = num(p["cambio"]) {
-            t.append(Tarjeta(et: "Peso", cifra: (cambio > 0 ? "+" : "") + n(cambio, 1), unidad: "kg",
-                             det: "De \(n(num(p["inicio"]), 1)) a \(n(num(p["fin"]), 1)) kg; el mínimo, \(n(num(p["min"]), 1))."))
+            let det = "De " + n(num(p["inicio"]), 1) + " a " + n(num(p["fin"]), 1) + " kg; el mínimo, " + n(num(p["min"]), 1) + "."
+            t.append(Tarjeta(et: "Peso", cifra: (cambio > 0 ? "+" : "") + n(cambio, 1), unidad: "kg", det: det))
         }
         if let s = num(c["sueno_medio"]) {
-            t.append(Tarjeta(et: "Sueño", cifra: "\(Int(s) / 60) h \(String(format: "%02d", Int(s) % 60))", unidad: "de media",
-                             det: "En \(n(num(c["noches"]))) noches con datos."))
+            let minutos = Int(s) % 60
+            let cifra = String(Int(s) / 60) + " h " + (minutos < 10 ? "0" : "") + String(minutos)
+            t.append(Tarjeta(et: "Sueño", cifra: cifra, unidad: "de media", det: "En " + n(num(c["noches"])) + " noches con datos."))
         }
         if let p = num(c["pasos"]), p > 0 {
-            t.append(Tarjeta(et: "Pasos", cifra: n(p), unidad: "", det: "\(n(num(c["pasos_medios"]))) al día de media."))
+            t.append(Tarjeta(et: "Pasos", cifra: n(p), unidad: "", det: n(num(c["pasos_medios"])) + " al día de media."))
         }
         if let hrs = num(m["horas"]), hrs > 0 {
-            let top = ((m["top"] as? [[String: Any]]) ?? []).map { "\($0["app"] as? String ?? "") \(n(num($0["horas"]), 1)) h" }
-            t.append(Tarjeta(et: "Móvil", cifra: n(hrs), unidad: "horas",
-                             det: "En las apps que vigilas, \(n(num(m["media_min"]))) min al día. " + top.joined(separator: " · ")))
+            let top = lista(m["top"]).map { x in cad(x["app"]) + " " + n(num(x["horas"]), 1) + " h" }
+            let det = "En las apps que vigilas, " + n(num(m["media_min"])) + " min al día. " + top.joined(separator: " · ")
+            t.append(Tarjeta(et: "Móvil", cifra: n(hrs), unidad: "horas", det: det))
         }
         if let gas = num(din["gastado"]), gas > 0 {
-            let cats = ((din["top_cats"] as? [[String: Any]]) ?? []).map { "\($0["cat"] as? String ?? "") \(n(num($0["eur"]))) €" }
-            let caro = (din["mes_mas_caro"] as? [String: Any])?["mes"] as? String
-            t.append(Tarjeta(et: "Gastos", cifra: n(gas), unidad: "€",
-                             det: "En \(n(num(din["tickets"]))) compras; \(n(num(din["al_dia_variable"]), 2)) € al día sin casa ni suscripciones. "
-                                + cats.joined(separator: " · ") + (caro.map { ". Mes más caro: \($0)." } ?? "")))
+            let cats = lista(din["top_cats"]).map { x in cad(x["cat"]) + " " + n(num(x["eur"])) + " €" }
+            var det = "En " + n(num(din["tickets"])) + " compras; " + n(num(din["al_dia_variable"]), 2) + " € al día sin casa ni suscripciones. "
+            det += cats.joined(separator: " · ")
+            if let caro = (din["mes_mas_caro"] as? [String: Any])?["mes"] as? String { det += ". Mes más caro: " + caro + "." }
+            t.append(Tarjeta(et: "Gastos", cifra: n(gas), unidad: "€", det: det))
         }
         if let ops = num(inv["operaciones"]), ops > 0 {
-            var det = "\(n(ops)) \(ops == 1 ? "operación" : "operaciones")."
-            if let v = num(inv["valor"]) { det += " Vale \(n(v)) € (\(n(num(inv["rent"]), 1)) %)." }
+            var det = n(ops) + " " + plural(ops, "operación", "operaciones") + "."
+            if let v = num(inv["valor"]) { det += " Vale " + n(v) + " € (" + n(num(inv["rent"]), 1) + " %)." }
             t.append(Tarjeta(et: "Inversión", cifra: n(num(inv["aportado"])), unidad: "€ invertidos", det: det))
         }
         if let ll = num(cl["llamadas"]), ll > 0 {
-            t.append(Tarjeta(et: "Claude", cifra: n(ll), unidad: "veces", det: "Lo que ha trabajado para ti en la Pi."))
+            t.append(Tarjeta(et: "Claude", cifra: n(ll), unidad: plural(ll, "vez", "veces"), det: "Lo que ha trabajado para ti en la Pi."))
         }
         if let u = datos["uso"] as? [String: Any], let dias = num(u["dias_activos"]), dias > 0 {
-            t.append(Tarjeta(et: "Tú en la app", cifra: n(dias), unidad: "días",
-                             det: "\(n(num(u["acciones"]))) cosas hechas; lo que más usas: \(u["favorita"] as? String ?? "–")."))
+            let fav = u["favorita"] as? String ?? "–"
+            let det = n(num(u["acciones"])) + " cosas hechas; lo que más usas: " + fav + "."
+            t.append(Tarjeta(et: "Tú en la app", cifra: n(dias), unidad: plural(dias, "día", "días"), det: det))
         }
         return t
     }
