@@ -13,11 +13,11 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Inversiones">
 <link rel="preload" href="/fuentes/instrument-sans-normal-latin.woff2?v=1" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/calma.css?v=230f1260">
+<link rel="stylesheet" href="/calma.css?v=1c2c21b0">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="/calma.js?v=230f1260"></script>
+<script src="/calma.js?v=1c2c21b0"></script>
 <script src="/anime-4.5.0.min.js"></script>
-<script src="/anima.js?v=230f1260"></script>
+<script src="/anima.js?v=1c2c21b0"></script>
 <style>
   @view-transition { navigation: auto; }
   @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }
@@ -1292,18 +1292,46 @@ async function pintaMultas() {
       const ultimas = [...r.multas].reverse().slice(0, 8);
       if (ultimas.length) {
         const ul = el("ul", "eventos-m");
-        for (const x of ultimas) { const li = el("li"); li.append(el("time", null, corta(x.dia)), el("div", null, `${x.n}: ${x.motivo} · ${eur(x.euros)}`)); ul.append(li); }
+        for (const x of ultimas) {
+          const li = el("li"), b = el("button", "c-btn mini", "Perdonar");
+          b.title = "Si estaba mal calculada o lo hiciste y no lo marcaste";
+          b.onclick = async () => { await ajustaMultas({perdona: {dia: x.dia, habito: x.id}}); };
+          li.append(el("time", null, corta(x.dia)), el("div", null, `${x.n}: ${x.motivo} · ${eur(x.euros)}`), b); ul.append(li);
+        }
         partes.push(ul);
+      }
+      // hábitos sin multa hasta un día («el móvil, hasta enero»)
+      const hab = r.habitos || [], nombre = id => (hab.find(h => h.id === id) || {}).n || id;
+      for (const [id, hasta] of Object.entries(m.exentos || {})) {
+        if (hasta < hoyISO()) continue;
+        const p = el("p", "nota-p", `${nombre(id)}: sin multas hasta el ${corta(hasta)} `), b = el("button", "c-btn mini", "Quitar");
+        b.onclick = () => ajustaMultas({exento: {habito: id, hasta: ""}});
+        p.append(b); partes.push(p);
+      }
+      if (hab.length) {
+        const fx = el("form", "rejilla"), sel = el("select", "c-campo"), fe = el("input", "c-campo"), bt = el("button", "c-btn", "Sin multas hasta");
+        sel.name = "habito"; sel.append(...hab.filter(h => h.id !== "aportar").map(h => { const o = el("option", null, h.n); o.value = h.id; return o; }));
+        fe.type = "date"; fe.name = "hasta"; fe.required = true; bt.type = "submit";
+        const l1 = el("label", null, "Hábito"), l2 = el("label", null, "Hasta el (incluido)");
+        l1.append(sel); l2.append(fe);
+        fx.append(l1, l2, el("div", "botones")); fx.lastChild.append(bt);
+        fx.onsubmit = e => { e.preventDefault(); ajustaMultas({exento: {habito: sel.value, hasta: fe.value}}); };
+        partes.push(fx);
       }
     }
     caja.replaceChildren(...partes);
   } catch (e) { caja.replaceChildren(el("p", "vacio", `No se pudieron leer: ${e.message}`)); }
 }
+async function ajustaMultas(cuerpo) {
+  try { const r = await api("/api/multas/ajusta", cuerpo); toast(r.texto[0].toUpperCase() + r.texto.slice(1)); I.perfil.multas = r.conf; pintaMultas(); }
+  catch (err) { toast(`No se guardó: ${err.message}`); }
+}
 $("#f-multas").onsubmit = async e => {
   e.preventDefault();
   const f = e.target, m = I.perfil.multas || {};
   const nuevo = {activo: f.activo.checked, fallo: num(f.fallo.value) ?? 1, racha: num(f.racha.value) ?? 5, racha_min: +f.racha_min.value || 3,
-                 desde: f.activo.checked ? (m.activo && m.desde ? m.desde : hoyISO()) : ""};
+                 desde: f.activo.checked ? (m.activo && m.desde ? m.desde : hoyISO()) : "",
+                 exentos: m.exentos || {}, perdonadas: m.perdonadas || []};
   try { await api("/api/inversiones/perfil", {multas: nuevo}); toast(nuevo.activo ? "Multas activadas desde hoy" : "Multas desactivadas"); cargar(); }
   catch (err) { toast(`No se guardó: ${err.message}`); }
 };

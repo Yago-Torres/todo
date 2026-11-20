@@ -1087,6 +1087,12 @@ def test_multas():
     assert main.aportes_en_log(s, [{"fecha": "2026-11-02", "tipo": "compra"}, {"fecha": "2026-11-03", "tipo": "venta"}])
     assert "aportar" in s["log"]["2026-11-02"] and "w" in s["log"]["2026-11-02"] and "aportar" not in s["log"].get("2026-10-01", [])
     assert not main.aportes_en_log(s, [{"fecha": "2026-11-02", "tipo": "compra"}])
+    # exento hasta un día (incluido) y una multa perdonada
+    assert [x["dia"] for x in main.multas(s, {**conf, "exentos": {"w": "2026-11-06"}}, "2026-11-08")] == ["2026-11-07"]
+    assert [x["dia"] for x in main.multas(s, {**conf, "perdonadas": ["2026-11-06|w"]}, "2026-11-08")] == ["2026-11-05", "2026-11-07"]
+    import inversiones
+    limpio = inversiones._multas({**conf, "exentos": {"w": "2027-01-01", "x": "mal"}, "perdonadas": ["2026-11-06|w", "basura"]})
+    assert limpio["exentos"] == {"w": "2027-01-01"} and limpio["perdonadas"] == ["2026-11-06|w"]
 
 
 def test_descansos_api():

@@ -76,7 +76,13 @@ def _multas(m):
         desde = date.today().isoformat() if activo else ""
     return {"activo": activo, "fallo": f if (f := _num(m.get("fallo"), 0, 100)) is not None else 1,
             "racha": r if (r := _num(m.get("racha"), 0, 500)) is not None else 5,
-            "racha_min": int(_num(m.get("racha_min"), 1, 365) or 3), "desde": desde}
+            "racha_min": int(_num(m.get("racha_min"), 1, 365) or 3), "desde": desde,
+            # sin multas para un hábito hasta un día (incluido): «el móvil, sin multar hasta enero»
+            "exentos": {str(k)[:20]: v for k, v in (m.get("exentos") or {}).items()
+                        if isinstance(v, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", v)} if isinstance(m.get("exentos"), dict) else {},
+            # multas sueltas que no cuentan ("día|hábito"): mal calculada, o lo hizo y no lo marcó a tiempo
+            "perdonadas": sorted({x for x in (m.get("perdonadas") or []) if isinstance(x, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}\|[\w-]{1,20}", x)})[-300:]
+                          if isinstance(m.get("perdonadas"), list) else []}
 
 
 def mirar_hoy(perfil, hoy=None):

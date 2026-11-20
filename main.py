@@ -1879,6 +1879,8 @@ def multas(s, conf, hoy):
     for f in rachas(s, hoy)["faltas"]:
         if f["dia"] < conf["desde"] or f["id"] == APORTAR:
             continue
+        if f["dia"] <= conf.get("exentos", {}).get(f["id"], "") or f"{f['dia']}|{f['id']}" in conf.get("perdonadas", []):
+            continue
         rota = f["racha"] >= conf["racha_min"]
         out.append({**f, "n": nombres.get(f["id"], f["id"]), "euros": round(conf["fallo"] + (conf["racha"] if rota else 0), 2),
                     "motivo": f"rompe una racha de {f['racha']} días" if rota else "no hecho"})
@@ -1945,7 +1947,45 @@ def get_multas(todo_sesion: str = Cookie(None), authorization: str = Header(None
     l = multas(s, conf, hoy.isoformat())
     ayer = (hoy - timedelta(days=1)).isoformat()
     return {"conf": conf, "multas": l, "total": round(sum(x["euros"] for x in l), 2),
-            "ayer": [x for x in l if x["dia"] == ayer], "hay_habito": any(h["id"] == APORTAR for h in s["habits"])}
+            "ayer": [x for x in l if x["dia"] == ayer], "hay_habito": any(h["id"] == APORTAR for h in s["habits"]),
+            "habitos": [{"id": h["id"], "n": h["n"]} for h in s["habits"]]}
+
+
+@app.post("/api/multas/ajusta")
+def ajusta_multas(a: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """{exento: {habito, hasta}} sin multas para ese hábito hasta ese día («hasta» vacío lo quita);
+    {perdona: {dia, habito}} quita una multa suelta (y {devuelve: …} la vuelve a poner). Para la web y el bot."""
+    exige(todo_sesion, authorization)
+    s = clean(dct(json.loads(DB.read_text("utf-8")))) if DB.exists() else clean({})
+    ids = {h["id"] for h in s["habits"]}
+    texto = []
+
+    def pon(d):
+        m = d["perfil"]["multas"]
+        m.setdefault("exentos", {}); m.setdefault("perdonadas", [])
+        if isinstance(a.get("exento"), dict):
+            h, hasta = str(a["exento"].get("habito") or ""), day(a["exento"].get("hasta")) or ""
+            if h not in ids:
+                raise HTTPException(400, f"No existe el hábito «{h}»")
+            if hasta:
+                m["exentos"][h] = hasta
+                texto.append(f"sin multas hasta el {int(hasta[8:])}/{int(hasta[5:7])}")
+            else:
+                m["exentos"].pop(h, None)
+                texto.append("vuelve a multar")
+        for k, quita in (("perdona", False), ("devuelve", True)):
+            if isinstance(a.get(k), dict):
+                dia, h = day(a[k].get("dia")), str(a[k].get("habito") or "")
+                if not dia or h not in ids:
+                    raise HTTPException(400, "Falta el día o el hábito")
+                clave = f"{dia}|{h}"
+                m["perdonadas"] = [x for x in m["perdonadas"] if x != clave] + ([] if quita else [clave])
+                texto.append(("multa del " if quita else "perdonada la multa del ") + f"{int(dia[8:])}/{int(dia[5:7])}" + (" otra vez en pie" if quita else ""))
+        d["perfil"]["multas"] = inversiones._multas(m)
+    _inv_cambia(pon)
+    conf = inversiones.lee()["perfil"]["multas"]
+    guarda(MULTAS, json.dumps({"conf": conf, "multas": multas(s, conf, date.today().isoformat())}, ensure_ascii=False))
+    return {"texto": "; ".join(texto) or "nada que cambiar", "conf": conf}
 
 
 def racha(s, hid, hoy):
