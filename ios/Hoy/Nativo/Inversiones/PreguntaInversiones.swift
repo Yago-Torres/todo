@@ -70,6 +70,7 @@ struct PreguntaInversiones: View {
                     }
                 }
                 .scrollIndicators(.hidden)
+                .sinDeslizarSeccion()
                 Button {
                     Task { await envia() }
                 } label: {

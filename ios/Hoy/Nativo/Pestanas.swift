@@ -23,7 +23,7 @@ struct Pestanas: View {
             }
             .offset(x: arrastre)
             // deslizar a los lados: la página sigue al dedo y, pasado un tercio (o rápido), pasa a la de al lado
-            .simultaneousGesture(DragGesture(minimumDistance: 24)
+            .simultaneousGesture(DragGesture(minimumDistance: 24, coordinateSpace: .global)
                 .onChanged { g in
                     guard puedeArrastrar(g) else { return }
                     arrastre = g.translation.width * 0.6
@@ -59,6 +59,8 @@ struct Pestanas: View {
     private func puedeArrastrar(_ g: DragGesture.Value) -> Bool {
         let dx = g.translation.width, dy = g.translation.height
         guard abs(dx) > abs(dy) * 2 else { return false }
+        // empezó en algo que se desplaza de lado (las píldoras de Inversiones, sugerencias…): eso se mueve, la sección no
+        if ZonasSinDeslizar.shared.contiene(g.startLocation) { return false }
         if Self.conFilasDeslizables.contains(navegador.pestana) {
             let x = g.startLocation.x, ancho = UIScreen.main.bounds.width
             return x < 28 || x > ancho - 28
@@ -85,4 +87,38 @@ struct Pestanas: View {
     }
 
     private var pantalla: some View { RegistroNativo.vista(navegador.pestana) }
+}
+
+/// Lo que se desplaza de lado dentro de una sección (selectores de píldoras, filas de sugerencias…): un arrastre que
+/// empieza ahí mueve eso y no cambia de sección. Cada zona apunta su marco en coordenadas de pantalla mientras se ve.
+@MainActor
+final class ZonasSinDeslizar {
+    static let shared = ZonasSinDeslizar()
+    private var zonas: [UUID: CGRect] = [:]
+
+    func pon(_ id: UUID, _ marco: CGRect) { zonas[id] = marco }
+    func quita(_ id: UUID) { zonas[id] = nil }
+    func contiene(_ punto: CGPoint) -> Bool { zonas.values.contains { $0.insetBy(dx: 0, dy: -6).contains(punto) } }
+}
+
+private struct SinDeslizarSeccion: ViewModifier {
+    @State private var id = UUID()
+
+    func body(content: Content) -> some View {
+        content
+            .background {
+                GeometryReader { g in
+                    let marco = g.frame(in: .global)
+                    Color.clear
+                        .onAppear { ZonasSinDeslizar.shared.pon(id, marco) }
+                        .onChange(of: marco) { _, nuevo in ZonasSinDeslizar.shared.pon(id, nuevo) }
+                }
+            }
+            .onDisappear { ZonasSinDeslizar.shared.quita(id) }
+    }
+}
+
+extension View {
+    /// Para un ScrollView horizontal dentro de una sección: arrastrar ahí no pasa a la sección de al lado.
+    func sinDeslizarSeccion() -> some View { modifier(SinDeslizarSeccion()) }
 }

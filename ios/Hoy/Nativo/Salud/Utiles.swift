@@ -130,6 +130,7 @@ struct SelectorPildoras<Valor: Hashable>: View {
         }
         .contentMargins(.horizontal, Tema.Espacio.l, for: .scrollContent)
         .scrollIndicators(.hidden)
+        .sinDeslizarSeccion()
     }
 }
 

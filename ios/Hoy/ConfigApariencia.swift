@@ -175,6 +175,7 @@ struct SeccionPersonalizar: View {
                 }
             }
         }
+        .sinDeslizarSeccion()
     }
 }
 

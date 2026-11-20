@@ -375,6 +375,7 @@ private struct DetalleIntento: View {
                             }
                         }
                     }
+                    .sinDeslizarSeccion()
                 }
                 VideoEscalada(ruta: "/api/escalada/\(x.intento)/\(actual)")
                     .id(actual)

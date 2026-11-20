@@ -177,6 +177,7 @@ private struct HuchaViajes: View {
                             }
                         }
                     }
+                    .sinDeslizarSeccion()
                 }
             }
         }

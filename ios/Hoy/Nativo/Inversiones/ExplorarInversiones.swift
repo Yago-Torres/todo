@@ -165,6 +165,7 @@ struct ExplorarInversiones: View {
                     }
                 }
                 .scrollIndicators(.hidden)
+                .sinDeslizarSeccion()
             }
             Button {
                 Task {
@@ -397,6 +398,7 @@ struct TarjetaIdea: View {
                 }
             }
             .scrollIndicators(.hidden)
+            .sinDeslizarSeccion()
             if let nota = reaccion?.nota, !nota.isEmpty {
                 Text("Motivo: \(nota)").font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
             }
