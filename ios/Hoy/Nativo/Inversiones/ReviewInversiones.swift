@@ -241,43 +241,39 @@ private struct TablaMD: View {
     let cabecera: [String]
     let filas: [[String]]
 
-    /// Ancho fijo por columna (por lo largo de su texto, de 80 a 220 pt). Con minWidth/maxWidth, dentro del scroll
-    /// horizontal el Grid medía cada celda con un ancho y la colocaba con otro: el texto partido en varias líneas se
-    /// salía de su fila y se montaba encima de la siguiente (informe de mercado en Tom, 20/11).
-    private func ancho(_ j: Int) -> CGFloat {
-        let largo = ([cabecera] + filas).map { j < $0.count ? $0[j].replacingOccurrences(of: "*", with: "").count : 0 }.max() ?? 0
-        return min(220, max(80, CGFloat(largo) * 7.5))
-    }
-
+    /// Cada fila es una tarjeta: la primera celda de título y debajo «columna: valor». Ni Grid ni scroll lateral: el
+    /// Grid dentro de un ScrollView horizontal calculaba mal el alto de las filas y el texto partido se montaba sobre la
+    /// siguiente (informe de mercado en Tom, 20/11). Así cada línea ocupa lo que ocupa y en el móvil se lee de arriba abajo.
     var body: some View {
-        let n = max(cabecera.count, filas.map(\.count).max() ?? 0)
-        let anchos = (0..<n).map(ancho)
-        ScrollView(.horizontal) {
-            Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 8) {
-                GridRow(alignment: .top) {
-                    ForEach(0..<n, id: \.self) { j in
-                        Text(LectorMD.enLinea(j < cabecera.count ? cabecera[j] : ""))
-                            .font(Tema.fuente(.pequeno, peso: .semibold)).foregroundStyle(Tema.suave)
+        VStack(alignment: .leading, spacing: Tema.Espacio.s) {
+            ForEach(Array(filas.enumerated()), id: \.offset) { _, f in
+                VStack(alignment: .leading, spacing: 4) {
+                    if let primera = f.first {
+                        Text(LectorMD.enLinea(primera))
+                            .font(Tema.fuente(.pequeno, peso: .semibold)).foregroundStyle(Tema.texto)
                             .fixedSize(horizontal: false, vertical: true)
-                            .frame(width: anchos[j], alignment: .leading)
                     }
-                }
-                Divider().overlay(Tema.linea)
-                ForEach(Array(filas.enumerated()), id: \.offset) { _, f in
-                    GridRow(alignment: .top) {
-                        ForEach(0..<n, id: \.self) { j in
-                            Text(LectorMD.enLinea(j < f.count ? f[j] : ""))
-                                .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.texto)
-                                .monospacedDigit()
-                                .fixedSize(horizontal: false, vertical: true)
-                                .frame(width: anchos[j], alignment: .leading)
+                    ForEach(Array(f.dropFirst().enumerated()), id: \.offset) { k, celda in
+                        let titulo = k + 1 < cabecera.count ? cabecera[k + 1] : ""
+                        if !celda.trimmingCharacters(in: .whitespaces).isEmpty && celda != "—" && celda != "-" {
+                            VStack(alignment: .leading, spacing: 1) {
+                                if !titulo.isEmpty {
+                                    Text(LectorMD.enLinea(titulo))
+                                        .font(Tema.fuente(.etiqueta)).foregroundStyle(Tema.suave)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                Text(LectorMD.enLinea(celda))
+                                    .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.texto).monospacedDigit()
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(Tema.Espacio.s + 2)
+                .background(Tema.texto.opacity(0.04), in: RoundedRectangle(cornerRadius: Tema.Radio.celda, style: .continuous))
             }
-            .padding(.vertical, Tema.Espacio.xs)
         }
-        .scrollIndicators(.visible)
     }
 }
 
