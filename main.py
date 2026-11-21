@@ -2740,6 +2740,38 @@ async def tom(a: dict, request: Request, todo_sesion: str = Cookie(None), author
     return Response(r, status_code=estado, media_type="application/json")
 
 
+# ---------- capturas compartidas desde Tom ----------
+# La hoja de compartir de iOS (HoyCompartir) manda la foto tal cual; el bot la lee como las de Telegram (ticket,
+# captura del banco o de Trade Republic, documento) y contesta por Telegram. Aquí solo se reenvía.
+FOTO_BOT = TOM.rsplit("/", 1)[0] + "/foto"
+
+
+@app.post("/api/foto")
+async def comparte_foto(request: Request, todo_sesion: str = Cookie(None), authorization: str = Header(None),
+                        x_pista: str = Header("")):
+    exige(todo_sesion, authorization)
+    datos = await request.body()
+    if not datos:
+        raise HTTPException(400, "Falta la foto")
+    if len(datos) > 15 * 2**20:
+        raise HTTPException(413, "La foto tiene que pesar menos de 15 MB")
+    tipo = (request.headers.get("content-type") or "image/jpeg").split(";")[0]
+
+    def manda():
+        q = urllib.request.Request(FOTO_BOT, data=datos, method="POST",
+                                   headers={"Authorization": f"Bearer {PASS}", "Content-Type": tipo, "X-Pista": x_pista[:600]})
+        try:
+            with urllib.request.urlopen(q, timeout=30) as r:
+                return r.status, r.read()
+        except urllib.error.HTTPError as e:
+            return e.code, e.read()
+    try:
+        estado, r = await run_in_threadpool(manda)
+    except Exception:
+        raise HTTPException(502, "El bot de Telegram no responde")
+    return Response(r, status_code=estado, media_type="application/json")
+
+
 # ---------- pendientes: el vault de Obsidian (vault.py) ----------
 # Las tareas viven en el vault, no en data.json: así las ves en Obsidian junto a las
 # que crea el cerebro, y un PUT del cliente no se las puede llevar por delante.

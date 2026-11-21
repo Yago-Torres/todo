@@ -149,6 +149,23 @@ enum API {
         return (objeto?["texto"] as? String) ?? "Guardado en Leer luego"
     }
 
+    /// POST /api/foto: una captura o foto desde la hoja de compartir. El bot la lee como las de Telegram (ticket,
+    /// captura del banco o de Trade Republic, documento) y contesta por Telegram.
+    @discardableResult
+    static func mandaFoto(_ datos: Data, tipo: String = "image/jpeg", pista: String? = nil) async throws -> String {
+        var p = try peticion("/api/foto", metodo: "POST")
+        p.httpBody = datos
+        p.timeoutInterval = 90
+        p.setValue(tipo, forHTTPHeaderField: "Content-Type")
+        if let pista = pista?.trimmingCharacters(in: .whitespacesAndNewlines), !pista.isEmpty,
+           let cod = pista.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) {
+            p.setValue(String(cod.prefix(600)), forHTTPHeaderField: "X-Pista")
+        }
+        let crudo = try await manda(p)
+        let objeto = try? JSONSerialization.jsonObject(with: crudo) as? [String: Any]
+        return (objeto?["texto"] as? String) ?? "Enviada: te contesto por Telegram"
+    }
+
     // MARK: Tom (Siri y el modo voz): el servidor devuelve el texto ya listo para leerlo en voz alta
 
     /// La misma conversación para Siri y el modo voz: «y el de pierna al sábado» sigue a lo de antes (10 min).

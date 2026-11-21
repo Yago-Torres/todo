@@ -3,6 +3,7 @@ import UIKit
 import UniformTypeIdentifiers
 
 // «Leer luego» en la hoja de compartir (Safari o un texto con un enlace): manda la URL a todo y se cierra sola.
+// Con fotos o capturas (hasta 5): van a /api/foto y el bot las lee como si se las mandaras por Telegram.
 // todo guarda la nota al momento y el bot la resume con Claude en su siguiente vuelta (POST /api/leer/pendiente),
 // así que aquí no se espera a ningún resumen. Las claves son las del app group (Almacen), las mismas de la app.
 
@@ -31,6 +32,12 @@ final class CompartirControlador: UIViewController {
 
     private func guarda() async {
         let items = extensionContext?.inputItems.compactMap { $0 as? NSExtensionItem } ?? []
+        let fotos = await FotosCompartidas.de(items)
+        if !fotos.isEmpty {
+            estado.modo = .fotos(fotos.count)
+            await mandaFotos(fotos, pista: FotosCompartidas.texto(items))
+            return
+        }
         guard let enlace = await EnlaceCompartido.de(items) else {
             estado.fase = .fallo("No encuentro ningún enlace que guardar")
             cierraLuego(3)
@@ -40,6 +47,20 @@ final class CompartirControlador: UIViewController {
             let texto = try await API.guardaParaLeer(url: enlace.url.absoluteString, titulo: enlace.titulo)
             estado.fase = .listo(texto)
             cierraLuego(1.2)
+        } catch {
+            estado.fase = .fallo(error.localizedDescription)
+            cierraLuego(4)
+        }
+    }
+
+    private func mandaFotos(_ fotos: [Data], pista: String?) async {
+        var ultimo = ""
+        do {
+            for f in fotos {
+                ultimo = try await API.mandaFoto(f, pista: pista)
+            }
+            estado.fase = .listo(fotos.count == 1 ? ultimo : String(fotos.count) + " capturas enviadas: te contesto por Telegram")
+            cierraLuego(1.5)
         } catch {
             estado.fase = .fallo(error.localizedDescription)
             cierraLuego(4)
@@ -124,6 +145,52 @@ struct EnlaceCompartido {
     }
 }
 
+// MARK: fotos y capturas
+
+enum FotosCompartidas {
+    /// Las imágenes compartidas, ya en JPEG (lado largo de 2400 px como mucho: un ticket se sigue leyendo bien).
+    static func de(_ items: [NSExtensionItem]) async -> [Data] {
+        var out: [Data] = []
+        for item in items {
+            for proveedor in item.attachments ?? [] where proveedor.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
+                if out.count >= 5 { return out }
+                if let img = await carga(proveedor), let jpeg = comprime(img) { out.append(jpeg) }
+            }
+        }
+        return out
+    }
+
+    /// El texto que acompaña a la foto (lo que escribas en la hoja): va al bot como pie de foto.
+    static func texto(_ items: [NSExtensionItem]) -> String? {
+        for item in items {
+            if let t = item.attributedContentText?.string.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty {
+                return t
+            }
+        }
+        return nil
+    }
+
+    private static func carga(_ proveedor: NSItemProvider) async -> UIImage? {
+        guard let dato = try? await proveedor.loadItem(forTypeIdentifier: UTType.image.identifier) else { return nil }
+        if let img = dato as? UIImage { return img }
+        if let d = dato as? Data { return UIImage(data: d) }
+        if let u = dato as? URL, let d = try? Data(contentsOf: u) { return UIImage(data: d) }
+        return nil
+    }
+
+    private static func comprime(_ img: UIImage) -> Data? {
+        let lado = max(img.size.width, img.size.height)
+        guard lado > 0 else { return nil }
+        let escala = min(1, 2400 / lado)
+        if escala >= 1 { return img.jpegData(compressionQuality: 0.82) }
+        let tam = CGSize(width: (img.size.width * escala).rounded(), height: (img.size.height * escala).rounded())
+        let formato = UIGraphicsImageRendererFormat.default()
+        formato.scale = 1
+        let pequena = UIGraphicsImageRenderer(size: tam, format: formato).image { _ in img.draw(in: CGRect(origin: .zero, size: tam)) }
+        return pequena.jpegData(compressionQuality: 0.82)
+    }
+}
+
 // MARK: la hoja
 
 @MainActor
@@ -134,7 +201,13 @@ final class EstadoCompartir: ObservableObject {
         case fallo(String)
     }
 
+    enum Modo {
+        case enlace
+        case fotos(Int)
+    }
+
     @Published var fase: Fase = .guardando
+    @Published var modo: Modo = .enlace
 }
 
 struct HojaCompartir: View {
@@ -187,9 +260,13 @@ struct HojaCompartir: View {
 
     private var titulo: String {
         switch estado.fase {
-        case .guardando: return "Guardando en Leer luego…"
+        case .guardando:
+            if case .fotos(let n) = estado.modo { return n == 1 ? "Enviando la captura…" : "Enviando " + String(n) + " capturas…" }
+            return "Guardando en Leer luego…"
         case .listo(let texto): return texto
-        case .fallo: return "No se ha podido guardar"
+        case .fallo:
+            if case .fotos = estado.modo { return "No se ha podido enviar" }
+            return "No se ha podido guardar"
         }
     }
 }
