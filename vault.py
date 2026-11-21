@@ -79,7 +79,9 @@ _TEXTOS = {}   # ruta -> ((mtime, tamaño), texto): solo se relee lo que ha camb
 
 def lee(p):
     st = p.stat()
-    m = (st.st_mtime_ns, st.st_size)   # con el tamaño: ext4 no distingue dos escrituras en el mismo tic
+    # con el tamaño (ext4 no distingue dos escrituras en el mismo tic) y el ctime: Remotely Save puede dejar la fecha
+    # de modificación vieja, y tachar una tarea no cambia el tamaño; el ctime cambia con cualquier escritura
+    m = (st.st_mtime_ns, st.st_ctime_ns, st.st_size)
     if (c := _TEXTOS.get(p)) and c[0] == m:
         return c[1]
     texto = p.read_text("utf-8", errors="ignore")
@@ -153,10 +155,29 @@ def sangria(linea):
     return len(linea.expandtabs(4)) - len(linea.expandtabs(4).lstrip())
 
 
+_cache_todas = {"huella": None, "tareas": []}
+
+
 def todas():
     """Todas las tareas del vault (sin Archivo/), abiertas y hechas, con un id estable por contenido, sus proyectos
-    y su historia (`padre`: la tarea con menos sangría justo encima, de la que hereda los proyectos)."""
+    y su historia (`padre`: la tarea con menos sangría justo encima, de la que hereda los proyectos).
+
+    Con caché: leerlas y analizarlas todas tarda ~120 ms y la bandeja lo pedía dos veces por petición. Se rehace si
+    cambia cualquier nota (ruta, mtime, ctime o tamaño: la huella cuesta ~15 ms). Devuelve copias."""
     ps = [p for p in notas() if p.name not in SIN_TAREAS]
+    try:
+        # ctime además de mtime: Remotely Save (WebDAV) puede poner la fecha de modificación vieja, y tachar una tarea
+        # ([ ] → [x]) no cambia el tamaño; el ctime cambia con cualquier escritura y no se puede fijar
+        huella = tuple((str(p), (st := p.stat()).st_mtime_ns, st.st_ctime_ns, st.st_size) for p in ps)
+    except OSError:   # una nota borrada justo ahora: sin caché esta vez
+        huella = None
+    if huella is None or huella != _cache_todas["huella"]:
+        _cache_todas["tareas"] = _todas(ps)
+        _cache_todas["huella"] = huella
+    return [{**t, "tags": list(t["tags"])} for t in _cache_todas["tareas"]]
+
+
+def _todas(ps):
     diarias = {}
     for p in ps:
         if p.parent.name == DIARIAS:

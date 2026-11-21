@@ -7,6 +7,7 @@ sesión toca cada día de carrera de esta semana y la siguiente.
 
     uv run python carrera.py            # qué haría, sin guardar
     uv run python carrera.py --aplica   # lo que lanza carrera.timer cada madrugada
+    uv run python carrera.py --avisa-test   # carrera-test.timer (08:00): si hoy toca test, el plan por Telegram
 """
 import json
 import sys
@@ -103,7 +104,8 @@ def test(est, final=False):
                 b("Calentamiento largo", 900, "15 min de trote y 4 progresivos. Un test en frío no mide nada."),
                 b("5000 m a tope", 0, f"Sal a {salida} /km y aprieta desde el km 3: salir fuerte es tu patrón "
                                       "y te cuesta el minuto final. Mismo recorrido siempre.", repes="5000 m"),
-                b("Vuelta a la calma", 600, "Apunta el tiempo con el atajo: de aquí salen tus ritmos nuevos.")]}
+                b("Vuelta a la calma", 600, "10 min muy suaves. Luego sube el .fit del COROS (Compartir → Tom o el bot): "
+                                            "fija tu 5k, recalcula tus ritmos y queda de fantasma para el próximo test.")]}
 
 
 def menos(m, f=.75):
@@ -343,6 +345,41 @@ def aplica(s, hoy=None):
     return cambios
 
 
+# ---------- el día del test: el plan por Telegram (carrera-test.timer, 08:00) ----------
+def plan_test(s, hoy=None):
+    """El mensaje del día de test (o de la carrera), o None si hoy no toca. Los ritmos salen del 5k estimado de hoy:
+    los dos primeros km un poco más lentos (salir fuerte es su patrón: lo paga en los km 3-4) y apretar al final."""
+    hoy = hoy or date.today()
+    inf = informe(s, hoy)
+    a = next((x for x in inf["agenda"] if x["dia"] == hoy.isoformat() and x["tipo"] == "test" and not x["hecho"]), None)
+    if not a:
+        return None
+    est = inf["estimacion"]["seg"]
+    p = est / 5
+    km = [p + 7, p + 2, p, p - 3]
+    km.append(est - sum(km))
+    notas = {1: "frena: salir fuerte es tu patrón", 3: "aquí empieza a doler: aguanta el ritmo", 5: "lo que te quede; los últimos 400 m, a tope"}
+    carrera = a["n"].startswith("Carrera")
+    lineas = [f"🏁 <b>Hoy: {a['n']}</b>", "",
+              (f"Es el día. Objetivo: bajar de {mmss(OBJETIVO)}; tu 5k estimado es {mmss(est)}, y los ritmos salen de ahí."
+               if carrera else f"Sirve para saber tu marca real (ahora estimada en {mmss(est)}, {inf['estimacion']['fuente']})."), "",
+              f"<b>Calentamiento</b>: 15 min suaves ({rango(inf['ritmos']['suave'])}) y 4 progresivos de 20 s.", "",
+              "<b>Los 5 km</b>:"]
+    for i, seg in enumerate(km, 1):
+        lineas.append(f"  km {i} → {mmss(seg)}" + (f"  ({notas[i]})" if i in notas else ""))
+    lineas += [f"  Total ≈ {mmss(est)}. Si el km 2 se hace muy duro, quédate en {mmss(p + 7)} el resto: unos "
+               f"{mmss(5 * (p + 7))}, y sigue valiendo.", "",
+               "Recorrido llano y siempre el mismo. En el COROS, si usas la alerta de ritmo: "
+               f"{mmss(p - 8)} a {mmss(p + 12)} /km.", "",
+               "<b>Después</b>: 10 min muy suaves y sube el .fit (Compartir → Tom o al bot): fija tu 5k, recalcula tus "
+               "ritmos y queda de fantasma para el próximo test."]
+    sueno = (s.get("salud") or {}).get(hoy.isoformat(), {}).get("sueno")
+    if sueno and sueno < 360:
+        lineas += ["", f"😴 Esta noche has dormido {sueno // 60} h {sueno % 60:02d} min. Un test cansado mide el cansancio: "
+                       "si no te ves bien, muévelo («el test al jueves» al bot)."]
+    return "\n".join(lineas)
+
+
 def main():
     import urllib.request
     from pathlib import Path
@@ -357,6 +394,14 @@ def main():
             return json.load(r)
 
     s = pide("GET")
+    if "--avisa-test" in sys.argv:
+        texto = plan_test(s)
+        if texto:
+            sys.path.insert(0, str(Path(__file__).parent))
+            import inversiones
+            inversiones._telegram(texto)
+        print(texto or "hoy no toca test")
+        return
     inf = informe(s)
     print(f"Semana {inf['semana']}/{inf['n_semanas']} · {inf['fase']} · 5k estimado {mmss(inf['estimacion']['seg'])}")
     for x in inf["semanas"][max(0, inf["semana"] - 1)]["sesiones"]:

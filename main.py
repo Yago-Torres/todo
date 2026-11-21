@@ -75,7 +75,10 @@ SECRET = (os.getenv("TODO_SECRET") or "").encode()
 COOKIE = "todo_sesion"
 VIDA = 90 * 24 * 3600  # 90 días: que no te eche de la pantalla de inicio del iPhone
 
+import intentos
+
 app = FastAPI()
+intentos.instala(app)   # 10 contraseñas malas en 15 min desde una IP: bloqueada 15 min (intentos.py)
 
 
 @app.on_event("startup")
@@ -923,6 +926,20 @@ def telegram_todo(texto):
 
 
 # ---------- uso (uso.py): qué usas, qué no y cuándo ----------
+VERSIONADO = re.compile(r"\d+\.\d+\.\d+")
+
+
+@app.middleware("http")
+async def cache_estaticos(request: Request, call_next):
+    """Lo que lleva versión en la URL (?v= de aplica.sh, o anime-4.5.0.min.js) no cambia nunca: que el navegador no
+    vuelva a preguntar (la misma regla que «fijo» en sw.js). Sirve donde no hay service worker: la vista web de Tom."""
+    r = await call_next(request)
+    p = request.url.path
+    if r.status_code == 200 and not p.startswith("/api/") and ("v" in request.query_params or VERSIONADO.search(p)):
+        r.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return r
+
+
 @app.middleware("http")
 async def apunta_uso(request: Request, call_next):
     r = await call_next(request)

@@ -414,6 +414,11 @@ def test_carrera():
     assert s["sesion"]["2026-11-03"] == {"c": "test-5k"} and s["sesion"]["2026-11-06"] == {"c": "rodaje-largo"}, cambios
     s = clean(s)
     assert c.aplica(s, date(2026, 11, 2)) == []                                            # idempotente
+    # el día del test, el plan con los ritmos (de 24:00: 4:55, 4:50, 4:48, 4:45, 4:42); el día siguiente, nada
+    m = c.plan_test(s, date(2026, 11, 3))
+    assert "km 1 → 4:55" in m and "km 5 → 4:42" in m and "Total ≈ 24:00" in m and "marca real" in m, m
+    assert c.plan_test(s, date(2026, 11, 4)) is None
+    assert "Es el día. Objetivo: bajar de 22:00" in c.plan_test(r, date(2027, 3, 14))
     # corre el test en 23:00: la estimación y los ritmos bajan, y no se cuenta como fallo
     s["log"]["2026-11-03"] = ["c"]
     s["actividad"]["2026-11-03"] = [{"id": "t", "t": "Run", "km": 5, "seg": 1380, "min": 23}]
@@ -1200,6 +1205,47 @@ def test_comunidad():
     print("comunidad ok")
 
 
+def test_intentos():
+    import intentos as i
+    i._fallos.clear()
+    assert i.quien("192.168.1.50", {"cf-connecting-ip": "8.8.8.8"}) == "192.168.1.50"     # desde la wifi no se cree
+    assert i.quien("127.0.0.1", {"cf-connecting-ip": "81.0.0.1"}) == "81.0.0.1"           # desde el túnel, sí
+    assert i.quien("172.18.0.5", {}) == "172.18.0.5"
+    assert i.cuenta("/api/login", False, 401) and i.cuenta("/api/state", True, 401)
+    assert not i.cuenta("/api/state", False, 401) and not i.cuenta("/api/login", False, 200)
+    t0 = 1_000_000.0
+    for n in range(9):
+        i.fallo("1.2.3.4", t0 + n)
+    assert not i.bloqueada("1.2.3.4", t0 + 10)
+    i.fallo("1.2.3.4", t0 + 10)
+    assert i.bloqueada("1.2.3.4", t0 + 11) and not i.bloqueada("5.6.7.8", t0 + 11)
+    assert not i.bloqueada("1.2.3.4", t0 + 10 + i.VENTANA + 1)                              # a los 15 min, libre
+    i._fallos.clear()
+    print("intentos ok")
+
+
+def test_cache_vault():
+    """Tachar desde el móvil (Remotely Save puede conservar la fecha; [ ]→[x] no cambia el tamaño) se tiene que ver."""
+    import os, tempfile, time, vault
+    from pathlib import Path
+    notas, ruta = vault.notas, vault.ruta
+    try:
+        f = Path(tempfile.mkdtemp()) / "Nota.md"
+        f.write_text("- [ ] comprar pies de gato\n")
+        vault.notas, vault.ruta = (lambda: iter([f])), (lambda p: p.name)
+        assert [t["hecha"] for t in vault.todas()] == [False]
+        time.sleep(0.05)
+        st = f.stat()
+        f.write_text("- [x] comprar pies de gato\n")
+        os.utime(f, ns=(st.st_atime_ns, st.st_mtime_ns))
+        assert (f.stat().st_mtime_ns, f.stat().st_size) == (st.st_mtime_ns, st.st_size)
+        assert [t["hecha"] for t in vault.todas()] == [True]
+    finally:
+        vault.notas, vault.ruta = notas, ruta
+        vault._cache_todas["huella"] = None
+    print("caché del vault ok")
+
+
 def test_cobro_y_anio():
     import cobro, anio
     from datetime import date
@@ -1528,4 +1574,6 @@ if __name__ == "__main__":
     test_rutas()
     test_guias()
     test_comunidad()
+    test_intentos()
+    test_cache_vault()
     print("ok")
