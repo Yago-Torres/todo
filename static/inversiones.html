@@ -87,6 +87,11 @@
   #pestanas button { flex: 0 0 auto; }
   .md, .md li { min-width: 0; overflow-wrap: anywhere; }
   .leccion { border-left: 3px solid var(--acento); }
+  ul.modelo { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 8px; }
+  ul.modelo li { position: relative; padding: 8px 10px 12px; background: var(--carta-2); border-radius: var(--r-s); font-size: var(--t-texto); }
+  ul.modelo li b { font-variant-numeric: tabular-nums; margin-right: 4px; }
+  ul.modelo li small { color: var(--suave); font-size: var(--t-pequeno); }
+  ul.modelo li i { position: absolute; left: 10px; bottom: 5px; height: 3px; max-width: calc(100% - 20px); background: var(--acento); border-radius: 2px; }
   /* «no mires»: fuera del día de mirar, las cifras de Cartera salen borrosas hasta que pides verlas */
   body[data-nomires] #v-cartera .kpis, body[data-nomires] #v-cartera .c-evol, body[data-nomires] #v-cartera .dos { filter: blur(9px); pointer-events: none; user-select: none; }
   body[data-nomires] #estado { visibility: hidden; }
@@ -221,7 +226,7 @@
     </section>
 
     <section class="carta c-carta leccion" id="c-leccion" hidden>
-      <h2>Lección de la semana <small id="leccion-f"></small></h2>
+      <h2><span id="leccion-t">Lección de la semana</span> <small id="leccion-f"></small></h2>
       <div class="md" id="leccion"></div>
     </section>
 
@@ -235,6 +240,13 @@
       <div class="lienzo"><canvas id="g-serie" role="img" aria-label="Valor de la cartera frente a lo metido y a la referencia"></canvas></div>
       <div class="ley" id="ley-serie"></div>
       <p class="nota-p" id="nota-serie"></p>
+    </section>
+
+    <section class="carta c-carta" id="c-modelo" hidden>
+      <h2>Cartera modelo <small class="c-eti" id="modelo-auto"></small></h2>
+      <ul class="modelo" id="modelo-lista"></ul>
+      <p class="nota-p" id="modelo-porque"></p>
+      <p class="nota-p">Es ficticia: cada compra que apuntas se reparte así en el gráfico de arriba, para ver qué habría pasado. Tres piezas baratas que hay en Trade Republic.</p>
     </section>
 
     <div class="dos">
@@ -595,7 +607,11 @@ function pintaCartera() {
   $("#c-nomires").hidden = !tapa;
   if (tapa) $("#nomires-txt").textContent = `Modo «no mires»: la cartera se mira el ${DIAS[I.perfil.dia_mirar]}. Lo de un día no dice nada a ${I.perfil.horizonte || "largo plazo"}.`;
   $("#c-leccion").hidden = !I.leccion;
-  if (I.leccion) { md($("#leccion"), I.leccion.texto); $("#leccion-f").textContent = `review del ${corta(I.leccion.fecha)}`; }
+  if (I.leccion) {
+    md($("#leccion"), I.leccion.texto);
+    $("#leccion-t").textContent = I.leccion.diaria ? "Lección del día" : "Lección de la semana";
+    $("#leccion-f").textContent = I.leccion.diaria ? corta(I.leccion.fecha) : `review del ${corta(I.leccion.fecha)}`;
+  }
   document.querySelectorAll("#rangos button").forEach(b => b.setAttribute("aria-selected", String(+b.dataset.r === rango)));
   serie();
   posiciones();
@@ -614,14 +630,34 @@ function serie() {
     {label: "Valor", data: S.map(s => s.valor), borderColor: t.acento, backgroundColor: t.acento + "22", fill: "origin", borderWidth: 2, pointRadius: 0, tension: .2},
     {label: "Metido", data: S.map(s => s.metido), borderColor: t.suave, borderWidth: 1.5, borderDash: [4, 4], pointRadius: 0, stepped: true},
     {label: `Todo en ${ref}`, data: S.map(s => s.referencia), borderColor: t.serie[0], borderWidth: 1.5, pointRadius: 0, tension: .2},
-  ];
+    S.some(s => s.modelo) && !soloRef() && {label: "Cartera modelo", data: S.map(s => s.modelo ?? null), borderColor: t.serie[2] || t.texto, borderWidth: 1.5, borderDash: [2, 3], pointRadius: 0, tension: .2},
+  ].filter(Boolean);
   const o = base(t, eurCorto);
   o.plugins.tooltip.callbacks = {title: c => corta(S[c[0].dataIndex].dia), label: c => c.raw == null ? null : `${c.dataset.label}: ${eur(c.raw)}`};
   dibuja(caja, {type: "line", data: {labels: S.map(s => corta(s.dia)), datasets: ds}, options: o});
-  leyenda($("#ley-serie"), [["Valor", t.acento], ["Lo metido", t.suave, "raya"], [`Si todo hubiera ido a ${ref}`, t.serie[0]]]);
-  $("#nota-serie").textContent = u.referencia
+  leyenda($("#ley-serie"), [["Valor", t.acento], ["Lo metido", t.suave, "raya"], [`Si todo hubiera ido a ${ref}`, t.serie[0]],
+    ...(S.some(s => s.modelo) && !soloRef() ? [["Cartera modelo", t.serie[2] || t.texto, "raya"]] : [])]);
+  $("#nota-serie").textContent = (u.referencia
     ? `Con las mismas compras en ${I.referencia.nombre || ref} tendrías ${eur(u.referencia)} (${signo(u.valor - u.referencia)} para ti). Es la forma honesta de saber si elegir valores te está saliendo a cuenta.`
-    : "";
+    : "") + (u.modelo && !soloRef() ? ` Repartidas como la cartera modelo, ${eur(u.modelo)}.` : "");
+  modelo();
+}
+// si el modelo es todo en la referencia, sería la misma línea dos veces
+const soloRef = () => { const k = Object.keys(I.modelo?.pesos || {}); return k.length === 1 && k[0] === I.referencia.simbolo; };
+// la cartera modelo: el reparto «sensato» para tu perfil con el que te comparas (inversiones.modelo)
+function modelo() {
+  const M = I.modelo;
+  $("#c-modelo").hidden = !M || !Object.keys(M.pesos || {}).length;
+  if ($("#c-modelo").hidden) return;
+  $("#modelo-auto").textContent = M.auto ? "sale de tu perfil" : "la has puesto tú";
+  $("#modelo-lista").replaceChildren(...Object.entries(M.pesos).map(([s, w]) => {
+    const li = document.createElement("li"), b = document.createElement("b"), barra = document.createElement("i");
+    b.textContent = `${w} %`;
+    barra.style.width = `${w}%`;
+    li.append(b, ` ${M.nombres[s] || s} `, Object.assign(document.createElement("small"), {textContent: s}), barra);
+    return li;
+  }));
+  $("#modelo-porque").textContent = M.porque;
 }
 $("#rangos").onclick = e => { const b = e.target.closest("button"); if (b) { rango = +b.dataset.r; pintaCartera(); } };
 

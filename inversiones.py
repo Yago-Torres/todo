@@ -85,6 +85,15 @@ def _multas(m):
                           if isinstance(m.get("perdonadas"), list) else []}
 
 
+def _modelo_limpio(m):
+    """{símbolo: %} que sume 100, o {} (= el automático, sacado del perfil)."""
+    if not isinstance(m, dict):
+        return {}
+    out = {str(k).upper(): int(v) for k, v in m.items()
+           if re.fullmatch(r"[A-Za-z0-9.\-]{1,20}", str(k)) and isinstance(v, (int, float)) and 0 < v <= 100}
+    return out if sum(out.values()) == 100 else {}
+
+
 def mirar_hoy(perfil, hoy=None):
     """Con «no mires», si hoy es el día de mirar."""
     return not perfil["no_mires"] or (hoy or date.today()).weekday() == perfil["dia_mirar"]
@@ -111,6 +120,7 @@ def limpia(d):
         "no_mires": p.get("no_mires") is True,
         "dia_mirar": int(x) if (x := _num(p.get("dia_mirar"), 0, 6)) is not None else 6,
         "multas": _multas(p.get("multas")),
+        "modelo": _modelo_limpio(p.get("modelo")),
     }
     activos, vistos = [], set()
     for a in d.get("activos") or []:
@@ -278,7 +288,8 @@ def precio_ls(isin, ls_id=None):
 def actualiza(simbolos=None, rango=None):
     """Baja precios de los símbolos (por defecto, los de la cartera y la referencia). Devuelve los que fallaron."""
     d, p = lee(), lee_precios()
-    simbolos = simbolos or sorted({a["simbolo"] for a in d["activos"]} | {d["perfil"]["referencia"]})
+    simbolos = simbolos or sorted({a["simbolo"] for a in d["activos"]} | {d["perfil"]["referencia"]}
+                                  | set(modelo(d["perfil"])["pesos"]))
     cambios, fallos = {}, []
     isines = {a["simbolo"]: a["isin"] for a in d["activos"] if a.get("isin")}
     for s in simbolos:
@@ -513,8 +524,12 @@ def posiciones(ops, activos, precios, hoy=None):
     return salida
 
 
-def serie_cartera(ops, activos, precios, referencia, hoy=None):
-    """Día a día: valor, dinero metido (neto de ventas) y lo que tendrías si cada euro hubiera ido a la referencia."""
+def serie_cartera(ops, activos, precios, referencia, hoy=None, pesos=None):
+    """Día a día: valor, dinero metido (neto de ventas), lo que tendrías si cada euro hubiera ido a la referencia y,
+    con `pesos` ({símbolo: %}), lo que tendrías repartiendo cada compra como la cartera modelo (sin rebalancear)."""
+    pesos = pesos or {}
+    mod = {s: precios.get(s, {}).get("dias", {}) for s in pesos}
+    mod_cant = {s: 0.0 for s in pesos}
     hoy = hoy or date.today()
     if not ops:
         return []
@@ -541,10 +556,17 @@ def serie_cartera(ops, activos, precios, referencia, hoy=None):
             metido += signo * dinero
             if ref_hoy:
                 ref_cant += signo * dinero / ref_hoy
+            for s, w in pesos.items():
+                if (px := _precio_en(mod[s], dia)):
+                    mod_cant[s] += signo * dinero * w / 100 / px
         if d.weekday() < 5 or d == fin:
             valor = sum(c * ult.get(simbolo[a], 0) for a, c in cant.items() if c > 1e-9)
-            out.append({"dia": dia, "valor": round(valor, 2), "metido": round(metido, 2),
-                        "referencia": round(ref_cant * ref_hoy, 2) if ref_hoy and ref_cant else None})
+            fila = {"dia": dia, "valor": round(valor, 2), "metido": round(metido, 2),
+                    "referencia": round(ref_cant * ref_hoy, 2) if ref_hoy and ref_cant else None}
+            if pesos:
+                vm = sum(c * (_precio_en(mod[s], dia) or 0) for s, c in mod_cant.items())
+                fila["modelo"] = round(vm, 2) if vm else None
+            out.append(fila)
         d += timedelta(days=1)
     return out
 
@@ -581,7 +603,8 @@ def informe(hoy=None):
     pos = posiciones(d["operaciones"], d["activos"], p, hoy)
     valor = round(sum(x["valor"] or 0 for x in pos), 2)
     coste = round(sum(x["coste"] for x in pos), 2)
-    serie = serie_cartera(d["operaciones"], d["activos"], p, d["perfil"]["referencia"], hoy)
+    mod = modelo(d["perfil"])
+    serie = serie_cartera(d["operaciones"], d["activos"], p, d["perfil"]["referencia"], hoy, mod["pesos"])
     reparto = {}
     for x in pos:
         if x["valor"]:
@@ -602,6 +625,7 @@ def informe(hoy=None):
         "referencia": {"simbolo": d["perfil"]["referencia"], "nombre": p.get(d["perfil"]["referencia"], {}).get("nombre")},
         "proyeccion": proyeccion(valor, d["perfil"]["aportacion"]), "stress": stress(pos), "fiscal": fz, "declaracion": declaracion(d, fz, valor, hoy),
         "reviews": reviews(),
+        "modelo": {**mod, "nombres": {s: MODELO_NOMBRES.get(s) or p.get(s, {}).get("nombre") or s for s in mod["pesos"]}},
     }
 
 
@@ -989,7 +1013,10 @@ def leccion_de(texto):
 
 
 def leccion():
-    """La lección de la última review que la tenga: {fecha, texto}, o None."""
+    """La lección más reciente: la diaria si la hay, si no la de la última review. {fecha, texto, diaria}, o None."""
+    l = lecciones()
+    if l:
+        return {"fecha": l[0], "texto": (LECCIONES / f"{l[0]}.md").read_text("utf-8"), "diaria": True}
     for f in reviews():
         if (x := leccion_de(review(f))):
             return {"fecha": f, "texto": x}
@@ -1065,6 +1092,172 @@ def _telegram(msg):
     urllib.request.urlopen(req, timeout=30).close()
 
 
+# ---------- la cartera modelo (la ficticia con la que te comparas) ----------
+# Tres piezas baratas, todas en Trade Republic y con precio en Yahoo: acciones del mundo entero, bonos globales
+# cubiertos en euros y monetario. El reparto sale de lo que dijiste que aguantas ver caer (perfil.caida): las
+# acciones del mundo cayeron cerca de un 50 % en 2008, cuando los bonos de calidad aguantaron o subieron; en 2022
+# cayeron los dos a la vez (acciones ~18 %, bonos ~15 %). La regla: % en acciones ≈ el doble de la caída que aguantas.
+MODELO_NOMBRES = {"VWCE.DE": "Acciones de todo el mundo (FTSE All-World)", "VAGF.DE": "Bonos globales, cubiertos en euros",
+                  "XEON.DE": "Monetario (liquidez que rinde el tipo del BCE)"}
+
+
+def _caida(perfil):
+    m = re.search(r"\d+(?:[.,]\d+)?", str(perfil.get("caida") or ""))
+    return float(m.group(0).replace(",", ".")) if m else None
+
+
+def modelo(perfil):
+    """{"pesos": {símbolo: %}, "auto": bool, "porque": texto}."""
+    if perfil.get("modelo"):
+        return {"pesos": dict(perfil["modelo"]), "auto": False, "porque": "Este reparto lo has puesto tú."}
+    c = _caida(perfil)
+    if c is None:
+        return {"pesos": {"VWCE.DE": 100}, "auto": True,
+                "porque": "Sin una caída tolerada en tu perfil, el modelo es el clásico de largo plazo: todo en acciones del mundo."}
+    rv = int(min(100, max(20, round(c * 2 / 5) * 5)))
+    resto = 100 - rv
+    bonos = int(round(resto * 0.7 / 5) * 5)
+    pesos = {k: v for k, v in {"VWCE.DE": rv, "VAGF.DE": bonos, "XEON.DE": resto - bonos}.items() if v}
+    peor = round(rv * 0.5)
+    if rv == 100:
+        return {"pesos": pesos, "auto": True,
+                "porque": (f"Dices que aguantarías ver caer tu cartera un {c:g} % sin vender, así que el modelo es el clásico de largo "
+                           "plazo: todo en acciones del mundo entero. En 2008 cayeron cerca de un 50 % y tardaron unos cuatro o cinco "
+                           "años en recuperarse; en 2020, un tercio en un mes. Coincide con la referencia del gráfico.")}
+    return {"pesos": pesos, "auto": True,
+            "porque": (f"Dijiste que aguantas ver caer tu cartera un {c:g} %. Con un {rv} % en acciones del mundo, en una crisis como "
+                       f"la de 2008 (las acciones cayeron cerca de un 50 % y los bonos aguantaron) la cartera caería en torno a un {peor} %, "
+                       "lo que dices que aguantas. Si en realidad aguantas más, sube la caída en tu perfil: el modelo llevará más "
+                       "acciones y más rentabilidad esperada a largo plazo.")}
+
+
+# ---------- la lección diaria (inversiones-leccion.timer, 08:30) ----------
+# Un temario en orden: cada día el siguiente tema, explicado por Claude con tu cartera y tu perfil delante,
+# con una pregunta y la respuesta escondida (spoiler de Telegram). Al acabar el temario, vuelve a empezar con repasos.
+LECCIONES = DATOS.with_name("lecciones-inversiones")
+TEMARIO = [
+    "Antes de invertir: el colchón de emergencia, las deudas caras y el dinero que no vas a necesitar en 5 años",
+    "Qué es una acción y por qué sube a largo plazo (beneficios de las empresas, no magia)",
+    "Qué es un bono: prestar dinero, el cupón, y por qué su precio baja cuando suben los tipos",
+    "Liquidez y monetarios: el dinero que rinde sin riesgo apenas, y la inflación que se lo come",
+    "El interés compuesto con números: empezar a los 20 frente a empezar a los 30",
+    "Rentabilidad y riesgo van juntos: la volatilidad, y por qué nada rinde mucho y seguro",
+    "Diversificar: el riesgo de una sola empresa frente al de miles a la vez",
+    "Fondos indexados y ETF: qué son, en qué se parecen y en qué no",
+    "Los índices: MSCI World, FTSE All-World, S&P 500 y MSCI ACWI, y qué hay dentro de cada uno",
+    "Los costes: TER, comisiones de compra y cuánto se comen en 30 años",
+    "Acumulación frente a distribución: los dividendos y los impuestos",
+    "Por qué casi nadie bate al índice: los fondos de gestión activa y el sesgo del superviviente",
+    "No adivinar el mercado: el coste de perderse los mejores días",
+    "Aportar todos los meses (DCA) frente a meterlo todo de golpe: qué dicen los datos y qué dice la cabeza",
+    "Las caídas: cuánto y cuánto tiempo cayeron las bolsas en 2000, 2008, 2020 y 2022",
+    "Psicología: el pánico, la euforia, el FOMO y el sesgo de confirmación",
+    "Las burbujas: cómo reconocerlas a toro pasado (puntocom, 2008) y por qué no se pueden cronometrar",
+    "Concentración: cuánto pesan hoy unas pocas tecnológicas en los índices mundiales",
+    "Acciones sueltas: cuándo tienen sentido, qué parte de la cartera y cómo pensar una apuesta",
+    "Asignación de activos: el reparto entre acciones, bonos y liquidez, y cómo depende de ti",
+    "Tu perfil de riesgo de verdad: lo que dices que aguantas frente a lo que aguantarías",
+    "Rebalancear: qué es, cada cuánto y por qué obliga a comprar barato y vender caro",
+    "La divisa: invertir en dólares desde euros y qué significa «cubierto en euros»",
+    "Impuestos en España (I): ganancias y pérdidas, la base del ahorro y sus tramos",
+    "Impuestos en España (II): fondos traspasables frente a ETF, y la regla de los dos meses",
+    "Impuestos en España (III): dividendos, retención en origen y qué declarar de un broker extranjero",
+    "Trade Republic por dentro: cómo gana dinero, el precio de L&S, planes de ahorro y fondos",
+    "Cómo leer la ficha de un fondo o ETF (KID): riesgo, costes, réplica, tamaño y antigüedad",
+    "La réplica física frente a la sintética, y el préstamo de valores",
+    "Bonos más a fondo: duración, calidad crediticia y por qué los de largo plazo se movieron tanto en 2022",
+    "La inflación y los tipos de interés: qué hace el BCE y cómo afecta a cada activo",
+    "El oro, las materias primas y el inmobiliario cotizado: qué aportan y qué no",
+    "Las criptomonedas: qué son de verdad, su riesgo y qué parte tendría sentido (si alguna)",
+    "Productos que evitar: CFD, apalancamiento, productos estructurados y «señales» de Telegram",
+    "Cómo informarse sin ruido: fuentes fiables, por qué ignorar los titulares diarios",
+    "Escribe tu plan: objetivo, reparto, aportación, qué harás si cae un 30 % (y no tocarlo)",
+    "Planes de pensiones en España: ventajas fiscales, rescate y para quién compensan",
+    "El largo plazo con números: qué puede pasar con 100 € al mes durante 20, 30 y 40 años",
+    "Errores típicos de quien empieza, y cómo evitarlos uno a uno",
+    "Repaso: los cinco principios que, si haces solo eso, te dejan por delante de la mayoría",
+]
+
+LECCION = """Eres un buen profesor de finanzas personales. Me estás dando un curso de inversión, una lección corta cada día.
+Tengo {edad} años, vivo en España, invierto con {broker}, horizonte {horizonte}, tolerancia {tolerancia}, digo que aguanto
+una caída del {caida} %, aporto unos {aportacion} € al mes. Fondo de emergencia: {emergencia}.
+
+Mi cartera ahora: {cartera}
+Mi cartera modelo (la ficticia con la que me comparo): {modelo}
+
+Lecciones anteriores (títulos): {previas}
+
+Hoy toca la lección {n} de {total}: «{tema}».
+
+Escríbela en español, en markdown sencillo, unas 250-350 palabras, para alguien listo que empieza:
+# <título corto y claro>
+<la explicación, con un ejemplo con números en euros; separa **Hecho:** de **Opinión:** si mezclas>
+**En tu caso:** <2-4 frases aplicándolo a mi cartera y perfil, con mis números; sin decirme qué valor concreto comprar o vender>
+**Pregunta:** <una pregunta para comprobar que lo he entendido>
+**Respuesta:** <la respuesta, 1-3 frases>
+Nada fuera de ese formato."""
+
+
+def _leccion_estado():
+    try:
+        return json.loads((LECCIONES / "estado.json").read_text("utf-8"))
+    except (OSError, ValueError):
+        return {"n": 0, "hechas": []}
+
+
+def leccion_del_dia(hoy=None, ver=False):
+    hoy = hoy or date.today()
+    LECCIONES.mkdir(exist_ok=True)
+    f = LECCIONES / f"{hoy.isoformat()}.md"
+    if f.exists() and not ver:
+        return f.read_text("utf-8")
+    st = _leccion_estado()
+    n = st["n"] % len(TEMARIO)
+    inf = informe(hoy)
+    p = inf["perfil"]
+    pos = [x for x in inf["posiciones"] if x["cantidad"] > 0]
+    cartera = "; ".join(f"{x['nombre']} ({x['tipo']}) {x['peso']} %, metido {x['coste']:.0f} €" for x in pos) or "vacía"
+    mod = inf["modelo"]
+    modelo_txt = ", ".join(f"{v} % {mod['nombres'].get(k, k)} ({k})" for k, v in mod["pesos"].items()) + f". {mod['porque']}"
+    previas = "; ".join(TEMARIO[i % len(TEMARIO)] for i in range(max(0, st["n"] - 5), st["n"])) or "(es la primera)"
+    prompt = LECCION.format(edad=p["edad"] or "?", broker=p["broker"], horizonte=p["horizonte"] or "?", tolerancia=p["tolerancia"] or "?",
+                            caida=p["caida"] or "?", aportacion=p["aportacion"], emergencia=p["emergencia"] or "?",
+                            cartera=cartera, modelo=modelo_txt, previas=previas, n=n + 1, total=len(TEMARIO), tema=TEMARIO[n])
+    claude = os.environ.get("CLAUDE_BIN", str(Path.home() / ".local/bin/claude"))
+    r = subprocess.run([claude, "-p", "--model", os.environ.get("LECCION_MODEL", "sonnet"), "--allowedTools", "",
+                        "--strict-mcp-config", "--no-session-persistence"],
+                       input=prompt, capture_output=True, text=True, timeout=10 * 60)
+    if r.returncode or not r.stdout.strip():
+        raise SystemExit(f"claude falló ({r.returncode}): {r.stderr[-500:]}")
+    texto = r.stdout.strip()
+    texto = texto[texto.find("# "):] if "# " in texto else texto
+    if ver:
+        print(texto)
+        return texto
+    f.write_text(texto + "\n", "utf-8")
+    st = {"n": st["n"] + 1, "hechas": (st.get("hechas", []) + [{"dia": hoy.isoformat(), "tema": TEMARIO[n]}])[-400:]}
+    (LECCIONES / "estado.json").write_text(json.dumps(st, ensure_ascii=False, indent=1), "utf-8")
+    manda_leccion(hoy, texto, n + 1)
+    return texto
+
+
+def manda_leccion(hoy, texto, n):
+    import html
+    titulo = re.search(r"(?m)^# (.+)$", texto)
+    cuerpo, _, resp = texto.partition("**Respuesta:**")
+    cuerpo = re.sub(r"(?m)^# .+\n?", "", cuerpo).strip()
+    h = html.escape(cuerpo)
+    h = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", h)
+    msg = (f"<b>📈 Lección {n}/{len(TEMARIO)}: {html.escape(titulo.group(1) if titulo else 'Inversión')}</b>\n\n{h}"
+           + (f"\n\n<b>Respuesta:</b> <tg-spoiler>{html.escape(resp.strip())}</tg-spoiler>" if resp.strip() else "")
+           + f"\n\nTodas: https://todo.yagotg.dev/inversiones.html#c-leccion")
+    _telegram(msg[:4090])
+
+
+def lecciones():
+    return sorted((f.stem for f in LECCIONES.glob("20*.md")), reverse=True) if LECCIONES.exists() else []
+
+
 if __name__ == "__main__":
     if "--precios" in sys.argv:
         f = actualiza()
@@ -1077,6 +1270,8 @@ if __name__ == "__main__":
         sys.exit(1 if f and len(f) == len(lee()["activos"]) + 1 else 0)
     elif "--review" in sys.argv:
         hacer_review(ver="--ver" in sys.argv)
+    elif "--leccion" in sys.argv:
+        leccion_del_dia(ver="--ver" in sys.argv)
     elif "--aviso-renta" in sys.argv:
         aviso_renta()
     elif "--prompt" in sys.argv:
