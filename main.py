@@ -21,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 import carrera
 import fit
 import rutas
+import guias
 import inversiones
 import mercado
 import explorar
@@ -60,6 +61,7 @@ EMPTY = {
     "actividad": {},
     "salud": {},
     "gym": {},
+    "guias": {},
     "descansos": {},
     "vacaciones": [],
     "comodines": {"al_mes": 2, "usados": []},
@@ -259,6 +261,12 @@ def clean(state):
             # segundos para colocarse entre paso y paso de una rutina guiada; solo si la hay, para que las demás
             # rutinas sigan siendo iguales a las que genera carrera.py (las compara para no reescribirlas)
             **({"pausa": p} if (p := entero(r.get("pausa"), 0, 60, 0)) else {}),
+            # rutinas guiadas que se ajustan solas cada lunes según lo que hiciste (guias.py)
+            **({"adapta": True} if r.get("adapta") is True else {}),
+            **({"ajuste": {"semana": day(aj.get("semana")),
+                           "pct": entero(aj.get("pct"), 0, 100, 0) if aj.get("pct") is not None else None,
+                           "cambio": entero(aj.get("cambio"), -7200, 7200, 0), "texto": str(aj.get("texto") or "")[:240]}}
+               if isinstance(aj := r.get("ajuste"), dict) and day(aj.get("semana")) else {}),
         }
         for r in lst(state.get("rutinas"))
         if isinstance(r, dict) and r.get("id") and str(r.get("n") or "").strip()
@@ -281,6 +289,8 @@ def clean(state):
         "log": dias(state.get("log"), ids),  # lo hecho
         "plan": dias(state.get("plan"), ids),  # lo que toca hacer
         "rutinas": rutinas,
+        # día -> {rutina guiada: {hecho, total (s), pasos, de}}: cuánto hiciste del core o la movilidad (guias.py)
+        "guias": guias.limpia(state.get("guias")),
         # día -> {hábito: rutina}. Qué sesión concreta toca ese día.
         "sesion": {
             k: asignadas
@@ -581,6 +591,28 @@ def marca_habito(a: dict, response: Response, todo_sesion: str = Cookie(None), a
     # con «antes» la página sabe si nadie más escribió entre medias y puede quedarse la versión nueva
     response.headers["X-Version"] = version()
     return {"dia": dia, "hechos": estado["log"].get(dia, []), "antes": antes, "version": version()}
+
+
+# ---------- rutinas guiadas a medias (guias.py) ----------
+# Como /api/marca: dice cómo queda (se queda la vez que más del día), sin X-Version; la web y Tom lo mandan al salir
+# del reproductor a medias y al acabar.
+@app.post("/api/guia")
+def apunta_guia(a: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    dia, rid = day(a.get("dia")), str(a.get("rutina") or "")[:24]
+    if not dia or not rid:
+        raise HTTPException(400, "Falta el día o la rutina")
+    out = {}
+
+    def pon(s):
+        if not any(r["id"] == rid for r in s["rutinas"]):
+            raise HTTPException(404, "No existe esa rutina")
+        total = max(1, entero(a.get("total"), 1, 7200, 1))
+        out["pct"] = guias.apunta(s, dia, rid, entero(a.get("hecho"), 0, total, 0), total,
+                                  entero(a.get("pasos"), 0, 30, 0), entero(a.get("de"), 0, 30, 0))
+    cambia_estado(pon)
+    s = clean(dct(json.loads(DB.read_text("utf-8"))))
+    return {"dia": dia, "rutina": rid, "pct": out.get("pct", 0), "guia": s["guias"].get(dia, {}).get(rid)}
 
 
 # ---------- rachas: descansos, vacaciones y comodines sin el estado entero ----------
@@ -2128,7 +2160,11 @@ def vigila_inversiones():
                 d = inversiones.lee()
                 with cerrojo_estado:
                     s = clean(dct(json.loads(DB.read_text("utf-8"))))
-                    if aportes_en_log(s, d["operaciones"]):
+                    cambia = aportes_en_log(s, d["operaciones"])
+                    if (aj := guias.adapta(s)):   # el lunes: el core (y las guiadas con adapta) según la semana pasada
+                        print("guias:", aj, flush=True)
+                        cambia = True
+                    if cambia:
                         guarda(DB, json.dumps(clean(s), ensure_ascii=False))
                 conf = d["perfil"]["multas"]
                 guarda(MULTAS, json.dumps({"conf": conf, "multas": multas(s, conf, date.today().isoformat())}, ensure_ascii=False))

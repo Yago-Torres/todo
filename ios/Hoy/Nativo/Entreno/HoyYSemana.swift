@@ -85,6 +85,9 @@ struct FichaEntreno: View {
             if let r = rutina {
                 Text(r.n).font(Tema.fuente(.destacado)).foregroundStyle(Tema.texto)
                 Text(subtitulo(r, acabada)).font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave).monospacedDigit()
+                if r.tipo == "movilidad" {
+                    EstadoGuia(r: r, hecha: datos.e.guias[dia]?[r.id], marcada: hecho)
+                }
                 HStack(spacing: Tema.Espacio.s) {
                     switch r.tipo {
                     case "pesas":
@@ -94,8 +97,7 @@ struct FichaEntreno: View {
                         }
                         .buttonStyle(BotonEnt(principal: !hecho))
                     case "movilidad":
-                        Button("Empezar") { GuiaEnCurso.shared.empieza(r) }
-                            .buttonStyle(BotonEnt(principal: !hecho))
+                        BotonGuia(r: r, hecha: datos.e.guias[dia]?[r.id], principal: !hecho)
                     default:
                         Button("Ver la sesión") { viendo = .init(dia: dia, habito: habito.id, rutina: r.id) }
                             .buttonStyle(BotonEnt())
@@ -347,5 +349,64 @@ struct FilaBloque: View {
         var partes = ["\(b.series)×\(b.repes.isEmpty ? (b.porTiempo ? "\(b.seg) s" : "–") : b.repes)"]
         if b.kg > 0 { partes.append("\(FormatoEnt.num(b.kg)) kg") }
         return partes.joined(separator: " · ")
+    }
+}
+
+// MARK: la guiada de hoy a medias y el ajuste del lunes
+
+/// «Empezar», o «Seguir desde el paso N» si la de hoy se quedó a medias.
+private struct BotonGuia: View {
+    let r: RutinaGym
+    let hecha: GuiaHecha?
+    let principal: Bool
+
+    private var seguirDesde: Int? {
+        guard let h = hecha, h.pct < 100, h.pasos < r.bloques.count else { return nil }
+        return h.pasos
+    }
+
+    var body: some View {
+        if let paso = seguirDesde {
+            Button("Seguir desde el paso " + String(paso + 1)) { GuiaEnCurso.shared.empieza(r, desde: paso) }
+                .buttonStyle(BotonEnt(principal: principal))
+        } else {
+            Button("Empezar") { GuiaEnCurso.shared.empieza(r) }
+                .buttonStyle(BotonEnt(principal: principal))
+        }
+    }
+}
+
+/// «62 % hecho» (o «Hecho · 62 %» si se marcó igualmente) y, la semana del ajuste, lo que cambió y por qué.
+private struct EstadoGuia: View {
+    let r: RutinaGym
+    let hecha: GuiaHecha?
+    let marcada: Bool
+
+    private var ajusteDeEstaSemana: AjusteGuia? {
+        guard let a = r.ajuste else { return nil }
+        let hace6 = Calendar.current.date(byAdding: .day, value: -6, to: Date()) ?? Date()
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return a.semana >= f.string(from: hace6) ? a : nil
+    }
+
+    private func flecha(_ a: AjusteGuia) -> String {
+        if a.cambio > 0 { return "↑ " }
+        if a.cambio < 0 { return "↓ " }
+        return ""
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let h = hecha, h.pct < 100 {
+                let texto: String = marcada ? "Hecho · " + String(h.pct) + " %" : String(h.pct) + " % hecho"
+                ChipEnt(texto: texto, color: marcada ? Tema.acento : Tema.aviso, fondo: Tema.carta)
+            }
+            if let a = ajusteDeEstaSemana {
+                Text(flecha(a) + a.texto).font(Tema.fuente(.pequeno)).foregroundStyle(Tema.acento)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }

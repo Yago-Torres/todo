@@ -1133,6 +1133,48 @@ def test_rutas():
     print("rutas ok")
 
 
+def test_guias():
+    import guias, json, tempfile
+    from datetime import date
+    from pathlib import Path
+    core = {"id": "core", "n": "Core", "tipo": "movilidad", "hab": "c", "pausa": 5, "adapta": True,
+            "bloques": [{"ej": "Plancha", "seg": 40}, {"ej": "Dead bug", "seg": 40}]}
+    s = clean({"habits": [{"id": "c", "n": "Core", "goal": 3}], "rutinas": [core]})
+    assert s["rutinas"][0]["adapta"] is True and s["guias"] == {}
+    # a medias: 1 paso y medio de 2 → 75 %; luego otra peor el mismo día no la pisa
+    assert guias.apunta(s, "2026-11-10", "core", 60, 80, 1, 2) == 75
+    assert guias.apunta(s, "2026-11-10", "core", 20, 80, 0, 2) == 75
+    s = clean(s)
+    assert s["guias"]["2026-11-10"]["core"]["hecho"] == 60
+    # el lunes 23: la semana del 16 sin datos pero hubo antes → «no la hiciste», sin cambios
+    assert guias.adapta(s, date(2026, 11, 10)) == []            # semana del 9: sin datos de antes del 9 → nada aún
+    c = guias.adapta(s, date(2026, 11, 17))                     # semana del 9 al 15: un 75 % → igual
+    assert "75 %" in c[0] and [b["seg"] for b in s["rutinas"][0]["bloques"]] == [40, 40], c
+    s["guias"]["2026-11-18"] = {"core": {"hecho": 80, "total": 80, "pasos": 2, "de": 2}}
+    s["guias"]["2026-11-20"] = {"core": {"hecho": 80, "total": 80, "pasos": 2, "de": 2}}
+    c = guias.adapta(s, date(2026, 11, 23))
+    r = s["rutinas"][0]
+    assert [b["seg"] for b in r["bloques"]] == [45, 45] and r["ajuste"]["pct"] == 100 and "+5 s" in c[0], c
+    assert guias.adapta(s, date(2026, 11, 25)) == []             # una vez por semana
+    s["guias"]["2026-11-24"] = {"core": {"hecho": 45, "total": 90, "pasos": 1, "de": 2}}
+    guias.adapta(s, date(2026, 11, 30))
+    assert [b["seg"] for b in r["bloques"]] == [25, 25] and r["ajuste"]["pct"] == 50, r   # 45 × 60 % ≈ 25
+    assert clean(s)["rutinas"][0]["ajuste"]["texto"].startswith("La semana pasada hiciste de media un 50 %")
+    # por la API
+    main.PASS, main.SECRET = "x", b"s"
+    d = Path(tempfile.mkdtemp())
+    main.DB = d / "data.json"
+    main.DB.write_text(json.dumps(clean({"habits": [{"id": "c", "n": "Core", "goal": 3}], "rutinas": [core]})))
+    out = main.apunta_guia({"dia": "2026-11-21", "rutina": "core", "hecho": 50, "total": 80, "pasos": 1, "de": 2}, None, "Bearer x")
+    assert out["pct"] == 62 and out["guia"]["pasos"] == 1, out
+    try:
+        main.apunta_guia({"dia": "2026-11-21", "rutina": "nada", "hecho": 1, "total": 2}, None, "Bearer x")
+        assert False
+    except main.HTTPException:
+        pass
+    print("guias ok")
+
+
 def test_cobro_y_anio():
     import cobro, anio
     from datetime import date
@@ -1459,4 +1501,5 @@ if __name__ == "__main__":
     test_multas()
     test_carrera_calendario()
     test_rutas()
+    test_guias()
     print("ok")

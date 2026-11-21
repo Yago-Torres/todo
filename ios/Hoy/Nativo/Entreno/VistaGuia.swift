@@ -12,7 +12,7 @@ struct VistaGuia: View {
                 HStack {
                     Text(guia.rutina?.n ?? "Rutina").font(Tema.fuente(.destacado)).foregroundStyle(Tema.texto).lineLimit(1)
                     Spacer()
-                    Button("Salir") { guia.para() }
+                    Button("Salir") { guia.sal() }
                         .font(Tema.fuente(.texto, peso: .medium))
                         .foregroundStyle(Tema.texto)
                         .padding(.horizontal, 14).frame(minHeight: 36)

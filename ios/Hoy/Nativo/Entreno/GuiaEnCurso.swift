@@ -44,14 +44,17 @@ final class GuiaEnCurso {
 
     // MARK: empezar y parar
 
-    func empieza(_ r: RutinaGym) {
+    /// `desde`: el paso por el que seguir (la de hoy quedó a medias).
+    func empieza(_ r: RutinaGym, desde: Int = 0) {
         guard !r.bloques.isEmpty else { return }
+        let primero = min(max(0, desde), r.bloques.count - 1)
         rutina = r
-        i = 0
+        i = primero
         cambio = false
         pausa = false
-        fin = Date().addingTimeInterval(TimeInterval(r.bloques[0].seg > 0 ? r.bloques[0].seg : 30))
-        queda = r.bloques[0].seg > 0 ? r.bloques[0].seg : 30
+        let seg = r.bloques[primero].seg > 0 ? r.bloques[primero].seg : 30
+        fin = Date().addingTimeInterval(TimeInterval(seg))
+        queda = seg
         AudioServicesPlaySystemSound(1057)
         arranca()
     }
@@ -66,6 +69,32 @@ final class GuiaEnCurso {
                 self?.tic()
                 try? await Task.sleep(for: .milliseconds(250))
             }
+        }
+    }
+
+    /// Salir a medias: apunta lo hecho (salvo que acabaras de empezar) y para.
+    func sal() {
+        if let r = rutina {
+            let segs = r.bloques.map { $0.seg > 0 ? $0.seg : 30 }
+            let total = segs.reduce(0, +)
+            let restante = pausa ? queda : max(0, Int(ceil(fin.timeIntervalSinceNow)))
+            let completos = cambio ? i + 1 : i
+            var hecho = segs.prefix(completos).reduce(0, +)
+            if !cambio, i < segs.count { hecho += max(0, segs[i] - restante) }
+            if hecho >= 3 { manda(r, hecho: min(total, hecho), total: total, pasos: completos) }
+        }
+        para()
+    }
+
+    /// POST /api/guia: dice cómo queda la de hoy (el servidor se queda con la vez que más).
+    private func manda(_ r: RutinaGym, hecho: Int, total: Int, pasos: Int) {
+        let cuerpo: [String: Any] = ["dia": Fecha.hoy(), "rutina": r.id, "hecho": hecho, "total": total,
+                                     "pasos": pasos, "de": r.bloques.count]
+        Task {
+            guard var p = try? API.peticion("/api/guia", metodo: "POST", json: cuerpo) else { return }
+            p.timeoutInterval = 20
+            _ = try? await API.mandaCrudo(p)
+            await DatosEntreno.shared.carga(margen: 0)
         }
     }
 
@@ -136,6 +165,10 @@ final class GuiaEnCurso {
 
     private func acaba() {
         let h = rutina?.hab ?? ""
+        if let r = rutina {
+            let total = r.bloques.reduce(0) { $0 + ($1.seg > 0 ? $1.seg : 30) }
+            manda(r, hecho: total, total: total, pasos: r.bloques.count)
+        }
         AudioServicesPlaySystemSound(1025)
         Haptica.shared.toca(.dia)
         para()

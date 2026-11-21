@@ -124,6 +124,7 @@
   .ses li { display: grid; grid-template-columns: 4.2em minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px; border-radius: var(--r-s); background: var(--carta-2); }
   .ses .d { font-size: var(--t-pequeno); font-weight: 600; color: var(--suave); }
   .ses .n { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ficha .sub.ajuste { color: var(--acento); }
   .ses li.hecho .n { color: var(--suave); text-decoration: line-through; text-decoration-color: var(--tenue); }
   .ses li.hoy { box-shadow: inset 0 0 0 2px var(--acento); }
   .auto { display: flex; align-items: baseline; gap: 10px; margin: 10px 0 0; padding-left: 10px; border-left: 3px solid var(--acento); font-size: var(--t-texto); }
@@ -587,15 +588,25 @@ function ficha(h, r) {
   const viva = r.tipo === "pesas" && (S.gym[HOY] || []).find(s => s.rutina === r.id && !s.fin);
   const hecha = r.tipo === "pesas" && (S.gym[HOY] || []).find(s => s.rutina === r.id && s.fin);
   if (viva) cab.append(el("span", "c-chip ojo", "a medias"));
+  const gh = r.tipo === "movilidad" ? ((S.guias || {})[HOY] || {})[r.id] : null;
+  const ghPct = gh ? Math.min(100, Math.round(100 * gh.hecho / gh.total)) : 0;
+  if (gh && ghPct < 100) cab.append(el("span", "c-chip " + (hecho(HOY, h.id) ? "ok" : "ojo"), hecho(HOY, h.id) ? `Hecho · ${ghPct} %` : `${ghPct} % hecho`));
   f.append(el("div", "tit", r.n));
   const n = r.bloques.length;
   const dura = r.bloques.reduce((a, b) => a + b.seg, 0) + (r.pausa || 0) * Math.max(0, n - 1);
   f.append(el("div", "sub", r.tipo === "movilidad" ? `${n} pasos · ${Math.round(dura / 60)} min`
     : hecha ? resumen(hecha) : `${n} ejercicio${n === 1 ? "" : "s"}`));
+  // el ajuste del lunes (guias.py): lo que cambió esta semana y por qué
+  const lunes = (() => { const d = fecha(HOY); d.setDate(d.getDate() - (d.getDay() + 6) % 7); return d.toLocaleDateString("sv"); })();
+  if (r.ajuste && r.ajuste.semana === lunes) f.append(el("div", "sub ajuste", (r.ajuste.cambio > 0 ? "↑ " : r.ajuste.cambio < 0 ? "↓ " : "") + r.ajuste.texto));
   const acc = el("div", "acc");
   if (r.tipo === "pesas" || r.tipo === "movilidad") {
-    const b = el("button", "c-btn" + (hecho(HOY, h.id) ? "" : " pri"), r.tipo === "movilidad" ? "Empezar" : viva ? "Seguir" : hecha ? "Otra vez" : "Empezar");
-    b.onclick = () => (r.tipo === "movilidad" ? empiezaGuia(r) : empieza(r));
+    const seguir = gh && ghPct < 100 && gh.pasos < r.bloques.length;
+    const b = el("button", "c-btn" + (hecho(HOY, h.id) ? "" : " pri"),
+      r.tipo === "movilidad" ? (seguir ? `Seguir desde el paso ${gh.pasos + 1}` : "Empezar") : viva ? "Seguir" : hecha ? "Otra vez" : "Empezar");
+    b.onclick = () => (r.tipo === "movilidad"
+      ? empiezaGuia(r, seguir ? {i: gh.pasos, fin: Date.now() + (r.bloques[gh.pasos].seg || 30) * 1000} : undefined)
+      : empieza(r));
     acc.append(b);
   } else {
     // carrera y escalada: aquí solo se ve qué toca; se apuntan solas con el atajo o el bot
@@ -1191,9 +1202,34 @@ function pintaGuia() {
   const sig = g.r.bloques[i + 1];
   $("#hg-luego").textContent = sig ? "Luego: " + sig.ej : "Último";
 }
+// cuánto llevas de la guiada (en segundos): los pasos completos y lo que va del que está en marcha
+function hechoGuia() {
+  const segs = g.r.bloques.map(b => b.seg || 30), total = segs.reduce((a, b) => a + b, 0);
+  const suma = n => segs.slice(0, n).reduce((a, b) => a + b, 0);
+  const queda = g.pausa ? g.queda : Math.max(0, Math.ceil((g.fin - Date.now()) / 1000));
+  const pasos = g.cambio ? g.i + 1 : g.i;
+  const hecho = g.cambio ? suma(g.i + 1) : suma(g.i) + Math.max(0, segs[g.i] - queda);
+  return {total, pasos, de: segs.length, hecho: Math.min(total, hecho)};
+}
+// va en el estado con el guardado de siempre (Tom usa /api/guia, que hace lo mismo): se queda la vez que más del día
+function apuntaGuia(r, x) {
+  S.guias = S.guias || {};
+  const dia = (S.guias[HOY] = S.guias[HOY] || {}), antes = dia[r.id];
+  if (!antes || x.hecho >= antes.hecho) dia[r.id] = x;
+  guardar();
+}
+function saleGuia() {
+  if (g && !(g.i === 0 && !g.cambio && Date.now() < g.fin - (g.r.bloques[0].seg || 30) * 1000 + 3000)) {
+    const r = g.r, x = hechoGuia(), p = Math.round(100 * x.hecho / x.total);
+    apuntaGuia(r, x);
+    $("#estado").textContent = `Guardado: ${x.pasos} de ${x.de} pasos (${p} %)`;
+  }
+  paraGuia();
+}
 function acabaGuia() {
-  const h = g.r.hab;
+  const h = g.r.hab, r = g.r, total = r.bloques.reduce((a, b) => a + (b.seg || 30), 0);
   pip(1040);
+  apuntaGuia(r, {total, pasos: r.bloques.length, de: r.bloques.length, hecho: total});
   paraGuia();
   if (h && !hecho(HOY, h)) { marca(h, true); guardar(); }
 }
@@ -1204,7 +1240,7 @@ function paraGuia() {
   despierta(false);
   $("#hoja-guia").removeAttribute("data-on");
 }
-$("#hg-salir").onclick = paraGuia;
+$("#hg-salir").onclick = saleGuia;
 $("#hg-salta").onclick = () => g && pasoGuia(1);
 $("#hg-pausa").onclick = () => {
   if (!g) return;

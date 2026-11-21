@@ -64,6 +64,9 @@ struct RutinaGym: Codable, Identifiable, Hashable {
     var bloques: [BloqueGym]
     /// Segundos para colocarse entre paso y paso de una rutina guiada (solo si la hay).
     var pausa: Int?
+    /// Se ajusta sola cada lunes según lo que hiciste (guias.py en el servidor), y el porqué de esta semana.
+    var adapta: Bool?
+    var ajuste: AjusteGuia?
 
     init(from decoder: Decoder) throws {
         let k = try decoder.container(keyedBy: CodingKeys.self)
@@ -73,6 +76,8 @@ struct RutinaGym: Codable, Identifiable, Hashable {
         hab = (try? k.decode(String.self, forKey: .hab)) ?? ""
         bloques = (try? k.decode([BloqueGym].self, forKey: .bloques)) ?? []
         pausa = try? k.decode(Int.self, forKey: .pausa)
+        adapta = try? k.decode(Bool.self, forKey: .adapta)
+        ajuste = try? k.decode(AjusteGuia.self, forKey: .ajuste)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -84,14 +89,35 @@ struct RutinaGym: Codable, Identifiable, Hashable {
         try k.encode(bloques, forKey: .bloques)
         // como clean(): solo si la hay, para que las rutinas de carrera.py sigan siendo iguales
         if let pausa, pausa > 0 { try k.encode(pausa, forKey: .pausa) }
+        // sin esto, guardar desde Tom borraría el ajuste automático del core
+        if adapta == true { try k.encode(true, forKey: .adapta) }
+        if let ajuste { try k.encode(ajuste, forKey: .ajuste) }
     }
 
-    private enum CodingKeys: String, CodingKey { case id, n, tipo, hab, bloques, pausa }
+    private enum CodingKeys: String, CodingKey { case id, n, tipo, hab, bloques, pausa, adapta, ajuste }
 
     /// Lo que dura una rutina guiada, en segundos.
     var duracion: Int {
         bloques.reduce(0) { $0 + $1.seg } + (pausa ?? 0) * max(0, bloques.count - 1)
     }
+}
+
+/// El ajuste del lunes de una rutina guiada: la semana, la media que hiciste, cuántos segundos cambió y por qué.
+struct AjusteGuia: Codable, Hashable {
+    var semana: String
+    var pct: Int?
+    var cambio: Int
+    var texto: String
+}
+
+/// Cuánto hiciste de una rutina guiada un día (state["guias"]): segundos hechos de los totales y pasos completos.
+struct GuiaHecha: Codable, Hashable {
+    var hecho: Int
+    var total: Int
+    var pasos: Int
+    var de: Int
+
+    var pct: Int { total > 0 ? min(100, Int((Double(hecho) / Double(total) * 100).rounded())) : 0 }
 }
 
 /// Una serie hecha: [kilos, repeticiones] (o segundos, en la plancha), como la guarda el servidor.
@@ -225,6 +251,8 @@ struct EstadoEntreno {
     var gym: [String: [SesionGym]] = [:]
     var peso: [String: Double] = [:]
     var actividad: [String: [ActividadGym]] = [:]
+    /// Solo se lee: lo escribe el servidor (/api/guia), así que `escribe` no lo toca.
+    var guias: [String: [String: GuiaHecha]] = [:]
 
     init() {}
 
@@ -237,6 +265,7 @@ struct EstadoEntreno {
         gym = Self.lee(crudo["gym"]) ?? [:]
         peso = Self.lee(crudo["peso"]) ?? [:]
         actividad = Self.lee(crudo["actividad"]) ?? [:]
+        guias = Self.lee(crudo["guias"]) ?? [:]
     }
 
     private static func lee<T: Decodable>(_ valor: Any?) -> T? {
