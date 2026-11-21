@@ -1175,6 +1175,31 @@ def test_guias():
     print("guias ok")
 
 
+def test_comunidad():
+    import comunidad as c
+    assert c.nombre_tema("NVIDIA Corporation") == "NVIDIA" and c.nombre_tema("Apple Inc.") == "Apple"
+    assert c.nombre_tema("Vanguard FTSE All-World UCITS ETF USD Accumulation") == "Vanguard FTSE All-World"
+    gordo = {"source": "reddit", "title": "Jensen Huang resigns as Nvidia CEO", "url": "https://www.reddit.com/r/stocks/comments/1/x/",
+             "engagement": {"score": 1161, "num_comments": 294}, "published_at": "2026-11-12"}
+    hn = {"source": "hackernews", "title": "SEC's Nvidia probe <accounting>", "url": "https://example.com/sec",
+          "engagement": {"points": 298, "comments": 162}, "published_at": "2026-11-20"}
+    flojo = {**gordo, "url": "https://www.reddit.com/r/stocks/comments/2/y/", "engagement": {"score": 40, "num_comments": 12}}
+    otro = {**gordo, "url": "https://www.reddit.com/r/stocks/comments/3/z/", "title": "Intel plunges 16%"}
+    assert c.fuerte(gordo) and c.fuerte(hn) and not c.fuerte(flojo)
+    assert c.habla_de(gordo, "NVIDIA") and not c.habla_de(otro, "NVIDIA")
+    d = {"results": [flojo, otro, gordo, hn]}
+    assert [x["url"] for x in c.nuevos(d, "NVIDIA", {})] == [gordo["url"], hn["url"]]   # lo de más repercusión primero
+    assert c.nuevos(d, "NVIDIA", {hn["url"]: "2026-11-20", gordo["url"]: "2026-11-12"}) == []   # ya avisado
+    m = c.mensaje("NVIDIA", [gordo, hn])
+    assert "r/stocks · 1.161 votos, 294 comentarios (12/11)" in m and "&lt;accounting&gt;" in m and "Hacker News · 298 puntos" in m
+    assert c.recorta("a\nFree fixes:\n  - YouTube: video transcripts...\nb\n\n\n\nc") == "a\nb\n\nc"
+    assert c.recorta("x" * 50 + "\n" + "y" * 50, tope=60).endswith("(… cortado)")
+    pm = "### 1. US recession (score 45)\n## Polymarket Markets\n\n- 📊 Polymarket · US recession by end of 2026: 3.0% (down 4 pts this month) — https://polymarket.com/x\n✅ All agents reported back!\n└─ 📊 Polymarket: 5 markets"
+    assert c.solo_polymarket(pm).splitlines()[0] == "- 📊 Polymarket · US recession by end of 2026: 3.0% (down 4 pts this month) — https://polymarket.com/x"
+    assert c.solo_polymarket("nada") == "(no hay mercados de Polymarket sobre esto)"
+    print("comunidad ok")
+
+
 def test_cobro_y_anio():
     import cobro, anio
     from datetime import date
@@ -1502,4 +1527,5 @@ if __name__ == "__main__":
     test_carrera_calendario()
     test_rutas()
     test_guias()
+    test_comunidad()
     print("ok")
