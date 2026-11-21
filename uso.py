@@ -36,7 +36,7 @@ RUTAS = [
     ("/api/leido", "leer luego"), ("/api/leer", "leer luego"),
     ("/api/escalada", "escalada"),
     ("/api/entreno", "entreno"), ("/api/mueve", "entreno:mover"), ("/entreno.html", "entreno"),
-    ("/api/actividad/fit", "carrera:fit"), ("/actividad.html", "carrera:actividad"), ("/carrera.html", "carrera"), ("/salud.html", "salud"),
+    ("/api/actividad/fit", "carrera:fit"), ("/api/rutas", "carrera:rutas"), ("/api/segmentos", "carrera:segmentos"), ("/actividad.html", "carrera:actividad"), ("/carrera.html", "carrera"), ("/salud.html", "salud"),
     ("/api/documentos", "documentos"), ("/documentos.html", "documentos"),
     ("/api/ajustes", "ajustes"), ("/api/apariencia", "ajustes"), ("/ajustes.html", "ajustes"),
     ("/api/tom", "tom:voz"), ("/api/charla", "claude"),
@@ -47,7 +47,7 @@ AUTO = ("/api/pantalla", "/api/movil/revisa", "/api/salud", "/api/push/", "/api/
         "/api/leer/pendiente", "/api/inversiones/precios", "/api/escalada/fantasma")
 # lo que hay, para decir «esto no lo has tocado»
 CONOCIDAS = ["hoy", "habitos", "habitos:marcar", "habitos:editar", "habitos:descansos", "pendientes", "calendario", "notas",
-             "leer luego", "entreno", "entreno:mover", "escalada", "carrera", "carrera:fit", "carrera:actividad", "bot:fit", "salud", "documentos", "gastos",
+             "leer luego", "entreno", "entreno:mover", "escalada", "carrera", "carrera:fit", "carrera:actividad", "carrera:gpx", "carrera:rutas", "carrera:segmentos", "bot:fit", "salud", "documentos", "gastos",
              "inversiones", "inversiones:explorar", "inversiones:pregunta", "inversiones:operacion", "inversiones:plan",
              "inversiones:alerta", "inversiones:compara", "tom:voz", "claude", "bot:texto", "bot:voz", "bot:foto",
              "bot:enlace", "bot:/gastos", "bot:/dudas", "bot:/pendientes", "bot:/carrera", "bot:/noticias", "bot:/post",
@@ -86,6 +86,8 @@ def cliente(ua, ip):
 def funcion(ruta):
     if ruta.startswith("/api/inversiones/"):
         return "inversiones:" + ruta.split("/")[3]
+    if ruta.startswith("/api/actividad/") and ruta.endswith("/gpx"):
+        return "carrera:gpx"
     for prefijo, nombre in RUTAS:
         if ruta == prefijo or (prefijo != "/" and ruta.startswith(prefijo)):
             return nombre

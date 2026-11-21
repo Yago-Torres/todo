@@ -20,6 +20,7 @@ from fastapi.staticfiles import StaticFiles
 
 import carrera
 import fit
+import rutas
 import inversiones
 import mercado
 import explorar
@@ -1465,9 +1466,20 @@ def apunta_fit(datos: bytes):
     if h["id"] not in estado["log"].get(dia, []):
         estado["log"][dia] = sorted(set(estado["log"].get(dia, []) + [h["id"]]))
     TRAZAS.mkdir(exist_ok=True)
+    traza = {"dia": dia, **r["traza"]}
+    # carrera contra tu fantasma: si ya hiciste esta ruta, cuánto ibas por delante o por detrás (se calcula al subirla)
+    try:
+        traza["fantasma"] = rutas.busca(act["id"], traza, list(_otras_trazas(act["id"])))
+    except Exception as e:   # el fantasma es un extra: si falla, la carrera se guarda igual
+        print("fantasma:", repr(e), flush=True)
     tmp = TRAZAS / (act["id"] + ".tmp")
-    tmp.write_text(json.dumps({"dia": dia, **r["traza"]}, separators=(",", ":")), "utf-8")
+    tmp.write_text(json.dumps(traza, separators=(",", ":")), "utf-8")
     os.replace(tmp, TRAZAS / (act["id"] + ".json"))
+    extras = []
+    try:   # su ruta en la biblioteca y sus segmentos: extras, como el fantasma
+        extras = rutas_y_segmentos(act["id"], traza)
+    except Exception as e:
+        print("rutas/segmentos:", repr(e), flush=True)
     estado = clean(estado)
     guarda(DB, json.dumps(estado, ensure_ascii=False))
     trozos = [f"{act['km']:g} km", act["ritmo"], f"FC {act['fc']}" if act.get("fc") else "",
@@ -1475,9 +1487,191 @@ def apunta_fit(datos: bytes):
     texto = ("Apuntada" if nueva else "Actualizada") + f" · {h['n']} {dia[8:]}/{dia[5:7]} · " + " · ".join(x for x in trozos if x)
     if repetida:
         texto += " (sustituye a la del atajo)"
+    if traza.get("fantasma"):
+        texto += " · " + rutas.frase(traza["fantasma"])
+    if extras:
+        texto += " · " + " · ".join(extras)
     if h["id"] == carrera.habito_correr(estado) and act["km"]:
         texto += f" · 5k estimado {carrera.mmss(carrera.informe(estado)['estimacion']['seg'])}"
     return {"texto": texto, "dia": dia, "id": act["id"], "habito": h["id"], "nueva": nueva}
+
+
+# ---------- biblioteca de rutas y segmentos (actividades/rutas.json y segmentos.json) ----------
+cerrojo_rutas = threading.Lock()
+
+
+def _lee_json(f, vacio):
+    try:
+        return json.loads(f.read_text("utf-8"))
+    except (OSError, ValueError):
+        return vacio
+
+
+def _escribe_json(f, datos):
+    TRAZAS.mkdir(exist_ok=True)
+    tmp = f.with_suffix(".tmp")
+    tmp.write_text(json.dumps(datos, ensure_ascii=False, separators=(",", ":")), "utf-8")
+    os.replace(tmp, f)
+
+
+def _traza(fid):
+    f = TRAZAS / (fid + ".json") if re.fullmatch(r"[\w-]{1,20}", fid or "") else None
+    return _lee_json(f, None) if f and f.exists() else None
+
+
+def _dia_de(fid):
+    return f"{fid[4:8]}-{fid[8:10]}-{fid[10:12]}" if fid.startswith("fit-") else ""
+
+
+def rutas_y_segmentos(fid, traza):
+    """Al subir un fit: lo mete en su ruta y apunta sus pasos por los segmentos. Devuelve frases para el texto."""
+    frases = []
+    with cerrojo_rutas:
+        biblio = _lee_json(TRAZAS / "rutas.json", [])
+        ruta, nueva = rutas.clasifica(biblio, fid, traza, _traza)
+        _escribe_json(TRAZAS / "rutas.json", biblio)
+        if nueva and len(biblio) > 1:
+            frases.append(f"ruta nueva: «{ruta['nombre']}»")
+        segs = _lee_json(TRAZAS / "segmentos.json", [])
+        for s in segs:
+            s["intentos"] = [x for x in s["intentos"] if x["fit"] != fid]
+            s["intentos"] += [{"fit": fid, "dia": _dia_de(fid), **x} for x in rutas.pasos(s, traza)]
+            n = rutas.puesto(s, fid)
+            if n == 1 and len({x["fit"] for x in s["intentos"]}) > 1:
+                frases.append(f"mejor marca en «{s['nombre']}» ({carrera.mmss(min(x['seg'] for x in s['intentos'] if x['fit'] == fid))})")
+        _escribe_json(TRAZAS / "segmentos.json", segs)
+    return frases
+
+
+def _seg_con_marcas(s):
+    ints = sorted(s["intentos"], key=lambda x: x["seg"])
+    return {"id": s["id"], "nombre": s["nombre"], "m": s["m"], "veces": len(ints),
+            "mejor": ints[0] if ints else None, "intentos": sorted(s["intentos"], key=lambda x: (x["dia"], x["m"]), reverse=True)}
+
+
+def _km_sesion(estado):
+    """La próxima carrera del plan sin hacer (hoy o después) y cuántos km son, con tu ritmo suave."""
+    try:
+        inf = carrera.informe(estado)
+    except Exception:
+        return None
+    hoy = date.today().isoformat()
+    a = next((x for x in inf["agenda"] if x["dia"] >= hoy and not x["hecho"]), None)
+    if not a:
+        return None
+    mins = next((x["min"] for w in inf["semanas"] for x in w["sesiones"]
+                 if x["rutina"] == a["rutina"] and w["lunes"] <= a["dia"] <= (date.fromisoformat(w["lunes"]) + timedelta(days=6)).isoformat()), None)
+    if not mins:
+        return None
+    suave = sum(inf["ritmos"]["suave"]) / 2
+    est = inf["estimacion"]["seg"]
+    # el test: 5 km a tope más calentamiento y vuelta a la calma suaves; lo demás, todo a ritmo suave (aproximado)
+    km = 5 + max(0, mins * 60 - est) / suave if a["tipo"] == "test" else mins * 60 / suave
+    return {"dia": a["dia"], "n": a["n"], "min": mins, "km": round(km, 1)}
+
+
+@app.get("/api/rutas")
+def lista_rutas(km: float = 0, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """Tu biblioteca de rutas con lo que has hecho en cada una, y las 2 que mejor encajan con la próxima carrera
+    del plan (o con `km` si lo pasas)."""
+    exige(todo_sesion, authorization)
+    estado = clean(dct(json.loads(DB.read_text("utf-8")))) if DB.exists() else clean({})
+    acts = {a["id"]: {"dia": d, **a} for d, l in estado["actividad"].items() for a in l}
+    biblio = _lee_json(TRAZAS / "rutas.json", [])
+    out = []
+    for r in biblio:
+        hechas = [acts[f] for f in r["fits"] if f in acts]
+        mejor = min(hechas, key=lambda a: a.get("seg") or 1e9, default=None)
+        out.append({**r, "veces": len(hechas), "ultima": max((a["dia"] for a in hechas), default=None),
+                    "mejor": {"id": mejor["id"], "dia": mejor["dia"], "seg": mejor.get("seg"), "ritmo": mejor.get("ritmo")} if mejor else None})
+    sesion = None if km else _km_sesion(estado)
+    objetivo = km or (sesion or {}).get("km")
+    return {"rutas": sorted(out, key=lambda r: (-r["veces"], r["km"])), "sesion": sesion,
+            "sugeridas": [r["id"] for r in rutas.sugeridas(biblio, objetivo)] if objetivo else []}
+
+
+@app.patch("/api/rutas/{i}")
+def renombra_ruta(i: str, d: dict = Body(...), todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    nombre = str(d.get("nombre") or "").strip()[:60]
+    if not nombre:
+        raise HTTPException(400, "Falta el nombre")
+    with cerrojo_rutas:
+        biblio = _lee_json(TRAZAS / "rutas.json", [])
+        r = next((x for x in biblio if x["id"] == i), None)
+        if not r:
+            raise HTTPException(404, "No existe esa ruta")
+        r["nombre"] = nombre
+        _escribe_json(TRAZAS / "rutas.json", biblio)
+    return r
+
+
+@app.get("/api/rutas/{i}/gpx")
+def gpx_ruta(i: str, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    r = next((x for x in _lee_json(TRAZAS / "rutas.json", []) if x["id"] == i), None)
+    traza = _traza(r["ref"]) if r else None
+    if not traza:
+        raise HTTPException(404, "No existe esa ruta")
+    return Response(rutas.gpx(traza, r["nombre"]), media_type="application/gpx+xml",
+                    headers={"Content-Disposition": f'attachment; filename="ruta-{i}.gpx"'})
+
+
+@app.get("/api/segmentos")
+def lista_segmentos(todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    exige(todo_sesion, authorization)
+    return [_seg_con_marcas(s) for s in _lee_json(TRAZAS / "segmentos.json", [])]
+
+
+@app.post("/api/segmentos")
+def crea_segmento(d: dict = Body(...), todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """{fit, desde, hasta (metros de esa carrera), nombre}: crea el segmento y lo busca en todas tus carreras."""
+    exige(todo_sesion, authorization)
+    traza = _traza(str(d.get("fit") or ""))
+    if not traza:
+        raise HTTPException(404, "Esa carrera no tiene ruta")
+    try:
+        s = rutas.segmento(traza, float(d.get("desde", 0)), float(d.get("hasta", 0)), str(d.get("nombre") or ""))
+    except (TypeError, ValueError) as e:
+        raise HTTPException(400, str(e))
+    with cerrojo_rutas:
+        segs = _lee_json(TRAZAS / "segmentos.json", [])
+        usados = {x["id"] for x in segs}
+        n = len(segs) + 1
+        while f"s{n}" in usados:
+            n += 1
+        s["id"] = f"s{n}"
+        for fid, t in _otras_trazas(""):
+            s["intentos"] += [{"fit": fid, "dia": t.get("dia") or _dia_de(fid), **x} for x in rutas.pasos(s, t)]
+        segs.append(s)
+        _escribe_json(TRAZAS / "segmentos.json", segs)
+    return _seg_con_marcas(s)
+
+
+@app.patch("/api/segmentos/{i}")
+def cambia_segmento(i: str, d: dict = Body(...), todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """{nombre} lo renombra; {borrar: true} lo quita."""
+    exige(todo_sesion, authorization)
+    with cerrojo_rutas:
+        segs = _lee_json(TRAZAS / "segmentos.json", [])
+        s = next((x for x in segs if x["id"] == i), None)
+        if not s:
+            raise HTTPException(404, "No existe ese segmento")
+        if d.get("borrar"):
+            segs.remove(s)
+        elif str(d.get("nombre") or "").strip():
+            s["nombre"] = str(d["nombre"]).strip()[:60]
+        _escribe_json(TRAZAS / "segmentos.json", segs)
+    return {"ok": True}
+
+
+def _otras_trazas(sin):
+    for f in sorted(TRAZAS.glob("fit-*.json")):
+        if f.stem != sin and f.stem.startswith("fit-"):
+            try:
+                yield f.stem, json.loads(f.read_text("utf-8"))
+            except (OSError, ValueError):
+                continue
 
 
 @app.post("/api/actividad/fit")
@@ -1502,8 +1696,28 @@ def una_actividad(i: str, todo_sesion: str = Cookie(None), authorization: str = 
             if a["id"] == i:
                 f = TRAZAS / (i + ".json") if re.fullmatch(r"[\w-]{1,20}", i) else None
                 traza = json.loads(f.read_text("utf-8")) if f and f.exists() else None
-                return {"dia": dia, **a, "traza": traza}
+                ruta = next(({"id": r["id"], "nombre": r["nombre"], "veces": len(r["fits"])}
+                             for r in _lee_json(TRAZAS / "rutas.json", []) if i in r["fits"]), None)
+                segs = [{**_seg_con_marcas(s), "aqui": [x for x in s["intentos"] if x["fit"] == i], "puesto": rutas.puesto(s, i)}
+                        for s in _lee_json(TRAZAS / "segmentos.json", []) if any(x["fit"] == i for x in s["intentos"])]
+                for s in segs:
+                    del s["intentos"]
+                return {"dia": dia, **a, "traza": traza, "ruta": ruta, "segmentos": segs}
     raise HTTPException(404, "No existe")
+
+
+@app.get("/api/actividad/{i}/gpx")
+def gpx_actividad(i: str, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """La ruta en GPX, para importarla en la app del COROS (Rutas → importar) y seguirla en el reloj."""
+    exige(todo_sesion, authorization)
+    f = TRAZAS / (i + ".json") if re.fullmatch(r"[\w-]{1,20}", i) else None
+    if not f or not f.exists():
+        raise HTTPException(404, "Esa actividad no tiene ruta")
+    traza = json.loads(f.read_text("utf-8"))
+    km = rutas._km(traza) / 1000
+    nombre = f"{km:.1f} km · {traza.get('dia', '')}"
+    return Response(rutas.gpx(traza, nombre), media_type="application/gpx+xml",
+                    headers={"Content-Disposition": f'attachment; filename="ruta-{i}.gpx"'})
 
 
 @app.get("/api/actividades")

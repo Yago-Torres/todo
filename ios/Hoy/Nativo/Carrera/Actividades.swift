@@ -31,6 +31,7 @@ struct Parcial: Decodable, Hashable {
 struct DetalleActividad: Decodable {
     struct Traza: Decodable {
         var puntos: [[Double?]]
+        var fantasma: Fantasma?
     }
     var id: String
     var dia: String
@@ -52,6 +53,8 @@ struct DetalleActividad: Decodable {
     var velMax: Double?
     var parciales: [Parcial]?
     var traza: Traza?
+    var ruta: RutaDe?
+    var segmentos: [SegmentoAqui]?
 }
 
 /// Un punto de la traza ([t, lat, lon, m, alt, fc, vel, cad] cada 5 s), ya con el ritmo suavizado.
@@ -75,6 +78,8 @@ final class CarrerasFit {
 
     private(set) var lista: [ResumenActividad] = []
     private(set) var subiendo = false
+    /// Sube con cada .fit nuevo: la carta de rutas se recarga con ella.
+    private(set) var subidas = 0
     var mensaje: String?
     var error = false
     var abierta: ResumenActividad?
@@ -103,6 +108,7 @@ final class CarrerasFit {
             let o = (try? JSONSerialization.jsonObject(with: respuesta)) as? [String: Any] ?? [:]
             avisa(o["texto"] as? String ?? "Apuntada", error: false)
             Haptica.shared.toca(.record)
+            subidas += 1
             await carga()
             await CarreraDatos.shared.carga()
             if let id = o["id"] as? String, let a = lista.first(where: { $0.id == id }) {
@@ -227,8 +233,12 @@ struct PantallaActividad: View {
                 if let a {
                     CabeceraActividad(a: a)
                     CifrasActividad(a: a)
-                    if puntos.contains(where: { $0.lat != nil }) { MapaActividad(puntos: puntos) }
+                    if puntos.contains(where: { $0.lat != nil }) {
+                        MapaActividad(puntos: puntos, id: a.id, ruta: a.ruta)
+                    }
                     if puntos.count > 5 { GraficaActividad(puntos: puntos) }
+                    if puntos.contains(where: { $0.lat != nil }) { CartaFantasma(f: a.traza?.fantasma) }
+                    if let s = a.segmentos, !s.isEmpty { CartaSegmentosAqui(segmentos: s) }
                     if let p = a.parciales, !p.isEmpty { TablaParciales(parciales: p) }
                 } else {
                     Text(error ?? "Cargando…").font(Tema.fuente(.texto)).foregroundStyle(error == nil ? Tema.suave : Tema.peligro)
@@ -351,6 +361,8 @@ private struct CifrasActividad: View {
 
 private struct MapaActividad: View {
     let puntos: [PuntoTraza]
+    let id: String
+    let ruta: RutaDe?
 
     private var coords: [CLLocationCoordinate2D] {
         puntos.compactMap { p in
@@ -363,6 +375,10 @@ private struct MapaActividad: View {
         let c = coords
         VStack(alignment: .leading, spacing: Tema.Espacio.s) {
             TituloCarta(titulo: "Ruta", detalle: "verde, la salida")
+            if let ruta {
+                Text(ruta.nombre + (ruta.veces > 1 ? " · " + String(ruta.veces) + " veces" : " · la primera vez"))
+                    .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
+            }
             Map(interactionModes: [.pan, .zoom]) {
                 MapPolyline(coordinates: c)
                     .stroke(Tema.acento, style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
@@ -380,6 +396,7 @@ private struct MapaActividad: View {
             .mapStyle(.standard(pointsOfInterest: .excludingAll))
             .frame(height: 300)
             .clipShape(RoundedRectangle(cornerRadius: Tema.Radio.celda))
+            BotonGPX(ruta: "/api/actividad/" + id + "/gpx", nombre: ruta?.nombre ?? ("Carrera " + id))
         }
         .carta()
     }

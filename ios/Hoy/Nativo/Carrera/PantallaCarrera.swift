@@ -181,6 +181,7 @@ struct ContenidoCarrera: View {
                 CartaEstimacion(r: r)
                 CartaSemanaCarrera(r: r)
                 CartaActividades()
+                CartaRutas()
                 CartaRitmos(r: r)
                 CartaComoSeAjusta()
                 GraficaCamino(r: r)

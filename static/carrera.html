@@ -91,6 +91,19 @@
   .acts .n small { font-weight: 400; color: var(--suave); margin-left: 6px; }
   .acts .x { font-size: var(--t-pequeno); color: var(--suave); white-space: nowrap; }
   #b-fit { cursor: pointer; }
+  /* rutas y segmentos */
+  .rutas { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .rutas li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; padding: 10px;
+              border-radius: var(--r-s); background: var(--carta-2); }
+  .rutas li.sug { box-shadow: inset 0 0 0 2px var(--acento); }
+  .rutas .nom { font: inherit; font-weight: 600; color: inherit; background: none; border: 0; padding: 0; text-align: left; cursor: text;
+                overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .rutas .nom input { font: inherit; width: 100%; }
+  .rutas .det { grid-column: 1; font-size: var(--t-pequeno); color: var(--suave); font-variant-numeric: tabular-nums; }
+  .rutas .acc { grid-row: 1 / span 2; grid-column: 2; display: flex; gap: 6px; }
+  .rutas .eti-sug { color: var(--acento); font-weight: 600; }
+  .para { font-size: var(--t-texto); margin: 0 0 10px; }
+  .para b { font-variant-numeric: tabular-nums; }
   .puerta input { width: 100%; }
   .puerta button { width: 100%; }
 </style>
@@ -136,6 +149,21 @@
       <h2 id="t-acts">Tus carreras <label class="der c-btn mini" id="b-fit">Subir .fit<input type="file" accept=".fit" id="f-fit" hidden></label></h2>
       <ul class="acts" id="acts"></ul>
       <p class="bajo" id="fit-msg" style="margin:10px 0 0">Desde la app del COROS: la actividad → Compartir → exportar .fit, y súbelo aquí o mándaselo al bot.</p>
+    </section>
+
+    <section class="carta c-carta" id="rutas-carta" aria-labelledby="t-rutas">
+      <h2 id="t-rutas">Tus rutas <span class="der c-eti">GPX → app del COROS → reloj</span></h2>
+      <p class="para" id="rutas-para" hidden></p>
+      <ul class="rutas" id="rutas"></ul>
+      <p class="bajo" style="margin:10px 0 0">Cada .fit que subes cae en su ruta (o abre una nueva). Toca el nombre para cambiarlo.
+        El GPX se importa en la app del COROS (Rutas → importar) y se manda al reloj.</p>
+    </section>
+
+    <section class="carta c-carta" aria-labelledby="t-segs">
+      <h2 id="t-segs">Tus segmentos</h2>
+      <ul class="rutas" id="segs"></ul>
+      <p class="bajo" style="margin:10px 0 0">Un segmento es un tramo con nombre (una cuesta, una recta): cada vez que pasas por él se apunta tu tiempo.
+        Se crean desde una carrera con mapa, en «Segmentos».</p>
     </section>
 
     <section class="carta c-carta" aria-labelledby="t-ritmos">
@@ -213,6 +241,7 @@ async function cargar() {
     $("#estado").textContent = "";
     pinta();
     actividades();
+    rutasYSegmentos();
     anima.entrada();
   } catch (e) {
     $("#estado").textContent = "Sin conexión";
@@ -280,6 +309,88 @@ async function actividades() {
     li.append(x);
     return li;
   }) : [el("p", "vacio", "Aún no hay carreras apuntadas.")]));
+}
+
+// ---------- tu biblioteca de rutas y tus segmentos ----------
+const km1 = x => Number(x).toLocaleString("es-ES", {maximumFractionDigits: 1});
+const dm = s => s ? `${+s.slice(8)}/${+s.slice(5, 7)}` : "";
+const mmssJ = s => s == null ? "—" : `${Math.floor(Math.round(s) / 60)}:${String(Math.round(s) % 60).padStart(2, "0")}`;
+function editable(boton, texto, guarda) {
+  boton.onclick = () => {
+    const inp = el("input", "c-campo");
+    inp.value = texto;
+    inp.setAttribute("aria-label", "Nombre");
+    boton.replaceChildren(inp);
+    inp.focus(); inp.select();
+    let hecho = false;
+    const fin = async ok => {
+      if (hecho) return; hecho = true;
+      const v = inp.value.trim();
+      if (ok && v && v !== texto) { await guarda(v); } else boton.replaceChildren(texto);
+    };
+    inp.onkeydown = e => { if (e.key === "Enter") fin(true); if (e.key === "Escape") fin(false); };
+    inp.onblur = () => fin(true);
+    inp.onclick = e => e.stopPropagation();
+  };
+}
+async function rutasYSegmentos() {
+  const [a, b] = await Promise.all([fetch("/api/rutas").catch(() => null), fetch("/api/segmentos").catch(() => null)]);
+  if (a && a.ok) {
+    const R = await a.json(), sug = new Set(R.sugeridas);
+    const p = $("#rutas-para");
+    p.hidden = !R.sesion;
+    if (R.sesion) {
+      const s = R.sesion;
+      p.replaceChildren(`${DIAS[fecha(s.dia).getDay()]} ${fecha(s.dia).getDate()}: ${s.n}, unos `, el("b", null, `${km1(s.km)} km`),
+        sug.size ? ` → te propongo ${sug.size === 1 ? "la marcada" : "las marcadas"}.` : ". Ninguna de tus rutas se acerca todavía.");
+    }
+    $("#rutas").replaceChildren(...(R.rutas.length ? R.rutas.map(r => {
+      const li = el("li", sug.has(r.id) ? "sug" : null), nom = el("button", "nom", r.nombre);
+      nom.type = "button";
+      nom.title = "Cambiar el nombre";
+      editable(nom, r.nombre, async v => {
+        const x = await fetch(`/api/rutas/${r.id}`, {method: "PATCH", headers: {"Content-Type": "application/json"}, body: JSON.stringify({nombre: v})}).catch(() => null);
+        rutasYSegmentos();
+        if (!x || !x.ok) $("#rutas-para").textContent = "No se pudo cambiar el nombre";
+      });
+      const det = el("span", "det");
+      det.append(...[sug.has(r.id) && el("span", "eti-sug", "Para la próxima · "),
+        `${km1(r.km)} km · ${r.veces === 1 ? "1 vez" : `${r.veces} veces`}`,
+        r.mejor && r.mejor.ritmo && ` · mejor ${r.mejor.ritmo.replace(" /km", "")}/km el ${dm(r.mejor.dia)}`].filter(Boolean));
+      const acc = el("span", "acc"), g = el("a", "c-btn mini", "GPX");
+      g.href = `/api/rutas/${r.id}/gpx`; g.setAttribute("download", "");
+      const ver = el("a", "c-btn mini", "Ver");
+      ver.href = "/actividad.html?id=" + encodeURIComponent(r.mejor ? r.mejor.id : r.ref);
+      acc.append(ver, g);
+      li.append(nom, acc, det);
+      return li;
+    }) : [el("p", "vacio", "Aún no hay rutas: sube un .fit del COROS.")]));
+  }
+  if (b && b.ok) {
+    const S = await b.json();
+    $("#segs").replaceChildren(...(S.length ? S.map(s => {
+      const li = el("li"), nom = el("button", "nom", s.nombre);
+      nom.type = "button";
+      editable(nom, s.nombre, async v => {
+        await fetch(`/api/segmentos/${s.id}`, {method: "PATCH", headers: {"Content-Type": "application/json"}, body: JSON.stringify({nombre: v})}).catch(() => null);
+        rutasYSegmentos();
+      });
+      const m = s.mejor;
+      const det = el("span", "det", `${s.m >= 1000 ? km1(s.m / 1000) + " km" : s.m + " m"} · ${s.veces === 1 ? "1 vez" : `${s.veces} veces`}` +
+        (m ? ` · mejor ${mmssJ(m.seg)} (${mmssJ(m.seg / s.m * 1000)}/km) el ${dm(m.dia)}` : "") +
+        (s.intentos[0] && m && s.intentos[0].fit !== m.fit ? ` · última ${mmssJ(s.intentos[0].seg)}` : ""));
+      const acc = el("span", "acc"), x = el("button", "c-btn mini", "Quitar");
+      x.type = "button";
+      x.onclick = async () => {
+        if (!confirm(`¿Quitar el segmento «${s.nombre}» y sus tiempos?`)) return;
+        await fetch(`/api/segmentos/${s.id}`, {method: "PATCH", headers: {"Content-Type": "application/json"}, body: JSON.stringify({borrar: true})}).catch(() => null);
+        rutasYSegmentos();
+      };
+      acc.append(x);
+      li.append(nom, acc, det);
+      return li;
+    }) : [el("p", "vacio", "Aún no tienes segmentos.")]));
+  }
 }
 
 $("#f-fit").onchange = async e => {

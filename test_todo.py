@@ -1048,6 +1048,91 @@ def test_fit():
     print("fit ok")
 
 
+def _traza(vel, km=3, dia="2026-11-20", lon=-0.88, pausa=0, al_reves=False):
+    """Una traza como las de actividades/: en línea recta hacia el norte (o hacia el sur) a `vel` m/s, punto cada 5 s."""
+    pts, t, m = [], 0, 0.0
+    while m <= km * 1000:
+        lat = 41.65 + ((km * 1000 - m) if al_reves else m) / 110540
+        pts.append([t, round(lat, 6), lon, round(m), 200.0, 150, vel, 170])
+        t += 5; m += vel * 5
+        if pausa and len(pts) == 50:
+            t += pausa
+    return {"dia": dia, "campos": ["t", "lat", "lon", "m", "alt", "fc", "vel", "cad"], "puntos": pts}
+
+
+def test_rutas():
+    import rutas
+    vieja, hoy = _traza(4.0, dia="2026-11-20"), _traza(4.0 * 250 / 245, dia="2026-11-27", pausa=90)
+    assert rutas.misma_ruta(hoy, vieja) and rutas.misma_ruta(vieja, hoy)
+    assert not rutas.misma_ruta(_traza(4, al_reves=True), vieja)              # al revés no es la misma
+    assert not rutas.misma_ruta(_traza(4, lon=-0.85), vieja)                   # 2,5 km al este
+    assert not rutas.misma_ruta(_traza(4, km=6), vieja)                        # el doble de larga
+    f = rutas.fantasma(hoy, vieja)
+    # 5 s por km más rápido, y la pausa de 90 s no cuenta
+    assert [k["km"] for k in f["km"]] == [1, 2, 3] and all(-6 <= k["dif"] * 1 / k["km"] <= -4 for k in f["km"]), f["km"]
+    otras = [("fit-202611200800", vieja), ("fit-202611230800", _traza(3.8, dia="2026-11-23")),
+             ("fit-202612010800", _traza(5, dia="2026-12-01")), ("fit-202611210800", _traza(4, lon=-0.85))]
+    b = rutas.busca("fit-202611270800", hoy, otras)
+    assert b["veces"] == 2 and b["ultima"]["dia"] == "2026-11-23" and b["mejor"]["dia"] == "2026-11-20", b
+    assert "más rápido que el 23/11" in rutas.frase(b) and "mejor vez" in rutas.frase(b), rutas.frase(b)
+    assert rutas.busca("fit-202611270800", _traza(4, lon=-0.80), otras) is None
+    g = rutas.gpx(vieja, "3 km <prueba>")
+    assert g.count("<trkpt") == len(vieja["puntos"]) and "&lt;prueba&gt;" in g
+    # biblioteca: forma y nombre, agrupar, sugerir
+    ida_vuelta = _traza(4, km=2)
+    vuelta = _traza(4, km=2, al_reves=True)["puntos"]
+    ida_vuelta["puntos"] += [[p[0] + ida_vuelta["puntos"][-1][0] + 5, p[1], p[2], p[3] + 2005, *p[4:]] for p in vuelta]
+    assert rutas.forma(vieja) == "Solo ida" and rutas.forma(ida_vuelta) == "Ida y vuelta", rutas.forma(ida_vuelta)
+    assert rutas.nombre_auto(vieja) == "Solo ida de 3,0 km"
+    trazas = {"fit-1": vieja, "fit-2": hoy, "fit-3": _traza(4, lon=-0.85), "fit-4": ida_vuelta}
+    bib = []
+    for i, tr in trazas.items():
+        rutas.clasifica(bib, i, tr, trazas.get)
+    assert [r["fits"] for r in bib] == [["fit-1", "fit-2"], ["fit-3"], ["fit-4"]], bib
+    assert rutas.clasifica(bib, "fit-2", hoy, trazas.get) == (bib[0], False)          # repetir no duplica
+    assert [r["id"] for r in rutas.sugeridas(bib, 3.2)] == ["r1", "r2"] and rutas.sugeridas(bib, 10) == []
+    # segmentos: del metro 500 al 1500 de la vieja
+    s = rutas.segmento(vieja, 500, 1500, "Recta del parque")
+    assert 990 <= s["m"] <= 1000 and s["nombre"] == "Recta del parque"
+    p = rutas.pasos(s, hoy)
+    assert len(p) == 1 and 240 <= p[0]["seg"] <= 250 and 480 <= p[0]["m"] <= 520, p
+    assert rutas.pasos(s, _traza(4, al_reves=True)) == [] and rutas.pasos(s, _traza(4, lon=-0.85)) == []
+    assert len(rutas.pasos(s, ida_vuelta)) == 1                                         # a la vuelta va al revés: no cuenta
+    s["intentos"] = [{"fit": "a", "seg": 250}, {"fit": "b", "seg": 240}, {"fit": "b", "seg": 260}, {"fit": "c", "seg": 255}]
+    assert (rutas.puesto(s, "b"), rutas.puesto(s, "a"), rutas.puesto(s, "c"), rutas.puesto(s, "z")) == (1, 2, 3, None)
+    try:
+        rutas.segmento(vieja, 500, 550, "")
+        assert False
+    except ValueError:
+        pass
+    # por la API: dos carreras por la misma ruta, un segmento, la segunda mejora
+    import json, tempfile
+    from pathlib import Path
+    main.PASS, main.SECRET = "x", b"s"
+    d = Path(tempfile.mkdtemp())
+    main.DB, main.TRAZAS = d / "data.json", d / "actividades"
+    main.TRAZAS.mkdir()
+    main.DB.write_text(json.dumps({"habits": [{"id": "c", "n": "Correr", "goal": 3}], "actividad": {
+        "2026-11-20": [{"id": "fit-202611200800", "t": "Correr", "km": 3, "seg": 750}],
+        "2026-11-27": [{"id": "fit-202611270800", "t": "Correr", "km": 3, "seg": 735}]}}))
+    (main.TRAZAS / "fit-202611200800.json").write_text(json.dumps(vieja))
+    assert main.rutas_y_segmentos("fit-202611200800", vieja) == []
+    seg = main.crea_segmento({"fit": "fit-202611200800", "desde": 500, "hasta": 1500, "nombre": "Recta"}, None, "Bearer x")
+    assert seg["veces"] == 1 and seg["mejor"]["fit"] == "fit-202611200800"
+    (main.TRAZAS / "fit-202611270800.json").write_text(json.dumps(hoy))
+    fr = main.rutas_y_segmentos("fit-202611270800", hoy)
+    assert fr and "mejor marca en «Recta»" in fr[0], fr
+    L = main.lista_rutas(3, None, "Bearer x")
+    assert L["rutas"][0]["veces"] == 2 and L["rutas"][0]["mejor"]["seg"] == 735 and L["sugeridas"] == ["r1"], L
+    main.renombra_ruta("r1", {"nombre": "Vuelta al Ebro"}, None, "Bearer x")
+    assert "<name>Vuelta al Ebro</name>" in main.gpx_ruta("r1", None, "Bearer x").body.decode()
+    A = main.una_actividad("fit-202611270800", None, "Bearer x")
+    assert A["ruta"]["nombre"] == "Vuelta al Ebro" and A["segmentos"][0]["puesto"] == 1 and A["segmentos"][0]["aqui"]
+    main.cambia_segmento(seg["id"], {"borrar": True}, None, "Bearer x")
+    assert main.lista_segmentos(None, "Bearer x") == []
+    print("rutas ok")
+
+
 def test_cobro_y_anio():
     import cobro, anio
     from datetime import date
@@ -1373,4 +1458,5 @@ if __name__ == "__main__":
     test_fit()
     test_multas()
     test_carrera_calendario()
+    test_rutas()
     print("ok")

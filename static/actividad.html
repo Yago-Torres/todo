@@ -57,6 +57,28 @@
   table.parc td.barra { width: 45%; padding-right: 0; }
   table.parc td.barra span { display: block; height: 8px; border-radius: 4px; background: var(--acento); min-width: 4px; }
   table.parc tr.mejor td:nth-child(2) { color: var(--acento); font-weight: 650; }
+  .fant-cab { display: flex; align-items: baseline; gap: 4px 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .fant-cab b { font-size: 30px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .fant-cab b.delante { color: var(--acento); }
+  .fant-cab span { font-size: var(--t-texto); color: var(--suave); }
+  .kms { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .kms span { background: var(--carta-2); border-radius: var(--r-s); padding: 5px 8px; font-size: var(--t-pequeno); font-variant-numeric: tabular-nums; }
+  .kms span i { font-style: normal; color: var(--suave); margin-right: 4px; }
+  .kms span.delante b { color: var(--acento); }
+  .ruta .sel { fill: none; stroke: var(--texto); stroke-width: 14; stroke-linecap: round; stroke-linejoin: round; stroke-opacity: .55; }
+  .nombre-ruta { margin: -4px 0 10px; font-size: var(--t-texto); color: var(--suave); }
+  .nombre-ruta a { color: inherit; }
+  .segs { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
+  .segs li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; padding: 10px; border-radius: var(--r-s); background: var(--carta-2); }
+  .segs b { font-variant-numeric: tabular-nums; }
+  .segs small { grid-column: 1 / -1; color: var(--suave); font-size: var(--t-pequeno); }
+  .segs .n { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  form.nuevo-seg { display: grid; gap: 8px; border-top: 1px solid var(--linea); padding-top: 12px; }
+  form.nuevo-seg .fila { display: grid; grid-template-columns: 4.5em minmax(0, 1fr) 4.5em; gap: 8px; align-items: center; font-size: var(--t-pequeno); color: var(--suave); }
+  form.nuevo-seg .fila output { text-align: right; font-variant-numeric: tabular-nums; color: var(--texto); }
+  form.nuevo-seg input[type=range] { width: 100%; accent-color: var(--acento); }
+  form.nuevo-seg .abajo { display: flex; gap: 8px; }
+  form.nuevo-seg .abajo input { flex: 1; min-width: 0; }
   .pie { font-size: var(--t-pequeno); color: var(--tenue); margin: 10px 0 0; }
   .puerta input, .puerta button { width: 100%; }
 </style>
@@ -82,7 +104,9 @@
       <div class="mini" id="mini"></div>
     </section>
     <section class="carta c-carta" id="c-ruta" hidden aria-labelledby="t-ruta">
-      <h2 id="t-ruta">Ruta <span class="der c-eti">más intenso, más rápido</span></h2>
+      <h2 id="t-ruta">Ruta <span class="c-eti">más intenso, más rápido</span>
+        <a class="der c-btn mini" id="gpx" download title="Para importarla en la app del COROS (Rutas → importar) y seguirla en el reloj">GPX para el reloj</a></h2>
+      <p class="nombre-ruta" id="nombre-ruta" hidden></p>
       <svg class="ruta" id="ruta" role="img" aria-label="Recorrido de la carrera"></svg>
     </section>
   </div>
@@ -93,6 +117,21 @@
       <div class="leyenda" id="ley"></div>
       <div class="lienzo"><canvas id="g-ritmo" role="img" aria-label="Ritmo y frecuencia cardiaca a lo largo de la carrera"></canvas></div>
       <div class="lienzo bajo" id="l-alt"><canvas id="g-alt" role="img" aria-label="Altitud a lo largo de la carrera"></canvas></div>
+    </section>
+    <section class="carta c-carta" id="c-fant" hidden aria-labelledby="t-fant">
+      <h2 id="t-fant">Contra tu fantasma <span class="der c-eti" id="fant-veces"></span></h2>
+      <div id="fant"></div>
+    </section>
+    <section class="carta c-carta" id="c-segs" hidden aria-labelledby="t-segs">
+      <h2 id="t-segs">Segmentos</h2>
+      <ul class="segs" id="segs"></ul>
+      <form class="nuevo-seg" id="f-seg">
+        <div class="fila"><span>Desde</span><input type="range" id="seg-desde" min="0" step="10" aria-label="Desde (metros)"><output id="o-desde"></output></div>
+        <div class="fila"><span>Hasta</span><input type="range" id="seg-hasta" min="0" step="10" aria-label="Hasta (metros)"><output id="o-hasta"></output></div>
+        <div class="abajo"><input class="c-campo" id="seg-nombre" placeholder="Nombre: «Cuesta del parque»" maxlength="60" aria-label="Nombre del segmento">
+          <button class="c-btn pri" type="submit">Crear segmento</button></div>
+        <p class="pie" id="seg-msg" style="margin:0">Elige un tramo (se marca en la ruta): se buscará en todas tus carreras, las de antes y las que vengan.</p>
+      </form>
     </section>
     <section class="carta c-carta" id="c-parc" hidden aria-labelledby="t-parc">
       <h2 id="t-parc">Kilómetro a kilómetro</h2>
@@ -112,7 +151,7 @@ const mmss = s => s == null ? "—" : `${Math.floor(Math.round(s) / 60)}:${Strin
 const hms = s => s >= 3600 ? `${Math.floor(s / 3600)}:${mmss(s % 3600).padStart(5, "0")}` : mmss(s);
 const coma = (x, d = 1) => Number(x).toLocaleString("es-ES", {maximumFractionDigits: d});
 const ID = new URLSearchParams(location.search).get("id") || "";
-let A = null;
+let A = null, RT = null;
 
 function puerta(mostrar, msg) {
   $("#puerta").toggleAttribute("data-on", mostrar);
@@ -160,6 +199,112 @@ function pinta() {
   parciales();
   ruta();
   graficas();
+  fantasma();
+  segmentos();
+}
+// ---------- la ruta de la biblioteca y los segmentos ----------
+const deM = m => m >= 1000 ? `${coma(m / 1000, 2)} km` : `${Math.round(m)} m`;
+const PUESTO = n => n === 1 ? "Mejor marca" : `${n}.º`;
+function segmentos() {
+  const nr = $("#nombre-ruta");
+  nr.hidden = !A.ruta;
+  if (A.ruta) {
+    const a = el("a", null, A.ruta.nombre);
+    a.href = "/carrera.html#rutas-carta";
+    nr.replaceChildren("Ruta: ", a, A.ruta.veces > 1 ? ` · ${A.ruta.veces} veces` : " · la primera vez");
+  }
+  const P = puntos().filter(p => p[C.lat] != null && p[C.m] != null);
+  if (P.length < 5) return;
+  $("#c-segs").hidden = false;
+  const S = A.segmentos || [];
+  $("#segs").replaceChildren(...S.map(s => {
+    const li = el("li"), mejorAqui = Math.min(...s.aqui.map(x => x.seg));
+    li.append(el("span", "n", s.nombre), el("b", null, `${mmss(mejorAqui)} · ${mmss(mejorAqui / s.m * 1000)}/km`),
+              el("small", null, `${deM(s.m)} · ${s.veces === 1 ? "primera vez" : s.puesto === 1 ? `mejor marca de ${s.veces}` : `${PUESTO(s.puesto)} de ${s.veces}`}` +
+                 (s.mejor && s.puesto !== 1 ? ` · tu mejor: ${mmss(s.mejor.seg)} el ${diaMes(s.mejor.dia)}` : "")));
+    return li;
+  }));
+  $("#segs").hidden = !S.length;
+  const fin = Math.floor(P.at(-1)[C.m] / 10) * 10, d = $("#seg-desde"), h = $("#seg-hasta");
+  if (!d.max) {
+    d.max = h.max = fin;
+    d.value = Math.round(fin * 0.3 / 10) * 10; h.value = Math.round(fin * 0.45 / 10) * 10;
+  }
+  const marca = () => {
+    if (+d.value > +h.value - 100) { if (document.activeElement === d) d.value = +h.value - 100; else h.value = +d.value + 100; }
+    $("#o-desde").textContent = deM(+d.value); $("#o-hasta").textContent = deM(+h.value);
+    resalta(+d.value, +h.value);
+  };
+  d.oninput = h.oninput = marca;
+  marca();
+}
+function resalta(desde, hasta) {
+  const svg = $("#ruta");
+  svg.querySelector(".sel")?.remove();
+  if (!RT) return;
+  const pts = RT.P.map((p, i) => [p, i]).filter(([p]) => p[C.m] != null && p[C.m] >= desde && p[C.m] <= hasta);
+  if (pts.length < 2) return;
+  const pl = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+  pl.setAttribute("class", "sel");
+  pl.setAttribute("points", pts.map(([, i]) => RT.X(i) + "," + RT.Y(i)).join(" "));
+  svg.insertBefore(pl, svg.querySelector("circle"));
+}
+$("#f-seg").onsubmit = async e => {
+  e.preventDefault();
+  const msg = $("#seg-msg");
+  msg.textContent = "Buscando ese tramo en todas tus carreras…";
+  const r = await fetch("/api/segmentos", {method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({fit: ID, desde: +$("#seg-desde").value, hasta: +$("#seg-hasta").value, nombre: $("#seg-nombre").value})}).catch(() => null);
+  const j = r ? await r.json().catch(() => ({})) : {};
+  if (!r || !r.ok) { msg.textContent = j.detail || "No se pudo crear"; return; }
+  msg.textContent = `«${j.nombre}» creado: ${j.veces === 1 ? "solo lo has hecho hoy" : `lo has hecho ${j.veces} veces`}.`;
+  $("#seg-nombre").value = "";
+  await cargar();
+};
+// ---------- carrera contra tu fantasma: la última vez que hiciste esta ruta (lo calcula el servidor al subirla) ----------
+const conSigno = s => (s < 0 ? "−" : s > 0 ? "+" : "±") + mmss(Math.abs(s));
+const diaMes = s => s ? `${+s.slice(8)}/${+s.slice(5, 7)}` : "";
+function fantasma() {
+  const P = puntos();
+  if (!P.some(p => p[C.lat] != null)) return;
+  $("#gpx").href = `/api/actividad/${encodeURIComponent(ID)}/gpx`;
+  $("#c-fant").hidden = false;
+  const F = A.traza.fantasma, caja = $("#fant");
+  if (!F || !F.ultima) {
+    $("#fant-veces").textContent = "";
+    caja.replaceChildren(el("p", "vacio", "Primera vez en esta ruta. Cuando la repitas, correrás contra esta."));
+    return;
+  }
+  const u = F.ultima;
+  $("#fant-veces").textContent = F.veces === 1 ? "la 2.ª vez en esta ruta" : `${F.veces + 1} veces en esta ruta`;
+  const cab = el("div", "fant-cab");
+  const b = el("b", u.final < 0 ? "delante" : null, conSigno(u.final));
+  cab.append(b, el("span", null, Math.abs(u.final) < 3 ? `igual que el ${diaMes(u.dia)}` :
+    `${u.final < 0 ? "más rápido" : "más lento"} que el ${diaMes(u.dia)} (${mmss(u.seg)} en ${coma(u.m / 1000, 2)} km)`));
+  const hijos = [cab];
+  if (F.mejor) hijos.push(el("p", "pie", `Frente a tu mejor vez aquí, el ${diaMes(F.mejor.dia)}: ${conSigno(F.mejor.final)}.`));
+  const lienzo = el("div", "lienzo bajo"), cv = el("canvas");
+  cv.setAttribute("role", "img");
+  cv.setAttribute("aria-label", "Segundos por delante (arriba) o por detrás (abajo) de la última vez, a lo largo de la carrera");
+  lienzo.append(cv);
+  const kms = el("div", "kms");
+  kms.append(...u.km.map(k => { const s = el("span", k.dif < 0 ? "delante" : null); s.append(el("i", null, `km ${k.km}`), el("b", null, conSigno(k.dif))); return s; }));
+  hijos.push(lienzo, kms, el("p", "pie", "Arriba de la línea vas por delante. Tiempo en movimiento: las pausas no cuentan."));
+  caja.replaceChildren(...hijos);
+  if (!window.Chart) return;
+  const s = getComputedStyle(document.documentElement), v = n => s.getPropertyValue(n).trim();
+  const datos = [{x: 0, y: 0}, ...u.serie.map(([m, d]) => ({x: m / 1000, y: -d}))];
+  graf.f?.destroy();
+  graf.f = new Chart(cv, {type: "line", data: {datasets: [{data: datos, borderColor: v("--acento"), borderWidth: 2, pointRadius: 0, tension: .3,
+      fill: {target: "origin", above: v("--acento") + "33", below: v("--peligro") + "33"}}]},
+    options: {responsive: true, maintainAspectRatio: false, animation: false, parsing: false,
+      interaction: {mode: "index", intersect: false},
+      plugins: {legend: {display: false}, tooltip: {callbacks: {title: c => `${coma(c[0].parsed.x, 2)} km`,
+        label: c => c.parsed.y === 0 ? "Empatados" : `${mmss(Math.abs(c.parsed.y))} ${c.parsed.y > 0 ? "por delante" : "por detrás"}`}}},
+      scales: {x: {type: "linear", min: 0, max: datos.at(-1).x, grid: {display: false}, border: {color: v("--linea")},
+                   ticks: {color: v("--tenue"), font: {size: 11}, stepSize: 1, callback: x => Number.isInteger(x) ? `${x} km` : ""}},
+               y: {grid: {color: c => c.tick.value === 0 ? v("--suave") : v("--linea")}, border: {display: false},
+                   ticks: {color: v("--tenue"), font: {size: 11}, maxTicksLimit: 5, callback: y => conSigno(-y)}}}}});
 }
 
 function parciales() {
@@ -218,6 +363,7 @@ function ruta() {
   svg.append(mk("circle", {cx: X(0), cy: Y(0), r: 11, fill: "var(--serie-2)"}),
              mk("circle", {cx: X(P.length - 1), cy: Y(P.length - 1), r: 11, fill: "var(--texto)"}));
   svg.setAttribute("aria-label", `Recorrido de ${coma(A.km, 2)} km; el punto verde es la salida`);
+  RT = {P, X, Y};
 }
 
 const graf = {};
@@ -265,7 +411,7 @@ function graficas() {
                          fill: "start", borderWidth: 1.5, pointRadius: 0, tension: .3}]}});
   }
 }
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => A && (ruta(), graficas()));
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => A && (ruta(), graficas(), fantasma(), segmentos()));
 
 $("#f-clave").onsubmit = async e => {
   e.preventDefault();
