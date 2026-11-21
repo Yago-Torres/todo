@@ -376,7 +376,8 @@ private struct MapaActividad: View {
         VStack(alignment: .leading, spacing: Tema.Espacio.s) {
             TituloCarta(titulo: "Ruta", detalle: "verde, la salida")
             if let ruta {
-                Text(ruta.nombre + (ruta.veces > 1 ? " · " + String(ruta.veces) + " veces" : " · la primera vez"))
+                let veces: String = ruta.veces > 1 ? " · " + String(ruta.veces) + " veces" : " · la primera vez"
+                Text(ruta.nombre + veces)
                     .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
             }
             Map(interactionModes: [.pan, .zoom]) {

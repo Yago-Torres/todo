@@ -182,18 +182,29 @@ private struct PuntoFantasma: Identifiable {
 struct CartaFantasma: View {
     let f: Fantasma?
 
+    private func veces(_ n: Int) -> String {
+        n == 1 ? "2.ª vez en esta ruta" : String(n + 1) + " veces aquí"
+    }
+
+    private func comparado(_ u: Comparacion) -> String {
+        let dia: String = diaMes(u.dia)
+        if abs(u.fin) < 3 { return "igual que el " + dia }
+        return (u.fin < 0 ? "más rápido" : "más lento") + " que el " + dia
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Tema.Espacio.s) {
             if let f, let u = f.ultima {
-                TituloCarta(titulo: "Contra tu fantasma", detalle: f.veces == 1 ? "2.ª vez en esta ruta" : String(f.veces + 1) + " veces aquí")
+                TituloCarta(titulo: "Contra tu fantasma", detalle: veces(f.veces))
                 HStack(alignment: .firstTextBaseline, spacing: Tema.Espacio.s) {
                     Text(conSigno(u.fin)).font(.system(size: 30, weight: .bold, design: .rounded)).monospacedDigit()
                         .foregroundStyle(u.fin < 0 ? Tema.acento : Tema.texto)
-                    Text(abs(u.fin) < 3 ? "igual que el " + diaMes(u.dia) : (u.fin < 0 ? "más rápido" : "más lento") + " que el " + diaMes(u.dia))
+                    Text(comparado(u))
                         .font(Tema.fuente(.texto)).foregroundStyle(Tema.suave)
                 }
                 if let m = f.mejor {
-                    Text("Frente a tu mejor vez aquí, el " + diaMes(m.dia) + ": " + conSigno(m.fin))
+                    let frente: String = "Frente a tu mejor vez aquí, el " + diaMes(m.dia)
+                    Text(frente + ": " + conSigno(m.fin))
                         .font(Tema.fuente(.pequeno)).foregroundStyle(Tema.suave)
                 }
                 GraficaFantasma(serie: u.serie)
@@ -271,15 +282,22 @@ private struct FilaSegmentoAqui: View {
     let s: SegmentoAqui
 
     private var tiempo: Int { s.aqui.map(\.seg).min() ?? 0 }
+    private var marca: String {
+        let porKm: Double = Double(tiempo) / Double(max(1, s.m)) * 1000
+        return mmssR(Double(tiempo)) + " · " + mmssR(porKm) + "/km"
+    }
     private var detalle: String {
-        var t = metros(s.m) + " · "
+        var t: String = metros(s.m) + " · "
         if s.veces == 1 {
             t += "primera vez"
         } else if s.puesto == 1 {
             t += "mejor marca de " + String(s.veces)
         } else {
             t += String(s.puesto ?? 0) + ".º de " + String(s.veces)
-            if let m = s.mejor { t += " · tu mejor: " + mmssR(Double(m.seg)) + " el " + diaMes(m.dia) }
+            if let m = s.mejor {
+                let mejor: String = mmssR(Double(m.seg))
+                t += " · tu mejor: " + mejor + " el " + diaMes(m.dia)
+            }
         }
         return t
     }
@@ -289,7 +307,7 @@ private struct FilaSegmentoAqui: View {
             HStack {
                 Text(s.nombre).font(Tema.fuente(.texto, peso: .semibold)).foregroundStyle(Tema.texto).lineLimit(1)
                 Spacer(minLength: 6)
-                Text(mmssR(Double(tiempo)) + " · " + mmssR(Double(tiempo) / Double(max(1, s.m)) * 1000) + "/km")
+                Text(marca)
                     .font(Tema.fuente(.texto, peso: .semibold)).monospacedDigit()
                     .foregroundStyle(s.puesto == 1 && s.veces > 1 ? Tema.acento : Tema.texto)
             }
@@ -312,8 +330,7 @@ struct CartaRutas: View {
             TituloCarta(titulo: "Tus rutas", detalle: "GPX → COROS → reloj")
             if let b = biblio {
                 if let s = b.sesion {
-                    Text(FechasES.corta(s.dia) + ": " + s.n + ", unos " + kmTexto(s.km) + " km"
-                         + (b.sugeridas.isEmpty ? ". Ninguna de tus rutas se acerca todavía." : " → te propongo " + (b.sugeridas.count == 1 ? "la marcada." : "las marcadas.")))
+                    Text(frase(s, sugeridas: b.sugeridas.count))
                         .font(Tema.fuente(.texto)).foregroundStyle(Tema.texto).fixedSize(horizontal: false, vertical: true)
                 }
                 if b.rutas.isEmpty {
@@ -340,6 +357,20 @@ struct CartaRutas: View {
         .task(id: fit.subidas) { await carga() }
     }
 
+    private func frase(_ s: SesionRuta, sugeridas: Int) -> String {
+        let cuando: String = FechasES.corta(s.dia) + ": " + s.n
+        let cuanto: String = ", unos " + kmTexto(s.km) + " km"
+        let cuales: String
+        if sugeridas == 0 {
+            cuales = ". Ninguna de tus rutas se acerca todavía."
+        } else if sugeridas == 1 {
+            cuales = " → te propongo la marcada."
+        } else {
+            cuales = " → te propongo las marcadas."
+        }
+        return cuando + cuanto + cuales
+    }
+
     private func carga() async {
         if let d = try? await API.datos("/api/rutas"), let b = try? JSONDecoder().decode(Biblioteca.self, from: d) {
             withAnimation(Tema.Muelle.pantalla) { biblio = b }
@@ -356,8 +387,12 @@ private struct FilaRuta: View {
     let abre: () -> Void
 
     private var detalle: String {
-        var t = kmTexto(r.km) + " km · " + (r.veces == 1 ? "1 vez" : String(r.veces) + " veces")
-        if let m = r.mejor, let ri = m.ritmo { t += " · mejor " + ri.replacingOccurrences(of: " /km", with: "") + "/km el " + diaMes(m.dia) }
+        let veces: String = r.veces == 1 ? "1 vez" : String(r.veces) + " veces"
+        var t: String = kmTexto(r.km) + " km · " + veces
+        if let m = r.mejor, let ri = m.ritmo {
+            let ritmo: String = ri.replacingOccurrences(of: " /km", with: "")
+            t += " · mejor " + ritmo + "/km el " + diaMes(m.dia)
+        }
         return t
     }
 
@@ -389,9 +424,13 @@ private struct FilaSegmento: View {
     let s: Segmento
 
     private var detalle: String {
-        var t = metros(s.m) + " · " + (s.veces == 1 ? "1 vez" : String(s.veces) + " veces")
+        let veces: String = s.veces == 1 ? "1 vez" : String(s.veces) + " veces"
+        var t: String = metros(s.m) + " · " + veces
         if let m = s.mejor {
-            t += " · mejor " + mmssR(Double(m.seg)) + " (" + mmssR(Double(m.seg) / Double(max(1, s.m)) * 1000) + "/km) el " + diaMes(m.dia)
+            let porKm: Double = Double(m.seg) / Double(max(1, s.m)) * 1000
+            let tiempo: String = mmssR(Double(m.seg))
+            t += " · mejor " + tiempo
+            t += " (" + mmssR(porKm) + "/km) el " + diaMes(m.dia)
         }
         return t
     }
