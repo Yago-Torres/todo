@@ -36,6 +36,14 @@
   h1 { margin: 0; font-size: var(--t-titulo); font-weight: 700; letter-spacing: -.02em; }
   .top nav { margin-left: auto; display: flex; gap: 6px; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
   .top nav a { text-decoration: none; }
+  /* arriba del todo: a Carrera (y Carrera tiene su «‹ Entreno») */
+  a.acceso-carrera { grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center;
+                     padding: 14px 16px; color: inherit; text-decoration: none; }
+  a.acceso-carrera:active { transform: scale(.99); }
+  a.acceso-carrera .ico { font-size: 22px; }
+  a.acceso-carrera b { display: block; font-size: var(--t-destacado); }
+  a.acceso-carrera small { display: block; color: var(--suave); font-size: var(--t-pequeno); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  a.acceso-carrera .flecha { color: var(--tenue); font-size: 20px; }
   #estado { font-size: var(--t-pequeno); color: var(--suave); }
   .carta { padding: 16px; min-width: 0; }
   .carta h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -303,6 +311,12 @@
     <span id="estado">Cargando…</span>
     <nav><a class="c-btn mini" href="/">Hoy</a><a class="c-btn mini" href="/habitos.html">Hábitos</a><a class="c-btn mini" href="/pendientes.html">Pendientes</a><a class="c-btn mini" href="/salud.html">Salud</a><a class="c-btn mini" href="/gastos.html">Gastos</a></nav>
   </header>
+
+  <a class="acceso-carrera c-carta" href="/carrera.html" aria-label="Carrera: el plan de 5k">
+    <span class="ico" aria-hidden="true">🏃</span>
+    <span><b>Carrera</b><small id="acc-carrera">Plan de 5k</small></span>
+    <span class="flecha" aria-hidden="true">›</span>
+  </a>
 
   <div class="col">
     <section class="carta c-carta" aria-labelledby="t-hoy">
@@ -1747,6 +1761,19 @@ cargar();
   addEventListener("visibilitychange", () => document.visibilityState === "visible" && cargar());
   $("#f-clave").addEventListener("submit", () => setTimeout(cargar, 1500));   // tras entrar con la contraseña
   cargar();
+})();
+
+// la tarjeta de Carrera: el 5k estimado y la próxima sesión del plan
+(async () => {
+  try {
+    const r = await fetch("/api/carrera"); if (!r.ok) return;
+    const c = await r.json(), hoy = new Date().toLocaleDateString("sv");
+    const mm = s => `${Math.floor(Math.round(s) / 60)}:${String(Math.round(s) % 60).padStart(2, "0")}`;
+    const p = (c.agenda || []).find(a => !a.hecho && a.dia >= hoy);
+    const d = p ? new Date(p.dia + "T12:00:00") : null;
+    document.getElementById("acc-carrera").textContent = "Plan de 5k" + (c.estimacion ? ` · estimado ${mm(c.estimacion.seg)}` : "")
+      + (p ? ` · ${["dom", "lun", "mar", "mié", "jue", "vie", "sáb"][d.getDay()]} ${d.getDate()}: ${p.n}` : "");
+  } catch (e) { /* sin datos: se queda «Plan de 5k» */ }
 })();
 </script>
 </body>

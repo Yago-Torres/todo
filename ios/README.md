@@ -248,6 +248,9 @@ PantallaEditable(pantalla: "app-entreno", titulo: "Entreno",
 - **Carreras del COROS** (`Actividades.swift`): la carta «Tus carreras», «Subir .fit» y el detalle (`PantallaActividad`:
   cifras, mapa de MapKit, ritmo y pulso, km a km). Info.plist declara el tipo `com.garmin.fit`, así Tom sale en Compartir
   de la app del COROS; el fichero llega por `onOpenURL` (HoyApp) y `CarrerasFit.sube` lo manda a `/api/actividad/fit`.
+- **La Pi** (`Sistema/PantallaSistema.swift`): la tarjeta «La Pi» en Hoy (`BloqueSistemaHoy`, GET /api/sistema) abre `/sistema.html`
+  nativa (Resumen, Fallos, Consumo con gráficas) con «‹ Hoy». **Carrera** desde Entreno: `AccesoCarrera` arriba del todo, y
+  «‹ Entreno» en `PantallaCarrera`.
 - **Guiadas a medias** (`GuiaEnCurso.sal`, `HoyYSemana`: `BotonGuia`, `EstadoGuia`): salir apunta lo hecho con `POST /api/guia`;
   la tarjeta enseña el %, «Seguir desde el paso N» y el ajuste del lunes. `RutinaGym` conserva `adapta` y `ajuste`.
 - **Rutas** (`Rutas.swift`): en el detalle, «Contra tu fantasma» (la última vez en esa ruta), los segmentos por los que

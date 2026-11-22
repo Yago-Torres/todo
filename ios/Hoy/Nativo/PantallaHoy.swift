@@ -12,7 +12,7 @@ struct PantallaHoy: View {
     static var bloques: [(String, String)] {
         let resto: [(String, String)] = [
             ("anillos", "Anillos del día"), ("habitos", "Hábitos"), ("rachas", "Rachas"), ("entreno", "Entreno"), ("tareas", "Para hoy"),
-            ("salud", "Salud"), ("carrera", "Carrera"), ("gastos", "Gastos"), ("anio", "Tu año"),
+            ("salud", "Salud"), ("carrera", "Carrera"), ("gastos", "Gastos"), ("anio", "Tu año"), ("sistema", "La Pi"),
         ]
         let semana = ("semana", "Semana")
         return domingoOLunes ? [semana] + resto : resto + [semana]
@@ -60,6 +60,7 @@ struct PantallaHoy: View {
             if let p = hoy?.carrera?.proxima { tarjetaCarrera(p) }
         case "semana": BloqueSemana(destacado: Self.domingoOLunes)
         case "anio": BloqueAnioHoy()
+        case "sistema": BloqueSistemaHoy()
         case "gastos":
             if let g = hoy?.gastos, g.total != nil { tarjetaGastos(g) }
         default: EmptyView()

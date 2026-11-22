@@ -39,7 +39,7 @@ final class Navegador: ObservableObject {
     static func seccion(_ ruta: String) -> String {
         let camino = ruta.components(separatedBy: CharacterSet(charactersIn: "?#")).first ?? ruta
         let equivalentes = ["/hoy.html": "/", "/index.html": "/habitos.html", "/carrera.html": "/entreno.html",
-                            "/sueno.html": "/salud.html", "/anio.html": "/", "": "/"]
+                            "/sueno.html": "/salud.html", "/anio.html": "/", "/sistema.html": "/", "": "/"]
         return equivalentes[camino] ?? camino
     }
 

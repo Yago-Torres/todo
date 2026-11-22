@@ -17,6 +17,7 @@ enum RegistroNativo {
         ("/inversiones.html", { AnyView(PantallaInversiones()) }),
         ("/claude.html", { AnyView(PantallaClaude()) }),
         ("/anio.html", { AnyView(PantallaAnio()) }),   // sin entrada en la barra: se abre tocando «Tu año» en Hoy
+        ("/sistema.html", { AnyView(PantallaSistema()) }),   // igual: desde la tarjeta «La Pi» de Hoy
         ("/ajustes.html", { AnyView(PantallaAjustes()) }),
         // ← cada sección nueva, aquí (una línea, en el orden de la barra)
     ]

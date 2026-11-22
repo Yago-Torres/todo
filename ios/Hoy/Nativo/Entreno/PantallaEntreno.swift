@@ -28,6 +28,7 @@ struct PantallaEntreno: View {
         }) { editar in
             cabecera(editar)
             avisos
+            AccesoCarrera()   // arriba del todo: a Carrera (y Carrera tiene su «‹ Entreno»)
         } bloque: { id in
             bloque(id)
         }

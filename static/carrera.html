@@ -33,6 +33,7 @@
   h1 { margin: 0; font-size: var(--t-titulo); font-weight: 700; letter-spacing: -.02em; }
   .top nav { margin-left: auto; display: flex; gap: 6px; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
   .top nav a { text-decoration: none; }
+  .volver { color: var(--acento); text-decoration: none; font-weight: 500; font-size: var(--t-texto); margin-right: 4px; }
   #estado { font-size: var(--t-pequeno); color: var(--suave); }
   .carta { padding: 16px; min-width: 0; }
   .carta h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -120,6 +121,7 @@
 
 <div class="app">
   <header class="top">
+    <a class="volver" href="/entreno.html" aria-label="Volver a Entreno">‹ Entreno</a>
     <h1>Carrera</h1>
     <span id="estado">Cargando…</span>
     <nav><a class="c-btn mini" href="/">Hoy</a><a class="c-btn mini" href="/habitos.html">Hábitos</a><a class="c-btn mini" href="/pendientes.html">Pendientes</a><a class="c-btn mini" href="/salud.html">Salud</a><a class="c-btn mini" href="/gastos.html">Gastos</a></nav>

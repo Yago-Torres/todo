@@ -153,6 +153,18 @@ struct PantallaCarrera: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: Tema.Espacio.l) {
+                if !enHoja {
+                    Button {
+                        Haptica.shared.toca(.desmarcar)
+                        Navegador.shared.toca("/entreno.html")
+                    } label: {
+                        Label("Entreno", systemImage: "chevron.left").font(Tema.fuente(.texto, peso: .medium))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Tema.acento)
+                    .padding(.top, Tema.Espacio.s)
+                    .accessibilityHint("Vuelve a Entreno")
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Plan de 5k").estiloEtiqueta().foregroundStyle(Tema.suave)
                     Text("Carrera").font(Tema.fuente(.titulo)).foregroundStyle(Tema.texto)
