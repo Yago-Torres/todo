@@ -76,9 +76,11 @@ COOKIE = "todo_sesion"
 VIDA = 90 * 24 * 3600  # 90 días: que no te eche de la pantalla de inicio del iPhone
 
 import intentos
+import metricas
 
 app = FastAPI()
 intentos.instala(app)   # 10 contraseñas malas en 15 min desde una IP: bloqueada 15 min (intentos.py)
+metricas.instala(app, "todo-aitana" if "aitana" in str(DB) else "todo")   # peticiones, tiempos y fallos por minuto → observa.db (metricas.py)
 
 
 @app.on_event("startup")
@@ -2755,6 +2757,24 @@ async def tom(a: dict, request: Request, todo_sesion: str = Cookie(None), author
         except (ValueError, KeyError, TypeError):
             pass
     return Response(r, status_code=estado, media_type="application/json")
+
+
+# ---------- el panel del sistema (observa.py + metricas.py → /sistema.html) ----------
+_cache_sistema = {}
+
+
+@app.get("/api/sistema")
+def sistema(dias: int = 7, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """Accesos, consumo, fallos, servicios y timers de la Pi. Con 60 s de caché: pregunta mucho a systemd."""
+    exige(todo_sesion, authorization)
+    dias = max(1, min(int(dias), 90))
+    c = _cache_sistema.get(dias)
+    if c and time.time() - c[0] < 60:
+        return c[1]
+    import observa
+    d = observa.panel(dias)
+    _cache_sistema[dias] = (time.time(), d)
+    return d
 
 
 # ---------- capturas compartidas desde Tom ----------

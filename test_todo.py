@@ -1246,6 +1246,36 @@ def test_cache_vault():
     print("caché del vault ok")
 
 
+def test_observa():
+    import tempfile, time, metricas, observa
+    from pathlib import Path
+    db = Path(tempfile.mkdtemp()) / "observa.db"
+    metricas.DB, observa.DB = db, db
+    observa.ESTADO = db.with_name("estado.json")
+    assert metricas.grupo("/api/inversiones/precios") == "/api/inversiones" and metricas.grupo("/carrera.html") == "páginas"
+    assert metricas.grupo("/calma.css") == "estáticos" and metricas.grupo("/api/state") == "/api/state"
+    for ms, codigo in ((20, 200), (40, 200), (1500, 200), (30, 500), (5, 401)):
+        metricas.apunta("/api/state", codigo, ms)
+    metricas.vuelca("todo")
+    metricas.apunta("/api/state", 200, 10)
+    metricas.vuelca("todo")                                       # el mismo minuto se suma, no se pisa
+    c = observa.conecta()
+    c.execute("INSERT INTO muestra VALUES (?,?,?)", (int(time.time()), "pi:temperatura", 61.5))
+    c.execute("INSERT INTO evento VALUES (?,?,?,?)", (int(time.time()), "reinicio", "todo-bot", "se ha reiniciado 1 vez/veces"))
+    c.commit(); c.close()
+    p = observa.panel(1)
+    a = p["ahora"]
+    assert a["peticiones_24h"] == 6 and a["fallos_5xx_24h"] == 1 and a["temperatura"] == 61.5, a
+    r = next(x for x in p["rutas"] if x["grupo"] == "/api/state")
+    assert r["n"] == 6 and r["e5"] == 1 and r["max"] == 1500 and r["ms"] == round(1605 / 6)
+    assert p["eventos"][0]["quien"] == "todo-bot" and a["eventos_24h"] == 1
+    assert observa._caido({"ActiveState": "failed"}) and observa._caido({"ActiveState": "inactive", "Restart": "always"})
+    assert not observa._caido({"ActiveState": "inactive", "Restart": "no"})   # los de una vez al arrancar
+    assert observa.PINTA_ERROR.search("Traceback (most recent call last):") and observa.PINTA_ERROR.search("No he podido con la foto")
+    assert not observa.PINTA_ERROR.search("Apuntado: 12 € en Mercadona")
+    print("observa ok")
+
+
 def test_cobro_y_anio():
     import cobro, anio
     from datetime import date
@@ -1576,4 +1606,5 @@ if __name__ == "__main__":
     test_comunidad()
     test_intentos()
     test_cache_vault()
+    test_observa()
     print("ok")

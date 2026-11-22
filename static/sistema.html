@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="es" data-vt>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#F2F2F2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)">
+<title>Sistema</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.json" crossorigin="use-credentials">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preload" href="/fuentes/instrument-sans-normal-latin.woff2?v=1" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/calma.css?v=1c2c21b0">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="/calma.js?v=1c2c21b0"></script>
+<style>
+  /* El panel de la Pi: accesos, consumo, fallos, servicios y timers (observa.py + metricas.py), y el mapa explicado. */
+  @view-transition { navigation: auto; }
+  @media (prefers-reduced-motion: reduce) { @view-transition { navigation: none; } }
+  body { padding: 16px; padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+  .app { max-width: 1120px; margin: 0 auto; display: grid; gap: 14px; }
+  .top { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 4px 2px 0; }
+  h1 { margin: 0; font-size: var(--t-titulo); font-weight: 700; letter-spacing: -.02em; }
+  #estado { font-size: var(--t-pequeno); color: var(--suave); }
+  .top .c-seg { margin-left: auto; min-width: 180px; }
+  .pestanas { position: sticky; top: 0; z-index: 3; }
+  .rejilla { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 900px) { .rejilla.dos { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .carta { padding: 16px; min-width: 0; }
+  .carta h2 { margin: 0 0 4px; font-size: 16px; font-weight: 600; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .carta h2 small { margin-left: auto; font-weight: 400; font-size: var(--t-pequeno); color: var(--suave); }
+  .carta .que { margin: 0 0 12px; font-size: var(--t-pequeno); color: var(--suave); }
+  .cifras { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .cifra { background: var(--carta); border-radius: var(--r-s); padding: 12px; min-width: 0; box-shadow: var(--sombra); }
+  .cifra small { display: block; font-size: var(--t-pequeno); color: var(--suave); }
+  .cifra b { display: block; font-size: 26px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cifra i { font-style: normal; font-size: var(--t-pequeno); color: var(--suave); }
+  /* «bien» siempre verde: --acento cambia con el aspecto que elijas (en algunos es granate) */
+  :root { --bien: var(--serie-3); }
+  .cifra.mal b { color: var(--peligro); } .cifra.ojo b { color: var(--aviso); } .cifra.bien b { color: var(--bien); }
+  .lienzo { position: relative; height: 240px; min-width: 0; }
+  .lienzo.bajo { height: 180px; }
+  .ley { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 8px 0 0; font-size: var(--t-pequeno); color: var(--suave); }
+  .ley span { display: inline-flex; align-items: center; gap: 5px; }
+  .ley i { width: 10px; height: 10px; border-radius: 3px; background: var(--c); }
+  table.t { width: 100%; border-collapse: collapse; font-size: var(--t-texto); font-variant-numeric: tabular-nums; }
+  table.t th { text-align: left; font-weight: 400; font-size: var(--t-pequeno); color: var(--suave); padding: 0 6px 6px; }
+  table.t td { padding: 7px 6px; border-top: 1px solid var(--linea); vertical-align: top; }
+  table.t td.n, table.t th.n { text-align: right; white-space: nowrap; }
+  .tabla { overflow-x: auto; }
+  .eventos { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .eventos li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; padding: 9px 10px; border-radius: var(--r-s); background: var(--carta-2); font-size: var(--t-texto); }
+  .eventos li small { grid-column: 2; color: var(--suave); font-size: var(--t-pequeno); }
+  .vacio { margin: 0; padding: 8px 2px; color: var(--suave); font-size: var(--t-texto); }
+  .punto { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--c, var(--tenue)); margin-right: 6px; vertical-align: 1px; }
+  [hidden] { display: none !important; }
+  /* el mapa */
+  .mapa .lienzo-mapa { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -16px; padding: 0 16px; }
+  .mapa svg { width: 100%; min-width: 640px; height: auto; display: block; max-width: 760px; margin: 0 auto; }
+  @media (max-width: 680px) { .mapa .que::after { content: " En el móvil, desliza el mapa de lado."; } }
+  .mapa .nodo rect { fill: var(--carta-2); stroke: var(--linea); stroke-width: 1.5; }
+  .mapa .nodo { cursor: pointer; }
+  .mapa .nodo:hover rect, .mapa .nodo.sel rect { stroke: var(--acento); stroke-width: 2.5; }
+  .mapa .nodo text { fill: var(--texto); font-size: 13px; font-weight: 600; }
+  .mapa .nodo text.sub { fill: var(--suave); font-size: 10.5px; font-weight: 400; }
+  .mapa .caja { fill: none; stroke: var(--acento); stroke-width: 1.5; stroke-dasharray: 5 4; opacity: .7; }
+  .mapa .titulo-caja { fill: var(--acento); font-size: 12px; font-weight: 700; letter-spacing: .06em; }
+  .mapa .flecha { stroke: var(--tenue); stroke-width: 1.6; fill: none; marker-end: url(#punta); }
+  .mapa .flecha.datos { stroke-dasharray: 3 4; }
+  .mapa .etiq { fill: var(--suave); font-size: 10px; }
+  .mapa circle.vivo { stroke: var(--carta); stroke-width: 2; }
+  .explica { margin-top: 14px; }
+  .explica h3 { margin: 0 0 6px; font-size: 17px; }
+  .explica p { margin: 6px 0; font-size: var(--t-texto); line-height: 1.5; }
+  .explica p b { font-weight: 650; }
+  .porques { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+  .porques div { background: var(--carta-2); border-radius: var(--r-s); padding: 12px; font-size: var(--t-texto); line-height: 1.45; }
+  .porques b { display: block; margin-bottom: 4px; }
+  .puerta input, .puerta button { width: 100%; }
+</style>
+<body data-fondo="curvas">
+<div class="puerta c-puerta" id="puerta">
+  <form id="f-clave">
+    <p id="puerta-msg">Contraseña de todo</p>
+    <input class="c-campo" type="password" name="pass" required autocomplete="current-password" aria-label="Contraseña">
+    <button class="c-btn pri" type="submit">Entrar</button>
+  </form>
+</div>
+<div class="app">
+  <header class="top">
+    <h1>Sistema</h1>
+    <span id="estado">Cargando…</span>
+    <div class="c-seg" id="rango" role="tablist" aria-label="Periodo">
+      <button data-d="1">24 h</button><button data-d="7" aria-selected="true">7 días</button><button data-d="30">30 días</button>
+    </div>
+  </header>
+  <nav class="c-seg pestanas" id="pestanas" role="tablist" aria-label="Secciones">
+    <button data-p="resumen" aria-selected="true">Resumen</button><button data-p="accesos">Accesos</button>
+    <button data-p="consumo">Consumo</button><button data-p="fallos">Fallos</button><button data-p="mapa">Mapa</button>
+  </nav>
+
+  <!-- RESUMEN -->
+  <section data-pest="resumen" class="rejilla">
+    <div class="cifras" id="cifras"></div>
+    <div class="rejilla dos">
+      <section class="carta c-carta"><h2>Lo último que ha pasado <small id="ev-n"></small></h2>
+        <p class="que">Servicios que se reinician o caen, timers que acaban mal, contenedores con problemas.</p>
+        <ul class="eventos" id="ev-resumen"></ul></section>
+      <section class="carta c-carta"><h2>Las webs ahora <small>tiempo de respuesta</small></h2>
+        <p class="que">Medido desde la Pi (dentro) y pasando por Cloudflare (fuera).</p>
+        <table class="t" id="webs"></table></section>
+    </div>
+  </section>
+
+  <!-- ACCESOS -->
+  <section data-pest="accesos" class="rejilla" hidden>
+    <section class="carta c-carta"><h2>Peticiones por hora</h2>
+      <p class="que">Todo lo que llega a cada web: tú, Tom, el bot y los timers.</p>
+      <div class="lienzo"><canvas id="g-http"></canvas></div><div class="ley" id="l-http"></div></section>
+    <div class="rejilla dos">
+      <section class="carta c-carta"><h2>Lo que haces tú, por día</h2>
+        <p class="que">Pantallas que abres y acciones (sin lo automático), por canal.</p>
+        <div class="lienzo"><canvas id="g-uso"></canvas></div><div class="ley" id="l-uso"></div></section>
+      <section class="carta c-carta"><h2>Rutas más lentas</h2>
+        <p class="que">Tiempo medio y máximo de cada grupo de la API en el periodo.</p>
+        <div class="tabla"><table class="t" id="rutas"></table></div></section>
+    </div>
+  </section>
+
+  <!-- CONSUMO -->
+  <section data-pest="consumo" class="rejilla" hidden>
+    <div class="rejilla dos">
+      <section class="carta c-carta"><h2>Claude, por día <small id="claude-total"></small></h2>
+        <p class="que">Lo que gasta cada pieza que llama a Claude (claude-medido).</p>
+        <div class="lienzo"><canvas id="g-claude"></canvas></div><div class="ley" id="l-claude"></div></section>
+      <section class="carta c-carta"><h2>Claude, por quién</h2>
+        <p class="que">Llamadas y dólares en el periodo.</p>
+        <div class="tabla"><table class="t" id="claude-quien"></table></div></section>
+    </div>
+    <div class="rejilla dos">
+      <section class="carta c-carta"><h2>Temperatura y carga</h2>
+        <p class="que">Se frena a 80 °C. La carga es cuántos núcleos están ocupados (tiene 4).</p>
+        <div class="lienzo bajo"><canvas id="g-temp"></canvas></div><div class="ley" id="l-temp"></div></section>
+      <section class="carta c-carta"><h2>Memoria y disco libres</h2>
+        <p class="que">Memoria disponible (MB) y espacio libre en la SD (GB).</p>
+        <div class="lienzo bajo"><canvas id="g-mem"></canvas></div><div class="ley" id="l-mem"></div></section>
+    </div>
+    <section class="carta c-carta"><h2>Tiempo de respuesta de las webs</h2>
+      <p class="que">Media por hora, en milisegundos. Un hueco es que no contestaba.</p>
+      <div class="lienzo"><canvas id="g-webs"></canvas></div><div class="ley" id="l-webs"></div></section>
+  </section>
+
+  <!-- FALLOS -->
+  <section data-pest="fallos" class="rejilla" hidden>
+    <div class="rejilla dos">
+      <section class="carta c-carta"><h2>Errores de las webs por hora</h2>
+        <p class="que">5xx: algo se rompió dentro. 4xx: peticiones rechazadas (sin sesión, no existe…).</p>
+        <div class="lienzo bajo"><canvas id="g-err"></canvas></div><div class="ley" id="l-err"></div></section>
+      <section class="carta c-carta"><h2>Errores en los logs, por servicio</h2>
+        <p class="que">Líneas de error o peor en el journal durante el periodo.</p>
+        <div class="lienzo bajo"><canvas id="g-logs"></canvas></div></section>
+    </div>
+    <section class="carta c-carta"><h2>Servicios <small id="srv-n"></small></h2>
+      <p class="que">Lo que tiene que estar siempre en marcha. Reinicios y errores de las últimas 24 h.</p>
+      <div class="tabla"><table class="t" id="servicios"></table></div></section>
+    <section class="carta c-carta"><h2>Timers <small id="tim-n"></small></h2>
+      <p class="que">Lo que pasa solo: cuándo fue la última vez, cómo acabó, cuánto tardó y cuándo toca.</p>
+      <div class="tabla"><table class="t" id="timers"></table></div></section>
+    <section class="carta c-carta"><h2>Todos los eventos del periodo</h2>
+      <ul class="eventos" id="ev-todos"></ul></section>
+  </section>
+
+  <!-- MAPA -->
+  <section data-pest="mapa" class="rejilla" hidden>
+    <section class="carta c-carta mapa"><h2>Lo que hay montado <small>toca una pieza</small></h2>
+      <p class="que">Cómo llega todo a la Pi y qué hay dentro. El punto de cada pieza es su estado ahora: verde, en marcha; rojo, caída.</p>
+      <div class="lienzo-mapa"><svg id="svg-mapa" viewBox="0 0 760 580" role="img" aria-label="Esquema de lo que hay montado en la Raspberry Pi"></svg></div>
+      <div class="explica" id="explica"></div>
+    </section>
+    <section class="carta c-carta"><h2>Por qué está hecho así</h2>
+      <div class="porques" id="porques"></div></section>
+  </section>
+</div>
+<script>
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const el = (t, cls, txt) => { const e = document.createElement(t); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+const num = (x, d = 0) => x == null ? "—" : Number(x).toLocaleString("es-ES", {maximumFractionDigits: d, minimumFractionDigits: d});
+const hora = ts => new Date(ts * 1000).toLocaleString("es-ES", {weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit"});
+const hace = ts => { const m = Math.round((Date.now() / 1000 - ts) / 60); return m < 60 ? `hace ${m} min` : m < 1440 ? `hace ${Math.round(m / 60)} h` : `hace ${Math.round(m / 1440)} d`; };
+const dura = s => s == null ? "—" : s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60} s`;
+let D = null, dias = 7, pest = "resumen";
+const graf = {};
+
+function puerta(mostrar, msg) {
+  $("#puerta").toggleAttribute("data-on", mostrar);
+  $("#puerta-msg").textContent = msg || "Contraseña de todo";
+  if (mostrar) $("#puerta input").focus();
+}
+async function cargar() {
+  $("#estado").textContent = "Cargando…";
+  try {
+    const r = await fetch(`/api/sistema?dias=${dias}`);
+    if (r.status === 401) { $("#estado").textContent = ""; return puerta(true); }
+    if (!r.ok) throw new Error(r.status);
+    D = await r.json();
+    puerta(false);
+    $("#estado").textContent = `Actualizado ${hora(D.generado)} · se recoge cada 5 min`;
+    pinta();
+  } catch (e) { $("#estado").textContent = "Sin conexión"; }
+}
+function tokens() {
+  const s = getComputedStyle(document.documentElement), v = n => s.getPropertyValue(n).trim();
+  return {texto: v("--texto"), suave: v("--suave"), tenue: v("--tenue"), linea: v("--linea"), acento: v("--acento"),
+          peligro: v("--peligro"), aviso: v("--aviso"), serie: [1, 2, 3, 4, 5, 6, 7, 8].map(i => v(`--serie-${i}`))};
+}
+function leyenda(caja, items) {
+  caja.replaceChildren(...items.map(([n, c]) => { const s = el("span"), i = el("i"); i.style.setProperty("--c", c); s.append(i, n); return s; }));
+}
+function dibuja(id, cfg) {
+  if (!window.Chart) return;
+  graf[id]?.destroy();
+  graf[id] = new Chart(document.getElementById(id), cfg);
+}
+function base(t, apilado) {
+  return {responsive: true, maintainAspectRatio: false, animation: false, interaction: {mode: "index", intersect: false},
+    plugins: {legend: {display: false}},
+    scales: {x: {stacked: apilado, grid: {display: false}, border: {color: t.linea}, ticks: {color: t.tenue, maxTicksLimit: 8, maxRotation: 0, font: {size: 11}}},
+             y: {stacked: apilado, beginAtZero: true, grid: {color: t.linea}, border: {display: false}, ticks: {color: t.tenue, font: {size: 11}}}}};
+}
+const etHora = h => { const d = new Date(h); return dias <= 1 ? `${d.getHours()}:00` : `${d.getDate()}/${d.getMonth() + 1} ${d.getHours()}h`; };
+const etDia = d => `${+d.slice(8)}/${+d.slice(5, 7)}`;
+// todas las horas del periodo, aunque no haya datos (para que los huecos se vean)
+function horas() {
+  const out = [], fin = new Date(); fin.setMinutes(0, 0, 0);
+  for (let h = new Date(fin.getTime() - (dias * 24 - 1) * 3600e3); h <= fin; h = new Date(h.getTime() + 3600e3)) {
+    out.push(`${h.toLocaleDateString("sv")}T${String(h.getHours()).padStart(2, "0")}:00`);
+  }
+  return out;
+}
+
+function pinta() {
+  resumen(); accesos(); consumo(); fallos(); mapa();
+}
+
+// ---------- resumen ----------
+function resumen() {
+  const a = D.ahora, c = [];
+  const pon = (et, v, sub, clase) => { const d = el("div", "cifra " + (clase || "")); d.append(el("small", null, et), el("b", null, v)); if (sub) d.append(el("i", null, sub)); c.push(d); };
+  const caidos = a.servicios.total - a.servicios.en_marcha;
+  pon("Servicios en marcha", `${a.servicios.en_marcha}/${a.servicios.total}`, caidos ? `${caidos} caído${caidos > 1 ? "s" : ""}` : "todos bien", caidos ? "mal" : "bien");
+  pon("Timers que acabaron mal", a.timers.mal, `de ${a.timers.total}`, a.timers.mal ? "mal" : "bien");
+  pon("Peticiones (24 h)", num(a.peticiones_24h), a.ms_medio_24h != null ? `${a.ms_medio_24h} ms de media` : "");
+  pon("Fallos 5xx (24 h)", a.fallos_5xx_24h, "errores dentro de las webs", a.fallos_5xx_24h ? "mal" : "bien");
+  pon("Errores en logs (24 h)", a.errores_logs_24h, `${a.eventos_24h} eventos`, a.errores_logs_24h > 50 ? "ojo" : "");
+  pon("Claude (30 días)", `${num(a.claude_30d_usd, 2)} $`);
+  pon("Temperatura", a.temperatura != null ? `${num(a.temperatura, 1)} °C` : "—", "se frena a 80", a.temperatura > 75 ? "mal" : a.temperatura > 68 ? "ojo" : "");
+  pon("Memoria libre", a.memoria_libre_mb != null ? `${num(a.memoria_libre_mb / 1024, 1)} GB` : "—", `carga ${num(a.carga, 2)}`);
+  pon("Disco libre", a.disco_libre_gb != null ? `${num(a.disco_libre_gb, 1)} GB` : "—", "en la SD", a.disco_libre_gb < 5 ? "mal" : "");
+  pon("Última copia", a.copia_horas != null ? `hace ${num(a.copia_horas, 0)} h` : "—", "al pendrive", a.copia_horas > 30 ? "mal" : "bien");
+  pon("Bajones de tensión", a.bajones_periodo, "en el periodo", a.bajones_periodo ? "ojo" : "bien");
+  pon("Docker", `${a.docker.sanos ?? "—"}/${a.docker.total ?? "—"}`, "contenedores sanos", a.docker.sanos < a.docker.total ? "mal" : "bien");
+  $("#cifras").replaceChildren(...c);
+  eventos($("#ev-resumen"), D.eventos.slice(0, 8));
+  $("#ev-n").textContent = D.eventos.length ? `${D.eventos.length} en el periodo` : "";
+  const filas = [["Web", "Dentro", "Fuera"]];
+  const fuera = {todo: "todo", gastos: "gastos", "gastos-aitana": "gastos_aitana"};
+  for (const n of ["todo", "todo-aitana", "gastos", "gastos-aitana", "home-assistant", "filebrowser", "pistatus"]) {
+    const v = a.webs[n], f = fuera[n] ? a.webs["fuera:" + fuera[n]] : null;
+    filas.push([n, v == null ? "—" : v < 0 ? "no contesta" : `${num(v)} ms`, f == null ? "" : f < 0 ? "no contesta" : `${num(f)} ms`]);
+  }
+  tabla($("#webs"), filas, [false, true, true]);
+}
+function eventos(ul, l) {
+  const ICONO = {reinicio: "🔁", caido: "⛔", timer: "⏱️", docker: "🐳"};
+  ul.replaceChildren(...(l.length ? l.map(e => { const li = el("li"); li.append(el("span", null, ICONO[e.tipo] || "•"), el("span", null, `${e.quien}: ${e.detalle}`), el("small", null, `${hora(e.t)} · ${hace(e.t)}`)); return li; })
+    : [el("p", "vacio", "Nada que contar: todo ha ido bien.")]));
+}
+function tabla(t, filas, num_) {
+  const [cab, ...resto] = filas, tr = el("tr");
+  cab.forEach((c, i) => tr.append(el("th", num_[i] ? "n" : null, c)));
+  t.replaceChildren(tr, ...resto.map(f => { const r = el("tr"); f.forEach((c, i) => { const td = el("td", num_[i] ? "n" : null); if (c instanceof Node) td.append(c); else td.textContent = c; r.append(td); }); return r; }));
+}
+
+// ---------- accesos ----------
+function accesos() {
+  const t = tokens(), H = horas(), apps = [...new Set(Object.values(D.http).flatMap(x => Object.keys(x)))].sort();
+  dibuja("g-http", {type: "bar", data: {labels: H.map(etHora), datasets: apps.map((a, i) => ({label: a, data: H.map(h => D.http[h]?.[a]?.n || 0), backgroundColor: t.serie[i % 8], borderRadius: 2}))}, options: base(t, true)});
+  leyenda($("#l-http"), apps.map((a, i) => [a, t.serie[i % 8]]));
+  const ds = Object.keys(D.uso), canales = [...new Set(Object.values(D.uso).flatMap(x => Object.keys(x)))].sort();
+  dibuja("g-uso", {type: "bar", data: {labels: ds.map(etDia), datasets: canales.map((c, i) => ({label: c, data: ds.map(d => D.uso[d][c] || 0), backgroundColor: t.serie[(i + 2) % 8], borderRadius: 3}))}, options: base(t, true)});
+  leyenda($("#l-uso"), canales.map((c, i) => [c, t.serie[(i + 2) % 8]]));
+  tabla($("#rutas"), [["App · ruta", "Peticiones", "Media", "Máx."], ...D.rutas.map(r => [`${r.app} · ${r.grupo}`, num(r.n), `${num(r.ms)} ms`, `${num(r.max)} ms`])], [false, true, true, true]);
+  if (!D.rutas.length) $("#rutas").replaceChildren(el("p", "vacio", "Aún no hay datos: se apuntan desde el 22/11."));
+}
+
+// ---------- consumo ----------
+function consumo() {
+  const t = tokens(), dd = Object.keys(D.claude.por_dia), quienes = D.claude.por_quien.map(x => x.quien);
+  dibuja("g-claude", {type: "bar", data: {labels: dd.map(etDia), datasets: quienes.map((q, i) => ({label: q, data: dd.map(d => D.claude.por_dia[d][q] || 0), backgroundColor: t.serie[i % 8], borderRadius: 3}))},
+    options: {...base(t, true), plugins: {legend: {display: false}, tooltip: {callbacks: {label: c => `${c.dataset.label}: ${num(c.raw, 2)} $`}}}}});
+  leyenda($("#l-claude"), quienes.slice(0, 8).map((q, i) => [q, t.serie[i % 8]]));
+  const total = D.claude.por_quien.reduce((a, x) => a + x.usd, 0);
+  $("#claude-total").textContent = `${num(total, 2)} $ en ${dias} día${dias > 1 ? "s" : ""}`;
+  tabla($("#claude-quien"), [["Quién", "Llamadas", "Dólares", "%"], ...D.claude.por_quien.map(x => [x.quien, num(x.llamadas), num(x.usd, 2), total ? `${num(100 * x.usd / total)} %` : "—"])], [false, true, true, true]);
+  const H = horas(), S = k => H.map(h => D.serie[k]?.[h] ?? null);
+  // con pocos datos (recién empezado a recoger) una línea sin puntos no se ve: se pintan los puntos
+  const linea = (lab, data, color, eje) => ({label: lab, data, borderColor: color, backgroundColor: color, borderWidth: 2,
+    pointRadius: data.filter(v => v != null).length < 24 ? 3 : 0, tension: .3, spanGaps: false, yAxisID: eje});
+  const dosEjes = o => ({...o, scales: {...o.scales, y: {...o.scales.y, beginAtZero: false}, y2: {position: "right", grid: {display: false}, border: {display: false}, ticks: {color: t.tenue, font: {size: 11}}}}});
+  dibuja("g-temp", {type: "line", data: {labels: H.map(etHora), datasets: [linea("Temperatura (°C)", S("pi:temperatura"), t.peligro, "y"), linea("Carga", S("pi:carga"), t.serie[1], "y2")]}, options: dosEjes(base(t, false))});
+  leyenda($("#l-temp"), [["Temperatura (°C)", t.peligro], ["Carga (eje derecho)", t.serie[1]]]);
+  dibuja("g-mem", {type: "line", data: {labels: H.map(etHora), datasets: [linea("Memoria libre (MB)", S("pi:memoria_libre_mb"), t.acento, "y"), linea("Disco libre (GB)", S("pi:disco_libre_gb"), t.serie[3], "y2")]}, options: dosEjes(base(t, false))});
+  leyenda($("#l-mem"), [["Memoria libre (MB)", t.acento], ["Disco libre (GB, eje derecho)", t.serie[3]]]);
+  const webs = Object.keys(D.serie).filter(k => k.startsWith("web:")).sort();
+  dibuja("g-webs", {type: "line", data: {labels: H.map(etHora), datasets: webs.map((w, i) => linea(w.slice(4), H.map(h => { const v = D.serie[w]?.[h]; return v == null || v < 0 ? null : v; }), t.serie[i % 8], "y"))},
+    options: {...base(t, false), scales: {...base(t, false).scales, y: {...base(t, false).scales.y, type: "logarithmic", beginAtZero: false}}}});
+  leyenda($("#l-webs"), webs.map((w, i) => [w.slice(4), t.serie[i % 8]]));
+}
+
+// ---------- fallos ----------
+function fallos() {
+  const t = tokens(), H = horas(), apps = [...new Set(Object.values(D.http).flatMap(x => Object.keys(x)))];
+  const suma = (h, k) => apps.reduce((a, app) => a + (D.http[h]?.[app]?.[k] || 0), 0);
+  dibuja("g-err", {type: "bar", data: {labels: H.map(etHora), datasets: [{label: "5xx", data: H.map(h => suma(h, "e5")), backgroundColor: t.peligro, borderRadius: 2}, {label: "4xx", data: H.map(h => suma(h, "e4")), backgroundColor: t.aviso, borderRadius: 2}]}, options: base(t, true)});
+  leyenda($("#l-err"), [["5xx (algo se rompió)", t.peligro], ["4xx (rechazadas)", t.aviso]]);
+  const logs = Object.entries(D.serie).filter(([k]) => k.startsWith("errores:")).map(([k, v]) => [k.slice(8), Object.values(v).reduce((a, b) => a + b, 0)]).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  const cajaLogs = $("#g-logs").parentElement;
+  cajaLogs.querySelector(".vacio")?.remove();
+  $("#g-logs").hidden = !logs.length;
+  if (logs.length) dibuja("g-logs", {type: "bar", data: {labels: logs.map(x => x[0]), datasets: [{data: logs.map(x => x[1]), backgroundColor: t.aviso, borderRadius: 3}]}, options: {...base(t, false), indexAxis: "y"}});
+  else cajaLogs.append(el("p", "vacio", "Ningún error en los logs en este periodo."));
+  const sv = D.servicios;
+  $("#srv-n").textContent = `${sv.filter(s => s.estado === "active").length}/${sv.length} en marcha`;
+  tabla($("#servicios"), [["Servicio", "Estado", "Desde", "Reinicios", "Errores"], ...sv.map(s => {
+    const e = el("span"), p = el("span", "punto"); p.style.setProperty("--c", s.estado === "active" ? "var(--bien)" : "var(--peligro)"); e.append(p, s.estado === "active" ? "en marcha" : s.estado);
+    return [s.servicio, e, s.desde ? hace(s.desde) : "—", s.reinicios, s.errores];
+  })], [false, false, true, true, true]);
+  const tm = D.timers;
+  $("#tim-n").textContent = `${tm.filter(x => x.resultado === "success").length} bien de ${tm.length}`;
+  tabla($("#timers"), [["Timer", "Última", "Resultado", "Tardó", "Próxima"], ...tm.map(x => {
+    const r = el("span"), p = el("span", "punto"), ok = x.resultado === "success" || !x.resultado;
+    p.style.setProperty("--c", ok ? "var(--bien)" : "var(--peligro)"); r.append(p, x.resultado === "success" ? "bien" : x.resultado || "aún no");
+    return [x.timer, x.ultima ? hace(x.ultima) : "nunca", r, dura(x.segundos), x.proxima ? hora(x.proxima) : "—"];
+  })], [false, true, false, true, true]);
+  eventos($("#ev-todos"), D.eventos);
+}
+
+// ---------- el mapa ----------
+// cada pieza: dónde se dibuja, qué servicio dice su estado y su explicación
+const PIEZAS = {
+  iphone: {x: 20, y: 20, w: 160, n: "iPhone", s: "Tom · Nana · atajos", t: "El iPhone",
+    p: ["<b>Tom</b> es la app nativa de todo (SwiftUI): hábitos, entreno, carrera, gastos, widgets, avisos y una cola para cuando no hay red. <b>Nana</b> mide ronquidos y frases en sueños. Los <b>atajos</b> mandan los entrenos y la salud.",
+        "Se compilan en GitHub Actions (no hay Mac) y se instalan con SideStore."]},
+  pc: {x: 200, y: 20, w: 160, n: "PC", s: "app de escritorio · SSH", t: "El PC",
+    p: ["La <b>app de escritorio</b> (Tauri) es todo en Windows y Omarchy, con bandeja y atajo de teclado. Por <b>SSH</b> (solo con clave) se trabaja en la Pi."]},
+  telegram: {x: 380, y: 20, w: 170, n: "Telegram", s: "el bot · avisos", t: "Telegram",
+    p: ["Hablas con el <b>bot</b> en lenguaje normal: gastos, tareas, eventos, entrenos, fotos de tickets, notas de voz, .fit del reloj. También es por donde llegan los avisos: resumen de la mañana, lecciones, noticias, mantenimiento…"]},
+  navegador: {x: 570, y: 20, w: 170, n: "Navegador", s: "*.yagotg.dev", t: "La web",
+    p: ["Las mismas apps en el navegador: todo, gastos, inversiones, carrera, entreno… y este panel."]},
+  cloudflare: {x: 200, y: 120, w: 360, n: "Cloudflare", s: "dominio · contraseña (Access) · túnel", svc: "tunel", t: "Cloudflare",
+    p: ["El <b>dominio</b> yagotg.dev, la <b>contraseña</b> que se pide antes de llegar a nada (Access) y el <b>túnel</b>: la conexión sale de la Pi hacia Cloudflare, así que el router no abre ningún puerto.",
+        "Por qué: es la forma más segura y gratis de tener las apps en internet sin exponer la casa."]},
+  wireguard: {x: 600, y: 120, w: 140, n: "WireGuard", s: "VPN a casa", t: "WireGuard",
+    p: ["Una VPN para entrar a la red de casa desde fuera (el móvil y el PC), sin pasar por Cloudflare: Home Assistant, SSH, Pi-hole."]},
+  webs: {x: 40, y: 250, w: 220, n: "Webs", s: "todo · gastos (y las de Aitana)", svc: "todo", t: "Las webs",
+    p: ["<b>todo</b> (hábitos, hoy, pendientes, carrera, entreno, salud, inversiones, documentos, calendario) y <b>gastos</b>, cada una con su copia para Aitana (mismo código, sus datos). FastAPI y HTML sin frameworks, con el estilo común Calma.",
+        "Cada petición se mide (metricas.py) y un freno corta a quien prueba contraseñas (intentos.py)."]},
+  bots: {x: 280, y: 250, w: 200, n: "Bots", s: "todo-bot · cerebro · tranvía", svc: "todo-bot", t: "Los bots",
+    p: ["<b>todo-bot</b>: el de Telegram que entiende lo que le dices (con Claude). <b>cerebro</b>: el del vault de Obsidian, archiva y documenta. <b>tranvía</b>: cuándo pasa, también en el Kindle y la pantalla ESP32."]},
+  casa: {x: 500, y: 250, w: 220, n: "Casa", s: "Home Assistant · Pi-hole", svc: "pihole-FTL", t: "La casa",
+    p: ["<b>Home Assistant</b> (Docker): Zigbee, Tuya, bluetooth, automatizaciones. <b>Pi-hole</b>: el DNS de casa, que bloquea anuncios y rastreadores. Home Assistant se actualiza solo los domingos con vuelta atrás si no arranca."]},
+  claude: {x: 40, y: 360, w: 220, n: "Claude", s: "el «cerebro» común", t: "Claude",
+    p: ["El mismo motor para todo lo que piensa: el bot, el resumen de la mañana, los informes de mercado, la lección diaria, la revisión de logs, la escalada. Se llama por la línea de comandos (claude -p) a través de claude-medido, que apunta lo que gasta cada pieza (pestaña Consumo)."]},
+  datos: {x: 280, y: 360, w: 200, n: "Datos", s: "data.json · vault · observa.db", svc: "obsidian-webdav", t: "Los datos",
+    p: ["Cada app guarda un <b>data.json</b> (escrito de forma atómica: un corte de luz no lo deja a medias). El <b>vault</b> de Obsidian se sincroniza con el móvil y el PC por WebDAV. <b>observa.db</b> guarda lo de este panel (90 días).",
+        "Por qué JSON y no una base de datos: se lee, se copia y se arregla a mano; para una persona sobra."]},
+  cuidado: {x: 500, y: 360, w: 220, n: "Cuidado", s: "vigía · mantenimiento · revisión", svc: "vigia", t: "Lo que la cuida",
+    p: ["<b>Vigía</b>: avisa si algo cae. <b>Mantenimiento</b> (domingos 05:30): actualiza sistema y contenedores, con vuelta atrás. <b>Revisión de logs</b> (domingos 09:00): Claude lee la semana y cuenta lo que falla en silencio. <b>Observa</b> (cada 5 min): lo de este panel."]},
+  kindle: {x: 20, y: 500, w: 160, n: "Kindle · ESP32", s: "tranvía y estado", svc: "pistatus-http", t: "Las pantallas",
+    p: ["El <b>Kindle</b> enseña cuándo pasa el tranvía y el estado de la Pi (pistatus, cada minuto). La <b>pantalla ESP32</b> del tranvía pide su API en la red de casa."]},
+  copias: {x: 200, y: 500, w: 170, n: "Pendrive", s: "copia cada noche", svc: "copia-pendrive", t: "Las copias",
+    p: ["Cada noche a las 04:00, todo al <b>pendrive</b>. Cada hora, los data.json a SQLite con historial. Cada mes, un simulacro restaura una copia y comprueba que sirve.",
+        "Lo que falta: una copia fuera de casa (la SD y el pendrive están en el mismo enchufe)."]},
+  github: {x: 390, y: 500, w: 170, n: "GitHub", s: "código, sin datos", t: "GitHub",
+    p: ["Los repos públicos (todo, gastos, Nana) llevan el <b>código, nunca datos</b>. GitHub Actions compila Tom y Nana y las deja para instalar."]},
+  fuera: {x: 580, y: 500, w: 160, n: "Servicios de fuera", s: "precios · noticias · tiempo", t: "Lo que se consulta fuera",
+    p: ["Precios de bolsa (Yahoo, L&S), lo que se dice (Reddit, Hacker News, Polymarket: motor de last30days), el tiempo, el tranvía de Zaragoza, Google e iCloud para el calendario."]},
+};
+const FLECHAS = [["iphone", "cloudflare"], ["pc", "cloudflare"], ["navegador", "cloudflare"], ["telegram", "bots"], ["cloudflare", "webs"], ["cloudflare", "bots"],
+                 ["wireguard", "casa"], ["datos", "copias", 1], ["webs", "github", 1], ["fuera", "cuidado", 1], ["kindle", "bots", 1]];
+function centro(p, abajo) { return [p.x + p.w / 2, p.y + (abajo ? 52 : 0)]; }
+function mapa() {
+  const svg = $("#svg-mapa"), NS = "http://www.w3.org/2000/svg", mk = (t, a, txt) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); if (txt != null) e.textContent = txt; return e; };
+  const vivo = new Map(D.servicios.map(s => [s.servicio, s.estado === "active"]));
+  const timerOk = new Map(D.timers.map(x => [x.timer, x.resultado === "success"]));
+  svg.replaceChildren(mk("defs", {}));
+  svg.firstChild.append(Object.assign(mk("marker", {id: "punta", viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse"}), {}));
+  svg.querySelector("marker").append(mk("path", {d: "M0,0 L10,5 L0,10 z", fill: "currentColor", style: "color: var(--tenue)"}));
+  svg.append(mk("rect", {class: "caja", x: 25, y: 225, width: 710, height: 205, rx: 18}), mk("text", {class: "titulo-caja", x: 45, y: 244}, "RASPBERRY PI 4 · EN CASA, POR CABLE"));
+  for (const [a, b, datos] of FLECHAS) {
+    const A = PIEZAS[a], B = PIEZAS[b], [x1, y1] = centro(A, B.y > A.y), [x2, y2] = centro(B, A.y > B.y);
+    svg.append(mk("path", {class: "flecha" + (datos ? " datos" : ""), d: `M${x1},${y1} C${x1},${(y1 + y2) / 2} ${x2},${(y1 + y2) / 2} ${x2},${y2}`}));
+  }
+  for (const [id, p] of Object.entries(PIEZAS)) {
+    const g = mk("g", {class: "nodo", tabindex: 0, role: "button", "aria-label": p.t});
+    g.append(mk("rect", {x: p.x, y: p.y, width: p.w, height: 52, rx: 12}), mk("text", {x: p.x + 14, y: p.y + 22}, p.n), mk("text", {class: "sub", x: p.x + 14, y: p.y + 39}, p.s));
+    // el túnel vive en Docker: está bien si las webs contestan pasando por Cloudflare
+    const ok = p.svc === "tunel" ? (D.ahora.webs["fuera:todo"] ?? -1) > 0
+      : p.svc ? (vivo.has(p.svc) ? vivo.get(p.svc) : timerOk.get(p.svc)) : undefined;
+    if (ok !== undefined) g.append(mk("circle", {class: "vivo", cx: p.x + p.w - 14, cy: p.y + 14, r: 6, fill: ok ? "var(--bien)" : "var(--peligro)"}));
+    g.onclick = g.onkeydown = e => { if (e.type === "keydown" && e.key !== "Enter") return; explica(id); };
+    svg.append(g);
+  }
+  explica(explica.actual || "cloudflare");
+  const PQ = [["Una Pi y no la nube", "Tus datos en casa y sin cuotas, por unos 5 W. La pega: es un punto único de fallo; de ahí tanta copia, el vigía y este panel."],
+              ["Cloudflare delante", "El router no abre puertos, la contraseña se pide antes de llegar a la Pi y el túnel sale desde dentro."],
+              ["Ficheros JSON", "Se leen, se copian y se arreglan a mano. El historial lo da SQLite por encima."],
+              ["Sin frameworks", "Una carpeta por app, sin compilar nada: FastAPI y HTML con el estilo común Calma."],
+              ["Claude por la línea de comandos", "El mismo cerebro para todo lo que piensa, medido pieza a pieza."],
+              ["Tom nativo", "Widgets, avisos y modo sin red necesitan una app de verdad. Sin Mac, compila GitHub."],
+              ["Repos públicos sin datos", "El código se puede enseñar; tu vida no."],
+              ["Todo vigilado", "Si algo falla en silencio, lo cuenta este panel, el vigía o la revisión del domingo."]];
+  $("#porques").replaceChildren(...PQ.map(([b, t]) => { const d = el("div"); d.append(el("b", null, b), t); return d; }));
+}
+function explica(id) {
+  explica.actual = id;
+  const p = PIEZAS[id], caja = $("#explica");
+  $$("#svg-mapa .nodo").forEach(n => n.classList.toggle("sel", n.getAttribute("aria-label") === p.t));
+  caja.replaceChildren(el("h3", null, p.t), ...p.p.map(h => { const x = el("p"); x.innerHTML = h; return x; }));
+}
+
+$("#pestanas").onclick = e => {
+  const b = e.target.closest("button"); if (!b) return;
+  pest = b.dataset.p;
+  $$("#pestanas button").forEach(x => x.setAttribute("aria-selected", x === b));
+  $$("[data-pest]").forEach(s => s.hidden = s.dataset.pest !== pest);
+  if (D) pinta();   // Chart.js no mide bien un lienzo oculto: se repinta al enseñarlo
+  try { localStorage.setItem("sistema-pest", pest); } catch (e) { /* sin almacenamiento */ }
+};
+$("#rango").onclick = e => {
+  const b = e.target.closest("button"); if (!b) return;
+  dias = +b.dataset.d;
+  $$("#rango button").forEach(x => x.setAttribute("aria-selected", x === b));
+  cargar();
+};
+$("#f-clave").onsubmit = async e => {
+  e.preventDefault();
+  const inp = e.target.pass;
+  const r = await fetch("/api/login", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({pass: inp.value})}).catch(() => null);
+  if (r && r.ok) { inp.value = ""; await cargar(); } else puerta(true, r && r.status === 429 ? "Demasiados intentos: espera 15 min" : r && r.status === 401 ? "Contraseña incorrecta" : "No se pudo conectar");
+};
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => D && pinta());
+// la pestaña: la de la dirección (#fallos) o la última que miraste
+try { const p = location.hash.slice(1) || localStorage.getItem("sistema-pest"); if (p) $(`#pestanas [data-p="${p}"]`)?.click(); } catch (e) { /* nada */ }
+cargar();
+setInterval(() => document.visibilityState === "visible" && cargar(), 5 * 60e3);
+</script>
+</body>
+</html>
