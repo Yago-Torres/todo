@@ -164,7 +164,8 @@ def todas():
 
     Con caché: leerlas y analizarlas todas tarda ~120 ms y la bandeja lo pedía dos veces por petición. Se rehace si
     cambia cualquier nota (ruta, mtime, ctime o tamaño: la huella cuesta ~15 ms). Devuelve copias."""
-    ps = [p for p in notas() if p.name not in SIN_TAREAS]
+    # las de Curro/ son del trabajo (el vault del portátil del curro): no son tareas de Yago (lo pidió el 22/11)
+    ps = [p for p in notas() if p.name not in SIN_TAREAS and not ruta(p).startswith(SOLO_LECTURA)]
     try:
         # ctime además de mtime: Remotely Save (WebDAV) puede poner la fecha de modificación vieja, y tachar una tarea
         # ([ ] → [x]) no cambia el tamaño; el ctime cambia con cualquier escritura y no se puede fijar

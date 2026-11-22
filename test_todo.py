@@ -234,40 +234,28 @@ def test_vault():
     t = vault.nueva_tarea("  llamar   al dentista ", "2026-10-30", "10:00")
     assert t["t"] == "llamar al dentista" and (t["due"], t["hora"]) == ("2026-10-30", "10:00")
     ts = vault.tareas()
-    # de las diarias del curro solo cuenta la última; la bucket list del hub no es una tarea
-    assert [x["t"] for x in ts] == ["llamar al dentista", "rotar token", "llamar", "arrastrada", "cosa del curro",
-                                    "plantilla"], [x["t"] for x in ts]
-    assert ts[1]["due"] == "2026-11-02" and (ts[2]["due"], ts[2]["hora"]) == ("2026-11-05", "10:00") and ts[4]["fija"]
+    # las de Curro/ son del trabajo: no salen (22/11); la bucket list del hub no es una tarea
+    assert [x["t"] for x in ts] == ["llamar al dentista", "rotar token"], [x["t"] for x in ts]
+    assert ts[1]["due"] == "2026-11-02"
     nuevo = vault.marca(ts[0]["id"])
     assert nuevo and "- [x] llamar al dentista ⏰ 10:00 📅 2026-10-30 ✅" in (vault.VAULT / "Pendientes.md").read_text("utf-8")
     assert vault.marca(nuevo, False) == ts[0]["id"]          # deshacer devuelve el id de antes
-    # lo del curro se tacha (y se destacha), pero no se edita ni se borra
-    n = vault.marca(ts[4]["id"])
-    assert "- [x] cosa del curro ✅" in (vault.VAULT / "Curro" / "Jira.md").read_text("utf-8")
-    assert vault.marca(n, False) == ts[4]["id"]
-    # una viñeta sin casilla de la última daily: al tacharla se le pone
-    diaria = vault.VAULT / "Curro" / "Daily notes" / "2026-12-01 Martes.md"
-    diaria.write_text("## TODO's today\n\n- revisar PR\n- [ ] otra\n\nun apunte\n", "utf-8")
-    t = next(x for x in vault.tareas() if x["t"] == "revisar PR")
-    n = vault.marca(t["id"])
-    assert diaria.read_text("utf-8").startswith("## TODO's today\n\n- [x] revisar PR ✅") and "un apunte" in diaria.read_text("utf-8")
-    assert "revisar PR" not in [x["t"] for x in vault.tareas()]
-    assert vault.marca(n, False) and "revisar PR" in [x["t"] for x in vault.tareas()]
-    diaria.unlink()
+    # ni las de una nota del curro ni las de sus diarias
+    assert not any(x["ruta"].startswith("Curro/") for x in vault.todas())
     # editar: cambia texto, día y hora en su sitio; la prioridad del plugin Tasks se queda
     e = vault.edita(ts[1]["id"], " rotar  el token ", "2026-11-03", "09:30")
     assert (e["t"], e["due"], e["hora"]) == ("rotar el token", "2026-11-03", "09:30"), e
     assert "- [ ] rotar el token ⏫ ⏰ 09:30 📅 2026-11-03\n- [x] hecho" in (vault.VAULT / "Proyectos" / "Pi.md").read_text("utf-8")
     e = vault.edita(e["id"], "rotar el token", "", "09:30")          # sin día, la hora sola no vale
     assert (e["due"], e["hora"]) == ("", "") and e["id"] in [x["id"] for x in vault.tareas()]
-    assert vault.edita(ts[4]["id"], "x") is None and vault.edita("noexiste", "x") is None
+    assert vault.edita("noexiste", "x") is None
     # borrar quita la línea; deshacer la vuelve a poner en su sitio
     antes = (vault.VAULT / "Proyectos" / "Pi.md").read_text("utf-8")
     b = vault.borra(e["id"])
     assert b["i"] == 3 and "rotar el token" not in (vault.VAULT / "Proyectos" / "Pi.md").read_text("utf-8"), b
     vault.restaura(b["ruta"], b["i"], b["linea"])
     assert (vault.VAULT / "Proyectos" / "Pi.md").read_text("utf-8") == antes
-    assert vault.borra(ts[4]["id"]) is None   # Curro no se toca
+    assert vault.borra("noexiste") is None
     for malo in [("../fuera.md", 0, "- [ ] x"), ("Proyectos/Pi.md", 0, "no es una tarea"), ("Curro/Jira.md", 0, "- [ ] x")]:
         try:
             vault.restaura(*malo)
@@ -313,8 +301,7 @@ def test_vault():
         vault.VAULT / "Proyectos" / "todo.yagotg.dev.md").read_text("utf-8")
     n = vault.nueva_tarea("Mudanza", tags=["#casa"], historia=True)
     assert (n["historia"], n["tags"], n["grupo"]) == (True, ["casa"], "Pendientes"), n
-    for malo in [lambda: vault.cambia_estado(ts["columnas"]["id"], "rara"), lambda: vault.nueva_tarea("x", padre="noexiste"),
-                 lambda: vault.cambia_estado(next(t["id"] for t in vault.todas() if t["fija"]), "activa")]:
+    for malo in [lambda: vault.cambia_estado(ts["columnas"]["id"], "rara"), lambda: vault.nueva_tarea("x", padre="noexiste")]:
         try:
             malo()
             raise AssertionError("dejó pasar algo raro")
