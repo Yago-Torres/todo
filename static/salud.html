@@ -67,6 +67,13 @@
   details.datos table { width: 100%; border-collapse: collapse; margin-top: 6px; font-variant-numeric: tabular-nums; }
   details.datos th, details.datos td { text-align: right; padding: 4px 6px; border-bottom: 1px solid var(--linea); font-weight: 400; white-space: nowrap; }
   details.datos th:first-child, details.datos td:first-child { text-align: left; }
+  details.datos td.acc { width: 1%; padding: 2px 0 2px 4px; }
+  details.datos td.acc button { background: none; border: 0; color: var(--suave); font: inherit; padding: 4px 6px; cursor: pointer; border-radius: 6px; }
+  details.datos td.acc button:hover { color: var(--texto); background: var(--acento-suave); }
+  .mano { display: grid; grid-template-columns: 1.3fr 1fr 1fr auto; gap: 8px; margin-top: 10px; }
+  .mano .c-campo { min-width: 0; }
+  .mano-msg { margin: 6px 0 0; font-size: var(--t-pequeno); color: var(--suave); min-height: 1.2em; }
+  @media (max-width: 420px) { .mano { grid-template-columns: 1fr 1fr; } }
   details.como p { font-size: var(--t-texto); color: var(--suave); margin: 8px 0 0; }
   details.como summary { cursor: pointer; font-weight: 600; }
   .puerta input, .puerta button { width: 100%; }
@@ -152,6 +159,15 @@
       <div class="lienzo bajo-h" id="peso-lienzo"><canvas id="g-peso" role="img" aria-label="Peso por día y su media de 7 días"></canvas></div>
       <div class="leyenda" id="ley-peso" style="margin: 10px 0 0"></div>
       <details class="datos"><summary>Ver los datos</summary><div class="scroll" id="t-peso-d"></div></details>
+      <details class="datos" id="d-mano"><summary>Apuntar o corregir a mano</summary>
+        <form class="mano" id="f-mano">
+          <input class="c-campo" type="date" name="dia" required aria-label="Día">
+          <input class="c-campo" type="text" inputmode="decimal" name="peso" placeholder="kg" aria-label="Peso en kilos">
+          <input class="c-campo" type="text" inputmode="numeric" name="pasos" placeholder="pasos" aria-label="Pasos">
+          <button class="c-btn pri" type="submit">Guardar</button>
+        </form>
+        <p class="mano-msg" id="mano-msg">Lo que dejes vacío no se toca. Lo apuntado a mano ya no lo pisan Tom ni el atajo.</p>
+      </details>
     </section>
 
     <section class="carta c-carta" aria-labelledby="t-comp">
@@ -403,9 +419,54 @@ function tabla(sel, cab, filas) {
   const t = el("table"), h = el("tr");
   cab.forEach(x => h.append(el("th", null, x)));
   t.append(h);
-  filas.forEach(f => { const tr = el("tr"); f.forEach(x => tr.append(el("td", null, x))); t.append(tr); });
+  filas.forEach(f => { const tr = el("tr"); f.forEach(x => tr.append(x instanceof Node ? x : el("td", null, x))); t.append(tr); });
   $(sel).replaceChildren(t);
 }
+
+// ---------- apuntar o corregir a mano (/api/cuerpo) ----------
+// lo que se toca aquí queda apuntado en el servidor y Tom o el atajo ya no lo pisan al mandar la semana
+const HOY = () => new Date().toLocaleDateString("sv");
+function acciones(dia, campo, valor) {
+  const td = el("td", "acc"), ed = el("button", null, "Editar"), bo = el("button", null, "Borrar");
+  ed.type = bo.type = "button";
+  ed.onclick = () => {
+    const f = $("#f-mano");
+    f.dia.value = dia;
+    f.peso.value = campo === "peso" ? coma(valor) : "";
+    f.pasos.value = campo === "pasos" ? String(Math.round(valor)) : "";
+    $("#d-mano").open = true;
+    f[campo].focus();
+  };
+  bo.onclick = () => { if (confirm(`¿Borrar ${campo === "peso" ? coma(valor) + " kg" : miles(valor) + " pasos"} del ${larga(dia)}?`)) corrige({dia, [campo]: null}); };
+  td.append(ed, bo);
+  return td;
+}
+async function corrige(cuerpo) {
+  const msg = $("#mano-msg");
+  msg.textContent = "Guardando…";
+  try {
+    const r = await fetch("/api/cuerpo", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(cuerpo)});
+    if (r.status === 401) return puerta(true);
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { msg.textContent = j.detail || "No se pudo guardar"; return tom.avisa?.("error"); }
+    msg.textContent = j.texto;
+    const s = await fetch("/api/sueno");
+    if (s.ok) { R = await s.json(); pinta(); }
+    return true;
+  } catch (e) {
+    msg.textContent = "Sin conexión";
+  }
+}
+$("#f-mano").dia.value = HOY();
+$("#f-mano").dia.max = HOY();
+$("#f-mano").onsubmit = async e => {
+  e.preventDefault();
+  const f = e.target, c = {dia: f.dia.value};
+  if (f.peso.value.trim()) c.peso = f.peso.value.trim();
+  if (f.pasos.value.trim()) c.pasos = f.pasos.value.trim();
+  if (!c.peso && !c.pasos) return f.peso.focus();
+  if (await corrige(c)) { f.peso.value = f.pasos.value = ""; }
+};
 
 function graficas() {
   if (!window.Chart || !R) return;
@@ -471,7 +532,7 @@ function graficas() {
   op.plugins.tooltip.callbacks = {title: c => larga(P[c[0].dataIndex].dia), label: c => c.raw == null ? null : `${miles(c.raw)} pasos`};
   dibuja("g-pasos", {type: "bar", options: op, data: {labels: P.map(n => corta(n.dia)), datasets: [{label: "Pasos",
     data: P.map(n => n.pasos), backgroundColor: t.acento, borderRadius: 4, borderSkipped: "start", barPercentage: .7}]}});
-  tabla("#t-pasos-d", ["Día", "Pasos"], P.slice().reverse().filter(n => n.pasos).map(n => [larga(n.dia), miles(n.pasos)]));
+  tabla("#t-pasos-d", ["Día", "Pasos", ""], P.slice().reverse().filter(n => n.pasos).map(n => [larga(n.dia), miles(n.pasos), acciones(n.dia, "pasos", n.pasos)]));
 
   // 5. peso: cada pesaje (puntos) y la media de 7 días (la línea que importa)
   const W = R.cuerpo.peso;
@@ -486,7 +547,7 @@ function graficas() {
       {label: "Pesaje", data: W.map(w => w[1]), showLine: false, borderColor: t.carta, backgroundColor: t.suave, borderWidth: 1.5,
        pointRadius: 4, pointHoverRadius: 6}]}});
     leyenda("#ley-peso", [["Media 7 días", t.acento], ["Pesaje", t.suave]]);
-    tabla("#t-peso-d", ["Día", "Kg", "Media 7 días"], W.slice().reverse().map(([d, kg]) => [larga(d), coma(kg), coma(media7(W, d))]));
+    tabla("#t-peso-d", ["Día", "Kg", "Media 7 días", ""], W.slice().reverse().map(([d, kg]) => [larga(d), coma(kg), coma(media7(W, d)), acciones(d, "peso", kg)]));
   }
   const G = R.cuerpo.comp.filter(f => f[1] != null);
   if (G.length > 1 && document.getElementById("g-grasa")) {

@@ -260,6 +260,15 @@ final class DatosSalud {
         await carga()
     }
 
+    /// Apunta, corrige o borra (nil) a mano un dato de un día ("peso", "pasos" o "sueno") con POST /api/cuerpo, y
+    /// vuelve a cargar. El servidor se lo apunta: lo que mande luego Salud para ese día ya no lo pisa.
+    func corrige(dia: String, campo: String, valor: Double?) async throws -> String {
+        let json: [String: Any] = ["dia": dia, campo: valor.map { $0 as Any } ?? NSNull()]
+        let respuesta = try await API.datos("/api/cuerpo", metodo: "POST", json: json)
+        await recarga()
+        return ((try? JSONSerialization.jsonObject(with: respuesta)) as? [String: Any])?["texto"] as? String ?? "Guardado"
+    }
+
     // MARK: lo que se pinta
 
     func noches(_ periodo: PeriodoSalud) -> [NocheSueno] {

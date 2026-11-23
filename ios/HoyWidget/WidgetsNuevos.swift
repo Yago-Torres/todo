@@ -598,16 +598,20 @@ struct SemanaVista: View {
 
     private func tabla(_ d: DatosEstado) -> some View {
         let t = Tinta(modo)
-        let activos = d.habitos.filter { !$0.plan.isEmpty || !$0.hechos.isEmpty }
-        let filas = Array(activos.prefix(familia == .systemLarge ? 9 : 4))
-        let hechos = activos.reduce(0) { $0 + $1.hechos.count }
-        let previstos = activos.reduce(0) { $0 + max($1.plan.count, $1.hechos.count) }
-        return VStack(alignment: .leading, spacing: 5) {
-            CabeceraWidget(titulo: "Semana de hábitos", simbolo: "calendar", cuenta: previstos > 0 ? "\(hechos)/\(previstos)" : nil)
+        // todos, se hayan tocado o no; en el mediano no caben, así que primero los que se movieron estos 7 días
+        let grande = familia == .systemLarge
+        let quietos = d.habitos.filter { $0.plan.isEmpty && $0.hechos.isEmpty }
+        let orden = grande ? d.habitos : d.habitos.filter { !$0.plan.isEmpty || !$0.hechos.isEmpty } + quietos
+        let filas = Array(orden.prefix(grande ? 14 : 4))
+        let hechos = d.habitos.reduce(0) { $0 + $1.hechos.count }
+        let previstos = d.habitos.reduce(0) { $0 + max($1.plan.count, $1.hechos.count) }
+        let apretado = filas.count > 9
+        return VStack(alignment: .leading, spacing: apretado ? 3 : 5) {
+            CabeceraWidget(titulo: "Últimos 7 días", simbolo: "calendar", cuenta: previstos > 0 ? "\(hechos)/\(previstos)" : nil)
             HStack(spacing: 0) {
                 Spacer().frame(width: 92)
-                ForEach(Array(d.semana.enumerated()), id: \.offset) { i, dia in
-                    Text(DiasSemana.iniciales[i % 7])
+                ForEach(d.semana, id: \.self) { dia in
+                    Text(DiasSemana.inicial(dia))
                         .font(.system(size: 10, weight: dia == d.hoy ? .bold : .regular))
                         .foregroundStyle(dia == d.hoy ? t.texto : t.suave)
                         .frame(maxWidth: .infinity)
@@ -615,9 +619,9 @@ struct SemanaVista: View {
             }
             if filas.isEmpty {
                 Spacer(minLength: 0)
-                Text("Sin plan esta semana").font(.system(size: 13, weight: .semibold)).foregroundStyle(t.texto)
+                Text("Sin hábitos").font(.system(size: 13, weight: .semibold)).foregroundStyle(t.texto)
             }
-            ForEach(filas) { h in FilaSemana(habito: h, semana: d.semana, hoy: d.hoy) }
+            ForEach(filas) { h in FilaSemana(habito: h, semana: d.semana, hoy: d.hoy, lado: apretado ? 13 : 15) }
             Spacer(minLength: 0)
             HStack(spacing: 10) {
                 PuntoLeyenda(color: t.habitos, texto: "hecho")
@@ -635,6 +639,7 @@ struct FilaSemana: View {
     let habito: HabitoSemana
     let semana: [String]
     let hoy: String
+    var lado: CGFloat = 15
 
     private func punto(_ dia: String) -> some View {
         let t = Tinta(modo)
@@ -650,7 +655,7 @@ struct FilaSemana: View {
                 Circle().fill(t.campo).frame(width: 5, height: 5)
             }
         }
-        .frame(width: 15, height: 15)
+        .frame(width: lado, height: lado)
         .widgetAccentable(hecho)
         .frame(maxWidth: .infinity)
     }
@@ -658,10 +663,10 @@ struct FilaSemana: View {
     var body: some View {
         let t = Tinta(modo)
         HStack(spacing: 0) {
-            Text(habito.n).font(.system(size: 12, weight: .medium)).foregroundStyle(t.texto)
+            Text(habito.n).font(.system(size: lado < 15 ? 11 : 12, weight: .medium)).foregroundStyle(t.texto)
                 .lineLimit(1).minimumScaleFactor(0.7).frame(width: 92, alignment: .leading)
-            ForEach(Array(semana.enumerated()), id: \.offset) { _, dia in
-                if dia == hoy && (habito.plan.contains(dia) || habito.hechos.contains(dia)) {
+            ForEach(semana, id: \.self) { dia in
+                if dia == hoy {
                     Button(intent: MarcaHabitoIntent(habito: habito.id, nombre: habito.n, hecho: !habito.hechos.contains(dia))) {
                         punto(dia)
                     }
@@ -680,7 +685,7 @@ struct SemanaWidget: Widget {
             SemanaVista(entrada: entrada)
         }
         .configurationDisplayName("Semana de hábitos")
-        .description("Cada hábito, de lunes a domingo: lo hecho, lo previsto y lo que se quedó sin hacer. Marca el de hoy con un toque.")
+        .description("Todos tus hábitos en los últimos 7 días hasta hoy: lo hecho, lo previsto y lo que se quedó sin hacer. Marca el de hoy con un toque.")
         .supportedFamilies([.systemMedium, .systemLarge])
     }
 }

@@ -668,6 +668,21 @@ function pintaHoy() {
     }
     c.append(caja);
   }
+  // lo que toca en los próximos 7 días, para adelantarlo (un domingo libre, quitarse ya lo del lunes)
+  const prox = proximos();
+  if (prox.length) {
+    const caja = el("div", "atras");
+    caja.append(el("h3", null, "Adelantar"));
+    for (const [d, h] of prox) {
+      const p = el("p"), txt = el("span", null, rutina((S.sesion[d] || {})[h])?.n || habito(h).n + " ");
+      txt.append(el("small", null, ` · ${DIAS[fecha(d).getDay()]} ${fecha(d).getDate()}`));
+      const b = el("button", "c-btn mini", "Hacer hoy");
+      b.onclick = () => aHoy(d, h);
+      p.append(txt, b);
+      caja.append(p);
+    }
+    c.append(caja);
+  }
   const o = $("#otra");
   o.replaceChildren(Object.assign(el("option", null, "Entrenar otra rutina…"), {value: ""}),
     ...S.rutinas.filter(r => r.tipo === "pesas").map(r => Object.assign(el("option", null, r.n), {value: r.id})));
@@ -685,6 +700,18 @@ function atrasados() {
   }
   return [...ultimo].filter(([h]) => !hecho(HOY, h) && !(S.plan[HOY] || []).includes(h) && !(S.sesion[HOY] || {})[h])
     .map(([h, d]) => [d, h]);
+}
+
+// la siguiente sesión de cada entreno en los próximos 7 días (da igual la semana), si hoy no toca ya lo mismo
+function proximos() {
+  const entrena = new Set(S.rutinas.filter(r => r.tipo !== "movilidad" && r.hab).map(r => r.hab));
+  const hoy = new Set([...(S.plan[HOY] || []), ...Object.keys(S.sesion[HOY] || {})]), vistos = new Set(), out = [];
+  for (let i = 1; i <= 7; i++) {
+    const d = mas(HOY, i);
+    for (const h of new Set([...(S.plan[d] || []), ...Object.keys(S.sesion[d] || {})]))
+      if (entrena.has(h) && habito(h) && !hecho(d, h) && !hoy.has(h) && !vistos.has(h)) { vistos.add(h); out.push([d, h]); }
+  }
+  return out.slice(0, 3);
 }
 
 // mover el día entero a hoy: el plan y la rutina. El plan de carrera se recalcula con el día nuevo
@@ -1296,14 +1323,23 @@ function pintaPeso() {
     c.append(ch);
   }
 }
-$("#f-peso").onsubmit = e => {
+// por /api/cuerpo y no con el estado entero: así queda apuntado a mano y Tom o el atajo no lo pisan al mandar la semana.
+// Corregir o borrar uno de otro día: en Salud («Apuntar o corregir a mano»)
+$("#f-peso").onsubmit = async e => {
   e.preventDefault();
   const kg = Math.round(parseFloat(e.target.kg.value.replace(",", ".")) * 10) / 10;
   if (!(kg >= 20 && kg <= 400)) return e.target.kg.focus();   // el servidor lo rechazaría igualmente
-  S.peso[HOY] = kg;
-  e.target.reset();
-  calma.vibra();
-  guardar();
+  try {
+    const r = await fetch("/api/cuerpo", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({dia: HOY, peso: kg})});
+    if (r.status === 401) return puerta(true);
+    if (!r.ok) throw new Error(r.status);
+    e.target.reset();
+    calma.vibra();
+    await refresca(true);
+  } catch (err) {
+    $("#estado").textContent = "Sin guardar";
+    tom.avisa("error");
+  }
 };
 
 // ---------- avisos push ----------

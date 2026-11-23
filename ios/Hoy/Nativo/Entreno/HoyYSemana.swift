@@ -170,6 +170,12 @@ struct TarjetaSemana: View {
     }
 }
 
+/// Los días a los que se puede mover una sesión, agrupados por su semana (el menú «Mover a…»).
+private struct SemanaDestinos {
+    let lunes: String
+    var dias: [String]
+}
+
 struct DiaSemanaEnt: View {
     let dia: String
     let hoy: String
@@ -227,10 +233,14 @@ struct DiaSemanaEnt: View {
         .buttonStyle(.plain)
         .contextMenu {
             Menu("Mover a…") {
-                ForEach(destinos, id: \.self) { a in
-                    Button(FormatoEnt.diaSemana(a) + (a == hoy ? " (hoy)" : "")) {
-                        Haptica.shared.toca(.marcar)
-                        withAnimation(Tema.Muelle.pantalla) { datos.cambia { $0.mueve(h, de: dia, a: a) } }
+                ForEach(destinos, id: \.lunes) { s in
+                    Section(etiquetaSemana(s.lunes)) {
+                        ForEach(s.dias, id: \.self) { a in
+                            Button(FormatoEnt.diaSemana(a) + (a == hoy ? " (hoy)" : "")) {
+                                Haptica.shared.toca(.marcar)
+                                withAnimation(Tema.Muelle.pantalla) { datos.cambia { $0.mueve(h, de: dia, a: a) } }
+                            }
+                        }
                     }
                 }
             }
@@ -249,10 +259,27 @@ struct DiaSemanaEnt: View {
         .accessibilityHint("Mantén pulsado para moverla, cambiar la rutina o quitarla")
     }
 
-    /// Los otros días de esa semana y la siguiente.
-    private var destinos: [String] {
-        let lunes = FormatoEnt.lunes(dia)
-        return (0..<14).map { FormatoEnt.mas(lunes, $0) }.filter { $0 != dia }
+    /// De la semana de hoy (o la de la sesión, si se quedó atrás) a la que va detrás de la de la sesión, por semanas.
+    /// Antes solo salían esa semana y la siguiente: lo del lunes que viene no se podía traer al domingo de hoy.
+    private var destinos: [SemanaDestinos] {
+        let desde = min(FormatoEnt.lunes(hoy), FormatoEnt.lunes(dia))
+        let hasta = FormatoEnt.mas(FormatoEnt.lunes(max(hoy, dia)), 13)
+        var semanas: [SemanaDestinos] = []
+        var d = desde
+        while d <= hasta {
+            if d != dia {
+                let l = FormatoEnt.lunes(d)
+                if semanas.last?.lunes == l { semanas[semanas.count - 1].dias.append(d) } else { semanas.append(SemanaDestinos(lunes: l, dias: [d])) }
+            }
+            d = FormatoEnt.mas(d, 1)
+        }
+        return semanas
+    }
+
+    private func etiquetaSemana(_ lunes: String) -> String {
+        let esta = FormatoEnt.lunes(hoy)
+        return lunes == esta ? "Esta semana" : lunes == FormatoEnt.mas(esta, 7) ? "La semana que viene"
+            : lunes == FormatoEnt.mas(esta, -7) ? "La semana pasada" : "Semana del \(FormatoEnt.corta(lunes))"
     }
 
     private func planificar(_ e: EstadoEntreno) -> some View {

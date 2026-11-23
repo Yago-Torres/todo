@@ -1798,6 +1798,8 @@ def etapa(nombre):
 
 # la fecha como la escribe Atajos en español: «28.10.26, 00:43» o «28/10/2026 0:43» (día primero)
 FECHA_ES = re.compile(r"(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})\D+(\d{1,2}):(\d{2})")
+FECHA_MES = re.compile(r"(\d{1,2})\s+(?:de\s+)?([a-zé]{3})[a-zé]*\.?\s+(?:de\s+)?(\d{4})\D+(\d{1,2}):(\d{2})", re.I)
+MESES_CORTOS = ("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
 
 
 def inicio(texto):
@@ -1806,6 +1808,9 @@ def inicio(texto):
     if m := FECHA_ES.search(texto):
         anio = m[3] if len(m[3]) == 4 else "20" + m[3]
         return f"{anio}-{int(m[2]):02d}-{int(m[1]):02d}T{int(m[4]):02d}:{m[5]}"
+    # la fecha «media» de Atajos en español, si en el atajo no se elige el formato
+    if (m := FECHA_MES.search(texto)) and m[2].lower() in MESES_CORTOS:
+        return f"{m[3]}-{MESES_CORTOS.index(m[2].lower()) + 1:02d}-{int(m[1]):02d}T{int(m[4]):02d}:{m[5]}"
     return None
 
 
@@ -1871,6 +1876,34 @@ def lee_pesos(v, hoy):
     return out
 
 
+CAMPOS_MANO = {"peso": (20, 400), "pasos": (1, 200000), "sueno": (1, 1440)}
+
+
+def a_mano_ruta():
+    return DB.with_name("a_mano.json")
+
+
+def lee_a_mano():
+    """Lo apuntado, corregido o borrado a mano: {campo: {dia: valor, o None si se borró}}. Tom y el atajo mandan
+    cada vez los últimos 7 días: sin esto, un peso borrado volvería en la siguiente sincronización."""
+    try:
+        d = dct(json.loads(a_mano_ruta().read_text("utf-8")))
+    except (OSError, ValueError):
+        d = {}
+    return {c: {k: v for k, v in dct(d.get(c)).items() if day(k)} for c in CAMPOS_MANO}
+
+
+def apunta_recibido(texto):
+    """Lo que llega a /api/salud, también en salud.log (las últimas 300 líneas): journald se vacía al reiniciar y
+    es la única pista de qué manda de verdad el atajo o Tom."""
+    p = DB.with_name("salud.log")
+    try:
+        viejas = p.read_text("utf-8").splitlines()[-299:] if p.exists() else []
+        guarda(p, "\n".join(viejas + [f"{datetime.now():%Y-%m-%d %H:%M} {texto}"]) + "\n")
+    except OSError:
+        pass
+
+
 def desde_mediodia(inicio):
     """Minutos desde el mediodía anterior: las 23:30 y las 00:30 quedan seguidas."""
     return (int(inicio[11:13]) * 60 + int(inicio[14:16]) - 720) % 1440
@@ -1934,9 +1967,12 @@ def registra_salud(a: dict, todo_sesion: str = Cookie(None), authorization: str 
     o cada uno a su día si llegan como «fecha|kilos» por línea (ver lee_pesos)."""
     exige(todo_sesion, authorization)
     # lo que manda el atajo, tal cual (journalctl -u todo): para afinarlo sin adivinar
-    print("salud recibido:", json.dumps({k: str(a.get(k))[:200] for k in ("sueno", "pasos", "fases", "peso", "grasa", "magra", "imc", "dia") if k in a},
-                                        ensure_ascii=False), flush=True)
+    recibido = json.dumps({k: str(a.get(k))[:200] for k in ("sueno", "pasos", "fases", "peso", "grasa", "magra", "imc", "dia") if k in a},
+                          ensure_ascii=False)
+    print("salud recibido:", recibido, flush=True)
+    apunta_recibido(recibido)
     estado = clean(dct(json.loads(DB.read_text("utf-8")))) if DB.exists() else clean({})
+    mano = lee_a_mano()
     hoy = day(a.get("dia")) or date.today().isoformat()
     ayer = (date.fromisoformat(hoy) - timedelta(days=1)).isoformat()
     trozos = []
@@ -1954,6 +1990,8 @@ def registra_salud(a: dict, todo_sesion: str = Cookie(None), authorization: str 
         raise HTTPException(400, f"{mas // 60} h de sueño: Salud está sumando dos fuentes (iPhone y COROS) o el "
                                  "tiempo en la cama. En el atajo, una sola fuente y «Value is not In Bed»")
     for dia, m, tramos in camas:
+        if dia in mano["sueno"]:
+            continue
         noche = estado["salud"].setdefault(dia, {})
         if not tramos or m >= noche.get("sueno", 0):   # el filtro del atajo puede cortar una noche: no pisa a la entera
             noche["sueno"] = m
@@ -1964,9 +2002,12 @@ def registra_salud(a: dict, todo_sesion: str = Cookie(None), authorization: str 
         trozos.append(f"dormido {mins // 60} h {mins % 60:02d}" + (f" en {len(camas[-1][2])} tramos" if camas[-1][2] else "")
                       + (f" ({len(camas)} noches)" if len(camas) > 1 else ""))
     # la báscula: Salud lo da en kg con coma decimal y a veces con la unidad («70,4 kg»)
-    pesos = lee_pesos(a.get("peso"), hoy)
+    leidos = lee_pesos(a.get("peso"), hoy)
+    pesos = {d: kg for d, kg in leidos.items() if d not in mano["peso"]}
     estado["peso"].update(pesos)
-    peso = bool(pesos)
+    peso = bool(leidos)
+    if a.get("peso") and not leidos:
+        trozos.append(f"peso sin entender: «{str(a['peso'])[:60]}»")
     if pesos:
         u = max(pesos)
         trozos.append(f"{pesos[u]:.1f} kg".replace(".", ",") + ("" if u == hoy else f" del {int(u[8:])}/{int(u[5:7])}")
@@ -1986,18 +2027,64 @@ def registra_salud(a: dict, todo_sesion: str = Cookie(None), authorization: str 
         raro = a.get("fases") or a.get("sueno")
         if raro or not (peso or comp):
             trozos.append(f"sueño sin entender: «{str(raro)[:60]}»" if raro else "sin datos de sueño")
-    pasos = lee_pasos(a.get("pasos"), ayer)
-    for i, (d, n) in enumerate(sorted(pasos.items())):
+    leidos_pasos = lee_pasos(a.get("pasos"), ayer)
+    pasos = {d: n for d, n in leidos_pasos.items() if d not in mano["pasos"]}
+    for d, n in pasos.items():
         x = estado["salud"].setdefault(d, {})
-        # el día más viejo de una tanda puede venir cortado por el filtro del atajo
-        x["pasos"] = max(n, x.get("pasos", 0)) if i == 0 and len(pasos) > 1 else n
+        # un día ya acabado solo crece: la tanda puede traerlo cortado (el filtro del atajo, o el reloj sin
+        # sincronizar todavía) y una mañana con 6.509 pisaba los 14.463 del día entero. Hoy, el último
+        x["pasos"] = max(n, x.get("pasos", 0)) if d < hoy else n
     trozos += [f"{pasos[d]:,} pasos {q}".replace(",", ".") for d, q in ((ayer, "ayer"), (hoy, "hoy")) if d in pasos]
-    if a.get("pasos") and not pasos:
+    if a.get("pasos") and not leidos_pasos:
         trozos.append(f"pasos sin entender: «{str(a['pasos'])[:60]}»")
-    if not (pasos or mins or peso or comp):
+    if not (leidos_pasos or mins or peso or comp):
         raise HTTPException(400, f"No llega ni sueño, ni pasos, ni peso ({trozos[0]}): revisa las variables del atajo")
     guarda(DB, json.dumps(clean(estado), ensure_ascii=False))
     return {"texto": "Apuntado · " + " · ".join(trozos)}
+
+
+@app.post("/api/cuerpo")
+def corrige_cuerpo(a: dict, todo_sesion: str = Cookie(None), authorization: str = Header(None)):
+    """{dia, peso?, pasos?, sueno? (minutos)}: apuntar o corregir a mano; null o "" lo borra. Se queda en a_mano.json
+    y lo que manden luego Tom o el atajo para ese día y ese dato ya no lo pisa (ver lee_a_mano)."""
+    exige(todo_sesion, authorization)
+    hoy = date.today()
+    dia = day(a.get("dia"))
+    if not dia or dia > hoy.isoformat():
+        raise HTTPException(400, "¿De qué día?")
+    campos = [c for c in CAMPOS_MANO if c in a]
+    if not campos:
+        raise HTTPException(400, "Falta el peso, los pasos o el sueño")
+    estado = clean(dct(json.loads(DB.read_text("utf-8")))) if DB.exists() else clean({})
+    mano = lee_a_mano()
+    hecho = []
+    for c in campos:
+        lo, hi = CAMPOS_MANO[c]
+        crudo = a.get(c)
+        if c != "peso":   # «1.200 pasos»: el punto son miles
+            crudo = crudo if crudo in (None, "") else re.sub(r"[.,\s](?=\d{3}(?!\d))", "", str(crudo))
+        v = None if crudo in (None, "") else real(numero(crudo), lo, hi)
+        if crudo not in (None, "") and v is None:
+            raise HTTPException(400, f"«{str(crudo)[:20]}» no vale: entre {lo} y {hi}")
+        v = v if v is None else round(v, 1) if c == "peso" else round(v)
+        if c == "peso":
+            estado["peso"].pop(dia, None) if v is None else estado["peso"].__setitem__(dia, v)
+        else:
+            x = estado["salud"].setdefault(dia, {})
+            if v is None:
+                x.pop(c, None)
+                if c == "sueno":
+                    x.pop("fases", None)   # si no, la noche seguiría saliendo de sus tramos
+            else:
+                x[c] = v
+        mano[c][dia] = v
+        hecho.append(f"{c} borrado" if v is None else f"{v:g} kg".replace(".", ",") if c == "peso"
+                     else f"{v:,} pasos".replace(",", ".") if c == "pasos" else f"dormido {v // 60} h {v % 60:02d}")
+    estado = clean(estado)
+    guarda(DB, json.dumps(estado, ensure_ascii=False))
+    guarda(a_mano_ruta(), json.dumps(mano, ensure_ascii=False))
+    return {"texto": f"{int(dia[8:])}/{int(dia[5:7])}: " + " · ".join(hecho), "cuerpo": cuerpo(estado, hoy),
+            "version": version()}
 
 
 # ---------- plan de carrera (carrera.py) ----------

@@ -17,13 +17,13 @@ struct HabitoSemana: Identifiable, Hashable {
     var n: String
     var c: String
     var goal: Int
-    var plan: Set<String>   // días planificados de la semana
-    var hechos: Set<String> // días hechos de la semana
+    var plan: Set<String>   // días planificados de los últimos 7
+    var hechos: Set<String> // días hechos de los últimos 7
 }
 
 struct DatosEstado {
     var hoy: String
-    var semana: [String]
+    var semana: [String]   // los 7 días que acaban hoy
     var habitos: [HabitoSemana]
     /// Las sesiones de entreno de hoy a 7 días, en orden (las de hoy ya hechas incluidas).
     var sesiones: [SesionPlan]
@@ -34,8 +34,8 @@ struct DatosEstado {
 
     static var muestra: DatosEstado {
         let hoy = Fecha.hoy()
-        let semana = DiasSemana.semana(de: hoy)
-        let tres = Array(semana.prefix(3))
+        let semana = DiasSemana.ultimos(hasta: hoy)
+        let tres = Array(semana.suffix(3))
         return DatosEstado(
             hoy: hoy, semana: semana,
             habitos: [
@@ -54,7 +54,7 @@ struct DatosEstado {
         let hoy = Fecha.hoy()
         self.hoy = hoy
         self.copia = copia
-        let sem = DiasSemana.semana(de: hoy)
+        let sem = DiasSemana.ultimos(hasta: hoy)
         semana = sem
 
         func conjuntos(_ v: Any?) -> [String: Set<String>] {

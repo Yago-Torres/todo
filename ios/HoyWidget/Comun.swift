@@ -126,7 +126,7 @@ struct CabeceraWidget: View {
     }
 }
 
-/// El lunes de la semana de `dia` ("yyyy-MM-dd"); sirve para las cabeceras L M X J V S D.
+/// Días como "yyyy-MM-dd" para los widgets: los últimos 7, la inicial (L M X J V S D) y «Hoy», «Mañana» o «jue 13».
 enum DiasSemana {
     static let iniciales = ["L", "M", "X", "J", "V", "S", "D"]
 
@@ -138,11 +138,16 @@ enum DiasSemana {
         return f.date(from: dia)
     }
 
-    /// Lunes a domingo de la semana en curso, como "yyyy-MM-dd".
-    static func semana(de dia: String) -> [String] {
-        let cal = Calendar(identifier: .iso8601)   // semanas de lunes a domingo
-        guard let d = fecha(dia), let lunes = cal.date(from: cal.dateComponents([.yearForWeekOfYear, .weekOfYear], from: d)) else { return [] }
-        return (0..<7).compactMap { cal.date(byAdding: .day, value: $0, to: lunes) }.map(Fecha.dia)
+    /// Los 7 días que acaban en `dia`, del más viejo a él: con la semana de lunes a domingo, cada lunes salía vacío.
+    static func ultimos(hasta dia: String) -> [String] {
+        let cal = Calendar(identifier: .gregorian)
+        guard let d = fecha(dia) else { return [] }
+        return (0...6).reversed().compactMap { cal.date(byAdding: .day, value: -$0, to: d) }.map(Fecha.dia)
+    }
+
+    static func inicial(_ dia: String) -> String {
+        guard let d = fecha(dia) else { return "" }
+        return iniciales[(Calendar(identifier: .gregorian).component(.weekday, from: d) + 5) % 7]
     }
 
     /// «Hoy», «Mañana» o «jue 13».

@@ -281,12 +281,19 @@ struct CartaPeso: View {
     let datos: DatosSalud
     let periodo: PeriodoSalud
     @State private var sel: Date?
+    @State private var editando = false
 
     var body: some View {
         let puntos = datos.pesos(periodo)
         let ultimo = datos.informe?.cuerpo.peso.last
         VStack(alignment: .leading, spacing: Tema.Espacio.s) {
-            Text("Peso").estiloEtiqueta().foregroundStyle(Tema.suave)
+            HStack {
+                Text("Peso").estiloEtiqueta().foregroundStyle(Tema.suave)
+                Spacer()
+                Button("Editar") { editando = true }
+                    .font(Tema.fuente(.pequeno, peso: .medium)).foregroundStyle(Tema.acento)
+                    .accessibilityHint("Apuntar un peso a mano, o corregir o borrar uno")
+            }
             if let u = ultimo {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text(FechasES.coma(u.kg)).font(Tema.fuente(.gigante)).foregroundStyle(Tema.texto)
@@ -306,6 +313,7 @@ struct CartaPeso: View {
             if puntos.count > 1 { grafica(puntos) }
         }
         .carta()
+        .sheet(isPresented: $editando) { HojaPesos(datos: datos) }
     }
 
     private func subtitulo(_ dia: String) -> String {

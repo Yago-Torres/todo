@@ -661,6 +661,49 @@ def test_pesos():
     l = "01.11.26, 08:10|80,9\n03.11.26, 07:55|81,4\n03.11.26, 21:00|81,2\n02.11.26|nada"
     assert main.lee_pesos(l, "2026-11-03") == {"2026-11-01": 80.9, "2026-11-03": 81.2}
     assert main.lee_pesos("", "2026-11-03") == {} and main.lee_pesos("3|4", "2026-11-03") == {}
+    # la fecha «media» de Atajos en español también vale
+    assert main.lee_pesos("21 nov 2026, 7:55|79,1\n22 de noviembre de 2026|80", "2026-11-23") == {"2026-11-21": 79.1, "2026-11-22": 80.0}
+
+
+def test_a_mano():
+    import json, tempfile
+    from datetime import timedelta
+    from pathlib import Path
+    main.PASS, main.SECRET = "x", b"s"
+    main.DB = Path(tempfile.mkdtemp()) / "data.json"
+    hoy = date.today()
+    d = lambda n: (hoy - timedelta(days=n)).isoformat()
+    corta = lambda x: x[8:10] + "." + x[5:7] + "." + x[2:4]
+    main.registra_salud({"peso": f"{corta(d(2))}, 07:55|80,1\n{corta(d(1))}, 08:00|95,3",
+                         "pasos": f"{corta(d(2))}, 00:00|14463\n{corta(d(1))}, 00:00|6509"}, None, "Bearer x")
+    # el 95,3 era de otra persona: se borra; el de anteayer se corrige; hoy se apunta a mano
+    main.corrige_cuerpo({"dia": d(1), "peso": None}, None, "Bearer x")
+    main.corrige_cuerpo({"dia": d(2), "peso": "79,8"}, None, "Bearer x")
+    r = main.corrige_cuerpo({"dia": d(0), "peso": 79.6, "pasos": "1.200"}, None, "Bearer x")
+    assert r["cuerpo"]["peso"][-2:] == [[d(2), 79.8], [d(0), 79.6]] and "79,6 kg · 1.200 pasos" in r["texto"], r
+    # Tom vuelve a mandar la semana: lo tocado a mano no se pisa; un día acabado no baja; el de ayer sí sube
+    main.registra_salud({"peso": f"{corta(d(2))}, 07:55|80,1\n{corta(d(1))}, 08:00|95,3\n{corta(d(0))}, 08:00|79,9",
+                         "pasos": f"{corta(d(2))}, 00:00|9000\n{corta(d(1))}, 00:00|12000\n{corta(d(0))}, 00:00|3000"}, None, "Bearer x")
+    s = clean(json.loads(main.DB.read_text()))
+    assert s["peso"] == {d(2): 79.8, d(0): 79.6}, s["peso"]
+    assert [s["salud"][x]["pasos"] for x in (d(2), d(1), d(0))] == [14463, 12000, 1200], s["salud"]
+    # borrar el sueño se lleva sus tramos; lo imposible o de mañana no entra
+    main.registra_salud({"fases": f"Core|{corta(d(0))}, 01:00|25000"}, None, "Bearer x")
+    main.corrige_cuerpo({"dia": d(0), "sueno": ""}, None, "Bearer x")
+    assert "sueno" not in clean(json.loads(main.DB.read_text()))["salud"][d(0)]
+    for malo in ({"dia": d(0), "peso": "900"}, {"dia": (hoy + timedelta(days=1)).isoformat(), "peso": 80}, {"dia": d(0)}):
+        try:
+            main.corrige_cuerpo(malo, None, "Bearer x")
+            assert False, malo
+        except main.HTTPException:
+            pass
+    # lo que llega queda en salud.log; un peso con fecha ilegible lo dice en vez de callarse
+    try:
+        main.registra_salud({"peso": "ayer|80"}, None, "Bearer x")
+        assert False
+    except main.HTTPException as e:
+        assert "peso sin entender" in e.detail, e.detail
+    assert main.DB.with_name("salud.log").read_text().count("\n") == 4
 
 
 def test_documentos():
@@ -1572,6 +1615,7 @@ if __name__ == "__main__":
     test_marca()
     test_quita()
     test_pesos()
+    test_a_mano()
     test_documentos()
     test_pantalla()
     test_tom()
