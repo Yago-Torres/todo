@@ -634,6 +634,9 @@ struct SemanaVista: View {
     }
 }
 
+/// Una fila del widget: los días seguidos hechos se unen en una cápsula que se enciende hacia la derecha, con la racha
+/// escrita dentro desde 3 (la de verdad, aunque empiece antes de estos 7 días). La que llega a hoy brilla. Al marcar,
+/// la cápsula nueva entra fundiéndose, sin salto. La casilla de hoy se toca siempre, haya plan o no.
 struct FilaSemana: View {
     @Environment(\.widgetRenderingMode) private var modo
     let habito: HabitoSemana
@@ -641,23 +644,17 @@ struct FilaSemana: View {
     let hoy: String
     var lado: CGFloat = 15
 
-    private func punto(_ dia: String) -> some View {
-        let t = Tinta(modo)
-        let hecho = habito.hechos.contains(dia)
-        let previsto = habito.plan.contains(dia)
-        let color = t.completo ? Color(hex: habito.c) : Color.primary
-        return ZStack {
-            if hecho {
-                Circle().fill(color)
-            } else if previsto {
-                Circle().strokeBorder(dia < hoy ? t.aviso : t.suave, lineWidth: 1.6)
-            } else {
-                Circle().fill(t.campo).frame(width: 5, height: 5)
-            }
+    private struct Tramo: Hashable {
+        let desde: Int
+        let hasta: Int
+    }
+
+    private var tramos: [Tramo] {
+        var out: [Tramo] = []
+        for (i, dia) in semana.enumerated() where habito.hechos.contains(dia) {
+            if let u = out.last, u.hasta == i - 1 { out[out.count - 1] = Tramo(desde: u.desde, hasta: i) } else { out.append(Tramo(desde: i, hasta: i)) }
         }
-        .frame(width: lado, height: lado)
-        .widgetAccentable(hecho)
-        .frame(maxWidth: .infinity)
+        return out
     }
 
     var body: some View {
@@ -665,16 +662,72 @@ struct FilaSemana: View {
         HStack(spacing: 0) {
             Text(habito.n).font(.system(size: lado < 15 ? 11 : 12, weight: .medium)).foregroundStyle(t.texto)
                 .lineLimit(1).minimumScaleFactor(0.7).frame(width: 92, alignment: .leading)
-            ForEach(semana, id: \.self) { dia in
-                if dia == hoy {
-                    Button(intent: MarcaHabitoIntent(habito: habito.id, nombre: habito.n, hecho: !habito.hechos.contains(dia))) {
-                        punto(dia)
+            GeometryReader { g in
+                let ancho = g.size.width / CGFloat(max(semana.count, 1))
+                ZStack(alignment: .leading) {
+                    ForEach(Array(semana.enumerated()), id: \.offset) { i, dia in
+                        if !habito.hechos.contains(dia) {
+                            vacio(dia, t).frame(width: ancho).offset(x: CGFloat(i) * ancho)
+                        }
                     }
-                    .buttonStyle(.plain)
-                } else {
-                    punto(dia)
+                    ForEach(tramos, id: \.self) { tr in
+                        capsula(tr, t)
+                            .frame(width: max(CGFloat(tr.hasta - tr.desde + 1) * ancho - 4, lado), height: lado)
+                            .offset(x: CGFloat(tr.desde) * ancho + 2)
+                            .transition(.opacity)
+                    }
+                    if let i = semana.firstIndex(of: hoy) {
+                        Button(intent: MarcaHabitoIntent(habito: habito.id, nombre: habito.n, hecho: !habito.hechos.contains(hoy))) {
+                            Rectangle().fill(Color.white.opacity(0.001))
+                        }
+                        .buttonStyle(.plain)
+                        .frame(width: ancho, height: g.size.height)
+                        .offset(x: CGFloat(i) * ancho)
+                    }
+                }
+                .frame(width: g.size.width, height: g.size.height, alignment: .leading)
+            }
+            .frame(height: lado + 2)
+        }
+    }
+
+    private func color(_ t: Tinta) -> Color { t.completo ? Color(hex: habito.c) : Color.primary }
+
+    private func capsula(_ tr: Tramo, _ t: Tinta) -> some View {
+        let c = color(t)
+        let viva = semana[tr.hasta] == hoy
+        let n = habito.racha[semana[tr.hasta]] ?? (tr.hasta - tr.desde + 1)
+        return Capsule()
+            .fill(LinearGradient(colors: [c.opacity(viva ? 0.35 : 0.28), c], startPoint: .leading, endPoint: .trailing))
+            .overlay {
+                if viva {   // el extremo de hoy, encendido
+                    Capsule().fill(LinearGradient(colors: [.clear, .white.opacity(0.22)], startPoint: .leading, endPoint: .trailing))
                 }
             }
+            .shadow(color: viva && t.completo ? c.opacity(0.85) : .clear, radius: 4)
+            .overlay(alignment: .trailing) {
+                if n >= 3 {
+                    Text("\(n)")
+                        .font(.system(size: lado < 15 ? 8.5 : 9.5, weight: .heavy)).monospacedDigit()
+                        .foregroundStyle(.black.opacity(0.62))
+                        .lineLimit(1).minimumScaleFactor(0.6)
+                        .contentTransition(.numericText(value: Double(n)))
+                        .padding(.trailing, 5)
+                }
+            }
+            .widgetAccentable()
+    }
+
+    @ViewBuilder private func vacio(_ dia: String, _ t: Tinta) -> some View {
+        let previsto = habito.plan.contains(dia)
+        if dia == hoy {
+            Circle()
+                .strokeBorder(previsto ? color(t) : t.suave, style: StrokeStyle(lineWidth: 1.5, dash: previsto ? [] : [2.5, 2]))
+                .frame(width: lado - 1, height: lado - 1)
+        } else if previsto {
+            Circle().strokeBorder(t.aviso, lineWidth: 1.5).frame(width: lado - 4, height: lado - 4)
+        } else {
+            Circle().fill(t.campo).frame(width: 4, height: 4)
         }
     }
 }

@@ -19,6 +19,8 @@ struct HabitoSemana: Identifiable, Hashable {
     var goal: Int
     var plan: Set<String>   // días planificados de los últimos 7
     var hechos: Set<String> // días hechos de los últimos 7
+    /// Días seguidos hechos que acaban en cada final de racha de los 7, contando los de antes (la cápsula los escribe).
+    var racha: [String: Int] = [:]
 }
 
 struct DatosEstado {
@@ -69,7 +71,8 @@ struct DatosEstado {
             return HabitoSemana(id: id, n: (h["n"] as? String) ?? id, c: (h["c"] as? String) ?? "#888888",
                                 goal: (h["goal"] as? NSNumber)?.intValue ?? 7,
                                 plan: Set(sem.filter { plan[$0]?.contains(id) ?? false }),
-                                hechos: Set(sem.filter { log[$0]?.contains(id) ?? false }))
+                                hechos: Set(sem.filter { log[$0]?.contains(id) ?? false }),
+                                racha: Self.rachas(id, en: sem, log: log))
         }
 
         // sesiones de entreno: hábitos con alguna rutina que no sea de movilidad (igual que es_entreno() del servidor)
@@ -97,6 +100,22 @@ struct DatosEstado {
             }
         }
         self.sesiones = sesiones
+    }
+
+    /// Para cada día de `sem` en que acaba una racha (hecho y el siguiente no, o es el último), cuántos días seguidos lleva.
+    static func rachas(_ id: String, en sem: [String], log: [String: Set<String>]) -> [String: Int] {
+        let hecho = { (d: String) in log[d]?.contains(id) ?? false }
+        var out: [String: Int] = [:]
+        for (k, dia) in sem.enumerated() where hecho(dia) && (k == sem.count - 1 || !hecho(sem[k + 1])) {
+            var n = 0
+            var d = dia
+            while hecho(d) && n < 3650 {
+                n += 1
+                d = DiasSemana.antes(d)
+            }
+            out[dia] = n
+        }
+        return out
     }
 
     init(hoy: String, semana: [String], habitos: [HabitoSemana], sesiones: [SesionPlan], copia: Date?) {

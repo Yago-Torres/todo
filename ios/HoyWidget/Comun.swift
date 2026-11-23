@@ -145,6 +145,11 @@ enum DiasSemana {
         return (0...6).reversed().compactMap { cal.date(byAdding: .day, value: -$0, to: d) }.map(Fecha.dia)
     }
 
+    static func antes(_ dia: String) -> String {
+        guard let d = fecha(dia), let a = Calendar(identifier: .gregorian).date(byAdding: .day, value: -1, to: d) else { return "" }
+        return Fecha.dia(a)
+    }
+
     static func inicial(_ dia: String) -> String {
         guard let d = fecha(dia) else { return "" }
         return iniciales[(Calendar(identifier: .gregorian).component(.weekday, from: d) + 5) % 7]
