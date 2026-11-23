@@ -19,8 +19,13 @@ struct HabitoSemana: Identifiable, Hashable {
     var goal: Int
     var plan: Set<String>   // días planificados de los últimos 7
     var hechos: Set<String> // días hechos de los últimos 7
-    /// Días seguidos hechos que acaban en cada final de racha de los 7, contando los de antes (la cápsula los escribe).
+    /// Días seguidos hechos que acaban en cada final de racha de los 7, contando los de antes (sin /api/rachas).
     var racha: [String: Int] = [:]
+    /// De /api/rachas (la regla del servidor): cómo contó cada día de los 7 (hecho, fallo, pendiente, descanso,
+    /// vacaciones, enfermedad, comodin); sin entrada, no se exigía. nil si no se pudo leer.
+    var estados: [String: String]?
+    /// La racha de hoy según el servidor (base + hecho hoy).
+    var rachaHoy: Int?
 }
 
 struct DatosEstado {
@@ -50,8 +55,8 @@ struct DatosEstado {
             copia: nil)
     }
 
-    /// Lee el JSON de /api/state (clean() del servidor: habits, log, plan, rutinas, sesion).
-    init?(_ crudo: Data, copia: Date?) {
+    /// Lee el JSON de /api/state (clean() del servidor: habits, log, plan, rutinas, sesion) y, si llega, el de /api/rachas.
+    init?(_ crudo: Data, copia: Date?, rachas: Data? = nil) {
         guard let e = (try? JSONSerialization.jsonObject(with: crudo)) as? [String: Any] else { return nil }
         let hoy = Fecha.hoy()
         self.hoy = hoy
@@ -66,13 +71,19 @@ struct DatosEstado {
         }
         let log = conjuntos(e["log"]), plan = conjuntos(e["plan"])
         let lista = (e["habits"] as? [[String: Any]]) ?? []
+        var delServidor: [String: [String: Any]] = [:]
+        if let rachas, let r = (try? JSONSerialization.jsonObject(with: rachas)) as? [String: Any] {
+            for h in (r["habitos"] as? [[String: Any]]) ?? [] { if let id = h["id"] as? String { delServidor[id] = h } }
+        }
         habitos = lista.compactMap { h in
             guard let id = h["id"] as? String else { return nil }
             return HabitoSemana(id: id, n: (h["n"] as? String) ?? id, c: (h["c"] as? String) ?? "#888888",
                                 goal: (h["goal"] as? NSNumber)?.intValue ?? 7,
                                 plan: Set(sem.filter { plan[$0]?.contains(id) ?? false }),
                                 hechos: Set(sem.filter { log[$0]?.contains(id) ?? false }),
-                                racha: Self.rachas(id, en: sem, log: log))
+                                racha: Self.rachas(id, en: sem, log: log),
+                                estados: delServidor[id].map { ($0["dias"] as? [String: String]) ?? [:] },
+                                rachaHoy: (delServidor[id]?["racha"] as? NSNumber)?.intValue)
         }
 
         // sesiones de entreno: hábitos con alguna rutina que no sea de movilidad (igual que es_entreno() del servidor)
@@ -163,7 +174,8 @@ struct ProveedorEstado: TimelineProvider {
         guard Almacen.claves != nil else { return .sinClaves }
         do {
             let (crudo, copia) = try await API.leeOCopia("/api/state")
-            guard let datos = DatosEstado(crudo, copia: copia) else { return .sinDatos("No entiendo lo que devuelve el servidor") }
+            let rachas = try? await API.leeOCopia("/api/rachas").0   // sin ella, la cadena cuenta días seguidos
+            guard let datos = DatosEstado(crudo, copia: copia, rachas: rachas) else { return .sinDatos("No entiendo lo que devuelve el servidor") }
             return .datos(datos)
         } catch {
             return .sinDatos(error.localizedDescription)

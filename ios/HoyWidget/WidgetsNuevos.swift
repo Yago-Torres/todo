@@ -634,11 +634,12 @@ struct SemanaVista: View {
     }
 }
 
-/// Una fila del widget: los días seguidos hechos se unen en una cápsula que se enciende hacia la derecha, con la racha
-/// escrita dentro desde 3 (la de verdad, aunque empiece antes de estos 7 días). La que llega a hoy brilla. Al marcar,
-/// la cápsula de ayer se desliza hasta hoy: cada cápsula se identifica por el día en que empieza, así que al redibujar
-/// el widget solo cambia su ancho y SwiftUI lo anima. Una que empieza hoy crece desde la izquierda de su casilla.
-/// La casilla de hoy se toca siempre, haya plan o no.
+/// Una fila del widget. La cadena sigue la regla de rachas del servidor (/api/rachas): solo la rompe un día exigido sin
+/// hacer. Los días que no se exigían (Correr, 3/sem: los de entre medias) o libres (descanso, vacaciones, comodín) quedan
+/// como un puente borroso entre los hechos, y si la racha sigue viva, el puente llega hasta hoy. Los días hechos van en
+/// cápsulas que se encienden hacia la derecha; la última lleva la racha escrita (desde 3) y, si es de hoy, brilla.
+/// Al marcar, la cápsula de ayer se desliza hasta hoy: se identifican por el día en que empiezan, así que al redibujar
+/// solo cambia su ancho y SwiftUI lo anima. Sin /api/rachas (sin red), la cadena son días seguidos, como antes.
 struct FilaSemana: View {
     @Environment(\.widgetRenderingMode) private var modo
     let habito: HabitoSemana
@@ -651,16 +652,57 @@ struct FilaSemana: View {
         let hasta: Int
     }
 
-    private var tramos: [Tramo] {
-        var out: [Tramo] = []
-        for (i, dia) in semana.enumerated() where habito.hechos.contains(dia) {
-            if let u = out.last, u.hasta == i - 1 { out[out.count - 1] = Tramo(desde: u.desde, hasta: i) } else { out.append(Tramo(desde: i, hasta: i)) }
+    /// Una racha dentro de los 7 días: de su primer día hecho al último (o a hoy, si sigue viva) y sus tramos hechos.
+    private struct Cadena: Hashable {
+        let desde: Int
+        var hasta: Int
+        var hechos: [Tramo]
+        var viva = false
+        var numero = 0
+    }
+
+    private var cadenas: [Cadena] {
+        let est = habito.estados
+        let iHoy = semana.firstIndex(of: hoy)
+        var out: [Cadena] = []
+        var abierta: Cadena?
+        for (i, dia) in semana.enumerated() {
+            if habito.hechos.contains(dia) {
+                if var c = abierta {
+                    if let u = c.hechos.last, u.hasta == i - 1 { c.hechos[c.hechos.count - 1] = Tramo(desde: u.desde, hasta: i) } else { c.hechos.append(Tramo(desde: i, hasta: i)) }
+                    c.hasta = i
+                    abierta = c
+                } else {
+                    abierta = Cadena(desde: i, hasta: i, hechos: [Tramo(desde: i, hasta: i)])
+                }
+            } else {
+                let estado = est?[dia]
+                // sin datos del servidor, cualquier hueco corta; con ellos, solo un fallo
+                let corta = est == nil ? dia != hoy : estado == "fallo"
+                if corta, let c = abierta { out.append(c); abierta = nil }
+            }
+        }
+        if let c = abierta { out.append(c) }
+        guard !out.isEmpty else { return out }
+        var u = out[out.count - 1]
+        let rachaViva = habito.rachaHoy ?? habito.racha[semana[u.hasta]] ?? 0
+        if rachaViva > 0, let iHoy, u.hasta >= iHoy - 1 || est != nil {
+            u.viva = true
+            u.numero = rachaViva
+            u.hasta = max(u.hasta, iHoy)   // el puente llega hasta hoy
+        }
+        out[out.count - 1] = u
+        for k in out.indices where !out[k].viva {
+            let ultimo = out[k].hechos.last!
+            out[k].numero = habito.racha[semana[ultimo.hasta]] ?? out[k].hechos.reduce(0) { $0 + $1.hasta - $1.desde + 1 }
         }
         return out
     }
 
     var body: some View {
         let t = Tinta(modo)
+        let cs = cadenas
+        let ocupados = Set(cs.flatMap { c in c.hechos.flatMap { Array($0.desde...$0.hasta) } })
         HStack(spacing: 0) {
             Text(habito.n).font(.system(size: lado < 15 ? 11 : 12, weight: .medium)).foregroundStyle(t.texto)
                 .lineLimit(1).minimumScaleFactor(0.7).frame(width: 92, alignment: .leading)
@@ -668,16 +710,26 @@ struct FilaSemana: View {
                 let ancho = g.size.width / CGFloat(max(semana.count, 1))
                 ZStack(alignment: .leading) {
                     ForEach(Array(semana.enumerated()), id: \.offset) { i, dia in
-                        if !habito.hechos.contains(dia) {
+                        if !ocupados.contains(i) {
                             vacio(dia, t).frame(width: ancho).offset(x: CGFloat(i) * ancho)
                         }
                     }
-                    ForEach(tramos, id: \.desde) { tr in
-                        capsula(tr, t)
-                            .frame(width: max(CGFloat(tr.hasta - tr.desde + 1) * ancho - 4, lado), height: lado)
-                            .offset(x: CGFloat(tr.desde) * ancho + 2)
-                            .transition(.scale(scale: 0.2, anchor: .leading).combined(with: .opacity))
-                            .animation(.smooth(duration: 0.5), value: tr.hasta)
+                    ForEach(cs, id: \.desde) { c in
+                        if c.hasta > c.desde {   // el puente: centro a centro, por debajo de lo hecho
+                            puente(t)
+                                .frame(width: CGFloat(c.hasta - c.desde) * ancho, height: lado * 0.5)
+                                .offset(x: (CGFloat(c.desde) + 0.5) * ancho)
+                                .animation(.smooth(duration: 0.5), value: c.hasta)
+                        }
+                    }
+                    ForEach(cs, id: \.desde) { c in
+                        ForEach(c.hechos, id: \.desde) { tr in
+                            capsula(tr, c, t)
+                                .frame(width: max(CGFloat(tr.hasta - tr.desde + 1) * ancho - 4, lado), height: lado)
+                                .offset(x: CGFloat(tr.desde) * ancho + 2)
+                                .transition(.scale(scale: 0.2, anchor: .leading).combined(with: .opacity))
+                                .animation(.smooth(duration: 0.5), value: tr.hasta)
+                        }
                     }
                     if let i = semana.firstIndex(of: hoy) {
                         Button(intent: MarcaHabitoIntent(habito: habito.id, nombre: habito.n, hecho: !habito.hechos.contains(hoy))) {
@@ -696,25 +748,35 @@ struct FilaSemana: View {
 
     private func color(_ t: Tinta) -> Color { t.completo ? Color(hex: habito.c) : Color.primary }
 
-    private func capsula(_ tr: Tramo, _ t: Tinta) -> some View {
-        let c = color(t)
-        let viva = semana[tr.hasta] == hoy
-        let n = habito.racha[semana[tr.hasta]] ?? (tr.hasta - tr.desde + 1)
+    private func puente(_ t: Tinta) -> some View {
+        Capsule()
+            .fill(color(t).opacity(0.45))
+            .blur(radius: 2.5)
+            .widgetAccentable()
+    }
+
+    private func capsula(_ tr: Tramo, _ c: Cadena, _ t: Tinta) -> some View {
+        let col = color(t)
+        let deHoy = semana[tr.hasta] == hoy
+        let ultimo = tr == c.hechos.last
+        // en una cadena con huecos, lo más reciente va más encendido
+        let tramoCadena = CGFloat(max(c.hasta - c.desde, 1))
+        let inicio = 0.28 + 0.45 * CGFloat(tr.desde - c.desde) / tramoCadena
         return Capsule()
-            .fill(LinearGradient(colors: [c.opacity(viva ? 0.35 : 0.28), c], startPoint: .leading, endPoint: .trailing))
+            .fill(LinearGradient(colors: [col.opacity(deHoy ? max(inicio, 0.35) : inicio), col], startPoint: .leading, endPoint: .trailing))
             .overlay {
-                if viva {   // el extremo de hoy, encendido
+                if deHoy {   // el extremo de hoy, encendido
                     Capsule().fill(LinearGradient(colors: [.clear, .white.opacity(0.22)], startPoint: .leading, endPoint: .trailing))
                 }
             }
-            .shadow(color: viva && t.completo ? c.opacity(0.85) : .clear, radius: 4)
+            .shadow(color: deHoy && t.completo ? col.opacity(0.85) : .clear, radius: 4)
             .overlay(alignment: .trailing) {
-                if n >= 3 {
-                    Text("\(n)")
+                if ultimo && c.numero >= 3 {
+                    Text("\(c.numero)")
                         .font(.system(size: lado < 15 ? 8.5 : 9.5, weight: .heavy)).monospacedDigit()
                         .foregroundStyle(.black.opacity(0.62))
                         .lineLimit(1).minimumScaleFactor(0.6)
-                        .contentTransition(.numericText(value: Double(n)))
+                        .contentTransition(.numericText(value: Double(c.numero)))
                         .padding(.trailing, 5)
                 }
             }
@@ -726,8 +788,9 @@ struct FilaSemana: View {
         if dia == hoy {
             Circle()
                 .strokeBorder(previsto ? color(t) : t.suave, style: StrokeStyle(lineWidth: 1.5, dash: previsto ? [] : [2.5, 2]))
+                .background(Circle().fill(t.completo ? Paleta.fondo : .clear))   // tapa el puente que llega hasta hoy
                 .frame(width: lado - 1, height: lado - 1)
-        } else if previsto {
+        } else if habito.estados?[dia] == "fallo" || (habito.estados == nil && previsto && dia < hoy) {
             Circle().strokeBorder(t.aviso, lineWidth: 1.5).frame(width: lado - 4, height: lado - 4)
         } else {
             Circle().fill(t.campo).frame(width: 4, height: 4)
