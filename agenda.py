@@ -14,8 +14,10 @@ tareas del vault (vault.py) y la página las enseña en su día.
 - Los entrenos planeados (plan + sesion de data.json, de hoy en adelante) son eventos de «Deporte» con `entreno`
   ("dia:idHabito"). Los cuadra `cuadra_entrenos` cada vez que cambia data.json: se crean, se cambian y se borran
   solos, y por eso no se editan desde el calendario (se cambian en Entreno). Los de días pasados se quedan como fueron.
-  Desde el 23/11 (lo pidió Yago: en el iPhone salían dos veces y todo el día) van **solo a iCloud** y **con hora**
-  (`HORA_ENTRENO`, lo que dura la rutina, uno detrás de otro); del plan de carrera ya no van las semanas enteras.
+  Desde el 23/11 van **con hora** (`HORA_ENTRENO`, lo que dura la rutina, uno detrás de otro); del plan de carrera ya
+  no van las semanas enteras.
+- **Desde el 23/11 todo va solo a iCloud** (lo pidió Yago: en el iPhone, con su cuenta de Google, cada evento salía dos
+  veces). Lo que tenía copia en Google se borra de allí al sincronizarlo. El código de Google se queda por si vuelve.
 """
 import base64
 import importlib.util
@@ -240,6 +242,8 @@ def _bloques(r):
     return "\n".join(l)
 
 
+SOLO_ICLOUD = True
+
 # a qué hora entrena: unos 45 min después de avisos-antes (17:15 L-J, 14:45 V, 11:00 findes). La movilidad de la mañana, a las 7:30
 HORA_ENTRENO = {0: "18:00", 1: "18:00", 2: "18:00", 3: "18:00", 4: "15:30", 5: "11:30", 6: "11:30"}
 HORA_MANANA = "07:30"
@@ -412,7 +416,7 @@ def icloud_hay():
 
 
 def estado_inicial():
-    return {"google": "pendiente" if GOOGLE_MODULO.with_name("google.json").exists() else "sin configurar",
+    return {"google": "solo iCloud" if SOLO_ICLOUD else "pendiente" if GOOGLE_MODULO.with_name("google.json").exists() else "sin configurar",
             "icloud": "pendiente" if icloud_hay() else "sin configurar"}
 
 
@@ -619,13 +623,12 @@ def _copia(e):
     """Escribe (o reescribe) un evento en Google y en iCloud. Devuelve (ext, sincro)."""
     ext, sincro = dict(e.get("ext") or {}), {}
     g = google()
-    if e.get("entreno"):
-        # los entrenos y el plan de carrera, solo a iCloud (23/11: en el iPhone salían dos veces, Google e iCloud);
-        # si tenía copia en Google, se borra
+    if SOLO_ICLOUD:
+        # solo a iCloud (23/11: en el iPhone salía todo dos veces, Google e iCloud); si tenía copia en Google, se borra
         try:
             if g is not None and ext.get("google"):
                 try:
-                    g._api("DELETE", f"calendars/{_gcal(g, e['cal'])}/events/{ext['google']}")
+                    g._api("DELETE", f"calendars/{_gcal(g, ext.get('mover_de') or e['cal'])}/events/{ext['google']}")
                 except urllib.error.HTTPError as ex:
                     if ex.code not in (404, 410):
                         raise
@@ -675,7 +678,7 @@ def _copia(e):
 def _quita(e):
     ext = e.get("ext") or {}
     g = google()
-    if g and ext.get("google"):   # (un entreno de antes del 23/11 aún puede tenerla)
+    if g and ext.get("google"):   # (uno de antes del 23/11 aún puede tenerla)
         try:
             g._api("DELETE", f"calendars/{_gcal(g, e['cal'])}/events/{ext['google']}")
         except urllib.error.HTTPError as ex:

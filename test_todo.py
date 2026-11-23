@@ -146,7 +146,7 @@ def test_agenda():
     agenda.GOOGLE_MODULO = Path("/no/existe/calendario.py")
     e = agenda.nuevo({"t": "  Dentista  ", "dia": "2026-11-20", "inicio": "10:00", "fin": "09:00", "cal": "nada", "aviso": "15"})
     assert e["t"] == "Dentista" and e["fin"] == "" and e["cal"] == "day-to-day" and e["aviso"] == 15 and "ext" not in e, e
-    assert e["sincro"]["google"] == "sin configurar"
+    assert e["sincro"]["google"] == "solo iCloud"   # desde el 23/11 nada va a Google
     for malo in ({"t": "x"}, {"dia": "2026-11-20"}):
         try:
             agenda.nuevo(malo)
