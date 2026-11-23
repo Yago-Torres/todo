@@ -636,7 +636,7 @@ struct SemanaVista: View {
 
 /// Una fila del widget. La cadena sigue la regla de rachas del servidor (/api/rachas): solo la rompe un día exigido sin
 /// hacer. Los días que no se exigían (Correr, 3/sem: los de entre medias) o libres (descanso, vacaciones, comodín) quedan
-/// como un puente borroso entre los hechos, y si la racha sigue viva, el puente llega hasta hoy. Los días hechos van en
+/// dentro de una cápsula en contorno que abarca toda la racha; si sigue viva, el contorno llega hasta hoy. Los hechos van en
 /// cápsulas que se encienden hacia la derecha; la última lleva la racha escrita (desde 3) y, si es de hoy, brilla.
 /// Al marcar, la cápsula de ayer se desliza hasta hoy: se identifican por el día en que empiezan, así que al redibujar
 /// solo cambia su ancho y SwiftUI lo anima. Sin /api/rachas (sin red), la cadena son días seguidos, como antes.
@@ -715,10 +715,10 @@ struct FilaSemana: View {
                         }
                     }
                     ForEach(cs, id: \.desde) { c in
-                        if c.hasta > c.desde {   // el puente: centro a centro, por debajo de lo hecho
+                        if c.hasta > c.desde {   // el contorno de toda la racha, por debajo de lo hecho
                             puente(t)
-                                .frame(width: CGFloat(c.hasta - c.desde) * ancho, height: lado * 0.5)
-                                .offset(x: (CGFloat(c.desde) + 0.5) * ancho)
+                                .frame(width: CGFloat(c.hasta - c.desde + 1) * ancho - 4, height: lado)
+                                .offset(x: CGFloat(c.desde) * ancho + 2)
                                 .animation(.smooth(duration: 0.5), value: c.hasta)
                         }
                     }
@@ -750,8 +750,7 @@ struct FilaSemana: View {
 
     private func puente(_ t: Tinta) -> some View {
         Capsule()
-            .fill(color(t).opacity(0.45))
-            .blur(radius: 2.5)
+            .strokeBorder(color(t).opacity(0.55), lineWidth: 1.5)
             .widgetAccentable()
     }
 
