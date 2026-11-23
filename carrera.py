@@ -19,7 +19,7 @@ OBJETIVO = 22 * 60
 MARCA = (date(2026, 10, 20), 24 * 60, "tu marca aproximada")
 FIN_BASE = date(2027, 1, 31)         # hasta aquí manda perder grasa: base aeróbica
 FIN_ESPECIFICO = date(2027, 2, 28)   # luego una semana de afinar y la de la carrera
-TESTS = {2, 5, 9, 14}                # el de la 2 no se hizo: Yago pidió uno el 21/11 (semana 5) y el 8 pasa al 9
+TESTS = {2, 4, 9, 14}                # el de la 2 no se hizo; el pedido para la 5 lo hizo el domingo 22/11 (semana 4); el 8 pasa al 9
 N = (CARRERA - timedelta(days=CARRERA.weekday()) - INICIO).days // 7 + 1
 CORRE = ("run", "correr", "carrera", "trail")
 RUTINA = {"suave": "rodaje-suave", "largo": "rodaje-largo", "series": "b2-series-1k",
