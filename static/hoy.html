@@ -127,6 +127,9 @@
   .fila.libre .llama { display: none; }
   /* hecho hace poco y aún no toca (1 vez por semana o menos): el círculo lleno pero tenue, y hasta cuándo */
   .fila.cubierto .bx { opacity: .5; }
+  /* al día: hoy no toca y la racha sigue (Correr 3/sem, un día de entre medias). En contorno, como en el widget */
+  .fila.aldia .bx { border-color: var(--c); }
+  .fila.aldia .liq .forma { fill: var(--c); }
   .fila.peligro .rn { color: var(--aviso); animation: late-racha 1.3s ease-in-out infinite; }
   .fila.peligro .llama { fill: var(--aviso); }
   .fila.peligro .bx { border-color: var(--aviso); animation: aura 1.3s ease-in-out infinite; }
@@ -509,7 +512,10 @@ const SEM = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
 // «hasta el dom» si es esta semana; si no, la fecha
 const hasta = d => { const f = new Date(d + "T12:00"), dias = (f - new Date()) / 864e5;
   return dias < 6 ? `hasta el ${SEM[f.getDay()]}` : `hasta el ${f.getDate()}/${f.getMonth() + 1}`; };
-function listo(h) { return h.hecho || !!h.cubierto; }
+// al día: sin hacer, hoy no se exige y la racha sigue viva. No es un pendiente: cuenta como listo y va en contorno
+const alDia = h => !h.hecho && !h.libre && !h.cubierto && h.exigido === false && h.racha > 0;
+function listo(h) { return h.hecho || !!h.cubierto || alDia(h); }
+const circuloAlDia = () => mov.circulo(false).replace(/(class="forma") d="[^"]*"/, '$1 d="M6.33 10.33L7.67 9L9.17 10.67L12.83 6.67L14.17 8L9.17 13.33Z"');
 function habitos() {
   const hs = H.habitos, hechos = hs.filter(listo).length;
   $("#n-hab").textContent = `${hechos}/${hs.length}`;
@@ -540,8 +546,14 @@ function habitos() {
       b.classList.add("cubierto");
       b.setAttribute("aria-label", `${h.n}, hecho hace poco: no vuelve a tocar ${hasta(h.cubierto)}`);
     }
-    b.append(Object.assign(el("span", "bx liq"), {innerHTML: mov.circulo(h.hecho || cub)}), el("span", "nom", h.n));
+    const ad = alDia(h);
+    if (ad) {
+      b.classList.add("aldia");
+      b.setAttribute("aria-label", `${h.n}, al día: hoy no toca y la racha de ${h.racha} sigue`);
+    }
+    b.append(Object.assign(el("span", "bx liq"), {innerHTML: ad ? circuloAlDia() : mov.circulo(h.hecho || cub)}), el("span", "nom", h.n));
     if (cub) b.append(el("span", "plan libre", "hecho · " + hasta(h.cubierto)));
+    else if (ad) b.append(el("span", "plan libre", "al día"));
     else if (h.plan) b.append(el("span", "plan", "plan"));
     if (h.libre && !h.hecho) b.append(el("span", "plan libre", LIBRE[h.libre] || "descanso"));
     b.append(rn);

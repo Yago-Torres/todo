@@ -2370,10 +2370,11 @@ def hoy_habitos(s, hoy):
     r = {x["id"]: x for x in rachas(s, hoy)["habitos"]}
     # orden: su sitio en la lista de hábitos, para que la portada reordene al marcar sin perderlo
     # base: la racha sin contar hoy (marcar suma uno); juego: hoy la pide y hay racha; libre: descansa hoy (y por qué)
+    # exigido: hoy lo pide la regla de rachas. Sin hacer, sin exigir y con racha viva, los clientes lo pintan «al día»
     habitos = [{"id": h["id"], "n": h["n"], "c": h["c"], "plan": h["id"] in plan, "hecho": h["id"] in hecho,
                 "racha": r[h["id"]]["racha"], "base": r[h["id"]]["base"], "rota": r[h["id"]]["rota"],
                 "juego": r[h["id"]]["en_juego"], "libre": r[h["id"]]["libre"],
-                "cubierto": r[h["id"]]["cubierto"], "orden": i} for i, h in enumerate(s["habits"])]
+                "cubierto": r[h["id"]]["cubierto"], "exigido": r[h["id"]]["exigido"], "orden": i} for i, h in enumerate(s["habits"])]
     habitos.sort(key=lambda h: (not h["plan"], h["hecho"] or bool(h["cubierto"])))   # lo planificado y sin hacer, primero
     pesos = sorted(s["peso"].items())
     semana = [kg for d, kg in pesos if d > (date.fromisoformat(hoy) - timedelta(days=7)).isoformat()]

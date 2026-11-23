@@ -119,6 +119,8 @@
   .fila .n { font-weight: 600; font-variant-numeric: tabular-nums; }
   .fila .u { font-size: var(--t-pequeno); color: var(--suave); }
   .fila.cubierto .bx { opacity: .5; }
+  .fila.aldia .bx { border-color: var(--c); }
+  .fila.aldia .liq .forma { fill: var(--c); }
   .fila .plan.cub { background: var(--linea); color: var(--suave); }
   .fila .plan { font-size: var(--t-etiqueta); font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--acento-suave); color: var(--acento); }
 
@@ -501,6 +503,12 @@ async function cargaRachas() {
   render();
 }
 
+// al día (solo hoy, con /api/rachas): sin hacer, hoy no se exige y la racha sigue. Cuenta como hecho y va en contorno
+function alDia(d, h) {
+  const x = R[h];
+  return d === HOY && R_HOY === HOY && !!x && !hecho(HOY, h) && x.exigido === false && !x.libre && !x.cubierto && x.base > 0;
+}
+
 function racha(h) {
   const x = R[h];
   if (!x) return 0;
@@ -606,14 +614,14 @@ function habitos() {
   c.replaceChildren();
   $("#hb-dia").textContent = sel === HOY ? "hoy" : `${+sel.slice(8)} ${MES[+sel.slice(5, 7) - 1].slice(0, 3)}`;
   $("#hb-hoy").hidden = sel === HOY;
-  $("#hb-n").textContent = S.habits.length ? `${S.habits.filter(h => hecho(sel, h.id) || cubierto(sel, h)).length}/${S.habits.length}` : "0/0";
+  $("#hb-n").textContent = S.habits.length ? `${S.habits.filter(h => hecho(sel, h.id) || cubierto(sel, h) || alDia(sel, h.id)).length}/${S.habits.length}` : "0/0";
 
   if (!S.habits.length) {
     c.append(Object.assign(el("p", "vacio"), {textContent: "Sin hábitos. Añade uno abajo ↓"}));
     return;
   }
   for (const h of S.habits) {
-    const on = hecho(sel, h.id), n = enSemana(h.id, new Date(sel + "T12:00")), cub = cubierto(sel, h);
+    const on = hecho(sel, h.id), n = enSemana(h.id, new Date(sel + "T12:00")), cub = cubierto(sel, h), ad = !cub && alDia(sel, h.id);
     const b = el("button", "fila");
     b.style.setProperty("--c", h.c);
     b.dataset.h = h.id;
@@ -621,7 +629,7 @@ function habitos() {
     b.setAttribute("aria-label", `${h.n}, ${on ? "hecho" : "sin hacer"}`);
     b.append(
       el("span", "cua"),
-      Object.assign(el("span", "bx liq"), {innerHTML: mov.circulo(on || !!cub)}),
+      Object.assign(el("span", "bx liq"), {innerHTML: ad ? mov.circulo(false).replace(/(class="forma") d="[^"]*"/, '$1 d="M6.33 10.33L7.67 9L9.17 10.67L12.83 6.67L14.17 8L9.17 13.33Z"') : mov.circulo(on || !!cub)}),
       Object.assign(el("span", "nom"), {textContent: h.n}),
     );
     if (cub) {
@@ -629,6 +637,10 @@ function habitos() {
       b.classList.add("cubierto");
       b.setAttribute("aria-label", `${h.n}, hecho hace poco: no vuelve a tocar hasta el ${f.getDate()}/${f.getMonth() + 1}`);
       b.append(Object.assign(el("span", "plan cub"), {textContent: `hecho · hasta el ${f.getDate()}/${f.getMonth() + 1}`}));
+    } else if (ad) {
+      b.classList.add("aldia");
+      b.setAttribute("aria-label", `${h.n}, al día: hoy no toca y la racha sigue`);
+      b.append(Object.assign(el("span", "plan cub"), {textContent: "al día"}));
     } else if (planeado(sel, h.id)) b.append(Object.assign(el("span", "plan"), {textContent: "plan"}));
     b.append(
       numRacha("span", "n rn", racha(h.id)),

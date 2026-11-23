@@ -501,13 +501,14 @@ struct FilaHabito: View {
         Button(action: toca) {
             HStack(spacing: Tema.Espacio.m) {
                 ZStack {
+                    // al día: en contorno, con el check del color del hábito (hoy no toca, la racha sigue)
                     Circle()
-                        .strokeBorder(habito.listo ? Color.clear : Color(hex: habito.c), lineWidth: 2)
-                        .background(Circle().fill(habito.listo ? Color(hex: habito.c).opacity(habito.hecho ? 1 : 0.5) : Color.clear))
+                        .strokeBorder(habito.hecho || habito.cubierto != nil ? Color.clear : Color(hex: habito.c), lineWidth: 2)
+                        .background(Circle().fill(habito.hecho ? Color(hex: habito.c) : habito.cubierto != nil ? Color(hex: habito.c).opacity(0.5) : Color.clear))
                     if habito.listo {
                         Image(systemName: "checkmark")
                             .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(habito.alDia ? Color(hex: habito.c) : .white)
                             .transition(.scale.combined(with: .opacity))
                     }
                 }
@@ -524,6 +525,12 @@ struct FilaHabito: View {
                 if let hasta = habito.cubierto, !habito.hecho {
                     // hecho hace poco: no vuelve a tocar hasta ese día
                     Text("hecho · hasta el \(Self.corto(hasta))")
+                        .estiloEtiqueta()
+                        .foregroundStyle(Tema.suave)
+                        .padding(.horizontal, 8).padding(.vertical, 2)
+                        .background(Tema.linea, in: Capsule())
+                } else if habito.alDia {
+                    Text("al día")
                         .estiloEtiqueta()
                         .foregroundStyle(Tema.suave)
                         .padding(.horizontal, 8).padding(.vertical, 2)
@@ -553,7 +560,7 @@ struct FilaHabito: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(EstiloHundir())
-        .accessibilityLabel("\(habito.n), \(habito.hecho ? "hecho" : habito.cubierto != nil ? "hecho hace poco, aún no toca" : habito.libre != nil ? "descansa hoy" : "sin hacer")"
+        .accessibilityLabel("\(habito.n), \(habito.hecho ? "hecho" : habito.cubierto != nil ? "hecho hace poco, aún no toca" : habito.alDia ? "al día, hoy no toca" : habito.libre != nil ? "descansa hoy" : "sin hacer")"
                             + (habito.racha > 1 ? ", racha de \(habito.racha) días" + (habito.arriesga ? " en juego" : "") : ""))
         .accessibilityHint(habito.hecho ? "Toca para desmarcar" : "Toca para marcar")
     }

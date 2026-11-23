@@ -30,7 +30,7 @@ struct Resumen {
 
     init(_ h: Hoy, ahora: Date) {
         habitos = h.habitos
-        hechos = h.habitos.filter { $0.hecho }.count
+        hechos = h.habitos.filter { $0.listo }.count   // como en Hoy: hecho, cubierto o al día
         pasos = h.salud?.pasos?.ultimo ?? 0
         sueno = h.salud?.sueno?.ultimo ?? 0
         tareas = h.tareas ?? []

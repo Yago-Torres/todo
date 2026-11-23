@@ -121,7 +121,7 @@ struct FichaDato {
         case .racha:
             let planificados = h.habitos.filter { $0.plan }
             let base = planificados.isEmpty ? h.habitos : planificados
-            let hechos = base.filter { $0.hecho }.count
+            let hechos = base.filter { $0.listo }.count
             let mejor = h.habitos.max { $0.racha < $1.racha }
             let hora = Calendar.current.component(.hour, from: ahora)
             let enJuego = hora >= 20 && h.habitos.contains { $0.arriesga }

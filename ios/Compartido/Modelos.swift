@@ -33,8 +33,15 @@ struct Habito: Codable, Identifiable, Hashable {
     /// Hecho hace poco y aún no le toca (1 vez por semana o menos): cuenta como hecho hasta este día ("yyyy-MM-dd").
     var cubierto: String? = nil
 
-    /// Hecho hoy o cubierto: lo que cuenta en «3 de 5».
-    var listo: Bool { hecho || cubierto != nil }
+    /// Hoy lo pide la regla de rachas. nil con un servidor de antes del 23/11.
+    var exigido: Bool? = nil
+
+    /// Al día: sin hacer, hoy no se exige y la racha sigue viva (Correr 3/sem, un día de entre medias). No es un
+    /// pendiente: cuenta como listo y se pinta en contorno, como en el widget de la semana.
+    var alDia: Bool { !hecho && libre == nil && cubierto == nil && exigido == false && racha > 0 }
+
+    /// Hecho hoy, cubierto o al día: lo que cuenta en «3 de 5».
+    var listo: Bool { hecho || cubierto != nil || alDia }
 
     /// La racha está en juego hoy (sin los campos nuevos, como antes: 2 días o más sin hacer).
     var arriesga: Bool { !hecho && libre == nil && (juego ?? true) && racha >= 2 }

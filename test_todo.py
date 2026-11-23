@@ -988,6 +988,10 @@ def test_cubierto():
     assert r(base, "2026-11-16") == {"l": None, "e": None, "a": None}   # hecho hoy: es «hecho», no cubierto
     plan = {**base, "plan": {"2026-11-27": ["e"]}}   # una semana con plan manda el plan
     assert r(plan, "2026-11-24")["e"] is None
+    # 3 por semana: el día de entre medias no se exige y la racha sigue viva (Hoy lo pinta «al día», no pendiente)
+    tres = clean({"habits": [{"id": "c", "n": "Correr", "c": "#000", "goal": 3, "cada": 1}], "log": {"2026-11-17": ["c"], "2026-11-20": ["c"]}})
+    h = main.hoy_habitos(tres, "2026-11-21")["habitos"][0]
+    assert (h["exigido"], h["racha"], h["hecho"], h["libre"]) == (False, 2, False, None), h
     print("cubierto ok")
 
 
