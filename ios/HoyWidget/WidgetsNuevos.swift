@@ -636,7 +636,9 @@ struct SemanaVista: View {
 
 /// Una fila del widget: los días seguidos hechos se unen en una cápsula que se enciende hacia la derecha, con la racha
 /// escrita dentro desde 3 (la de verdad, aunque empiece antes de estos 7 días). La que llega a hoy brilla. Al marcar,
-/// la cápsula nueva entra fundiéndose, sin salto. La casilla de hoy se toca siempre, haya plan o no.
+/// la cápsula de ayer se desliza hasta hoy: cada cápsula se identifica por el día en que empieza, así que al redibujar
+/// el widget solo cambia su ancho y SwiftUI lo anima. Una que empieza hoy crece desde la izquierda de su casilla.
+/// La casilla de hoy se toca siempre, haya plan o no.
 struct FilaSemana: View {
     @Environment(\.widgetRenderingMode) private var modo
     let habito: HabitoSemana
@@ -670,11 +672,12 @@ struct FilaSemana: View {
                             vacio(dia, t).frame(width: ancho).offset(x: CGFloat(i) * ancho)
                         }
                     }
-                    ForEach(tramos, id: \.self) { tr in
+                    ForEach(tramos, id: \.desde) { tr in
                         capsula(tr, t)
                             .frame(width: max(CGFloat(tr.hasta - tr.desde + 1) * ancho - 4, lado), height: lado)
                             .offset(x: CGFloat(tr.desde) * ancho + 2)
-                            .transition(.opacity)
+                            .transition(.scale(scale: 0.2, anchor: .leading).combined(with: .opacity))
+                            .animation(.smooth(duration: 0.5), value: tr.hasta)
                     }
                     if let i = semana.firstIndex(of: hoy) {
                         Button(intent: MarcaHabitoIntent(habito: habito.id, nombre: habito.n, hecho: !habito.hechos.contains(hoy))) {
