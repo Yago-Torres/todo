@@ -190,7 +190,7 @@ def test_agenda():
     en = {x["entreno"]: x for x in agenda.todos() if x.get("entreno")}
     assert set(en) == {"2026-11-19:gym", "2026-11-21:gym"}, en
     assert en["2026-11-19:gym"]["t"] == "Push A" and "Press banca 4×8 · 60 kg" in en["2026-11-19:gym"]["nota"]
-    assert en["2026-11-21:gym"]["t"] == "Gimnasio" and en["2026-11-21:gym"]["cal"] == "Deporte" and en["2026-11-21:gym"]["inicio"] == ""
+    assert en["2026-11-21:gym"]["t"] == "Gimnasio" and en["2026-11-21:gym"]["cal"] == "Deporte" and (en["2026-11-21:gym"]["inicio"], en["2026-11-21:gym"]["fin"]) == ("11:30", "12:30")
     assert agenda.cuadra_entrenos(est, "2026-11-18") == (0, 0, 0)   # idempotente
     larga = {**est, "rutinas": [{**est["rutinas"][0], "bloques": [{"ej": "x" * 90, "nota": "y" * 90}] * 30}]}
     agenda.cuadra_entrenos(larga, "2026-11-18")
@@ -974,6 +974,15 @@ def test_carrera_calendario():
     assert all(v["dia"] >= "2026-11-19" and v["cal"] == "Deporte" for v in d.values())
     assert not any(k.startswith("carrera:descarga") and v["dia"] >= "2027-03-01" for k, v in d.items())
     assert agenda.carrera_deseada({**s, "rutinas": []}, "2026-11-19") == {}   # sin el plan aplicado (Aitana), nada
+    assert not any(":test-" in k or ":descarga-" in k for k in d), d   # sin eventos de semana entera
+    # con hora, uno detrás de otro: gimnasio a las 18:00 y el core al acabar; la movilidad de la mañana, a las 7:30
+    e = {"habits": [{"id": "g", "n": "Gym"}, {"id": "k", "n": "Core"}, {"id": "m", "n": "Estirar"}],
+         "rutinas": [{"id": "push", "n": "Push", "tipo": "pesas", "hab": "g", "bloques": []},
+                     {"id": "core-10", "n": "Core", "tipo": "movilidad", "hab": "k", "bloques": [{"seg": 400}]},
+                     {"id": "manana", "n": "Mañana", "tipo": "movilidad", "hab": "m", "bloques": [{"seg": 600}]}],
+         "plan": {"2026-11-23": ["k", "g", "m"]}, "sesion": {"2026-11-23": {"g": "push", "k": "core-10", "m": "manana"}}}
+    h = {k: (v["inicio"], v["fin"]) for k, v in agenda.entrenos_deseados(e, "2026-11-23").items()}
+    assert h == {"2026-11-23:g": ("18:00", "19:00"), "2026-11-23:k": ("19:00", "19:10"), "2026-11-23:m": ("07:30", "07:40")}, h
 
 
 def test_cubierto():

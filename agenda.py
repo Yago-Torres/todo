@@ -14,6 +14,8 @@ tareas del vault (vault.py) y la página las enseña en su día.
 - Los entrenos planeados (plan + sesion de data.json, de hoy en adelante) son eventos de «Deporte» con `entreno`
   ("dia:idHabito"). Los cuadra `cuadra_entrenos` cada vez que cambia data.json: se crean, se cambian y se borran
   solos, y por eso no se editan desde el calendario (se cambian en Entreno). Los de días pasados se quedan como fueron.
+  Desde el 23/11 (lo pidió Yago: en el iPhone salían dos veces y todo el día) van **solo a iCloud** y **con hora**
+  (`HORA_ENTRENO`, lo que dura la rutina, uno detrás de otro); del plan de carrera ya no van las semanas enteras.
 """
 import base64
 import importlib.util
@@ -238,22 +240,49 @@ def _bloques(r):
     return "\n".join(l)
 
 
+# a qué hora entrena: unos 45 min después de avisos-antes (17:15 L-J, 14:45 V, 11:00 findes). La movilidad de la mañana, a las 7:30
+HORA_ENTRENO = {0: "18:00", 1: "18:00", 2: "18:00", 3: "18:00", 4: "15:30", 5: "11:30", 6: "11:30"}
+HORA_MANANA = "07:30"
+
+
+def _minutos(r):
+    """Lo que dura una rutina: lo cronometrado (carrera, movilidad) por sus bloques; las pesas, 1 h; lo demás, 1 h 30."""
+    if r and r.get("tipo") in ("carrera", "movilidad"):
+        s = sum(int(b.get("seg") or 0) for b in r.get("bloques") or [])
+        if s:
+            return max(10, round(s / 300) * 5)
+    return 60 if not r or r.get("tipo") == "pesas" else 90
+
+
+def _suma(hora, minutos):
+    m = min(int(hora[:2]) * 60 + int(hora[3:]) + minutos, 23 * 60 + 59)
+    return f"{m // 60:02d}:{m % 60:02d}"
+
+
 def entrenos_deseados(estado, hoy):
     """{"dia:idHabito": {t, dia, cal, nota}} de lo planeado desde `hoy`. Un hábito es de entreno si tiene rutinas."""
     habs = {h.get("id"): h.get("n") for h in estado.get("habits") or []}
     rutinas = {r.get("id"): r for r in estado.get("rutinas") or []}
     deporte = {r.get("hab") for r in rutinas.values()}
     out = {}
+    pie = "Del plan de Entreno (todo.yagotg.dev/entreno.html)"
     for dia, ids in (estado.get("plan") or {}).items():
         if not DIA.match(dia) or dia < hoy:
             continue
-        for hid in ids:
-            if hid not in deporte or hid not in habs:
-                continue
-            r = rutinas.get(((estado.get("sesion") or {}).get(dia) or {}).get(hid))
-            pie = "Del plan de Entreno (todo.yagotg.dev/entreno.html)"
+        del_dia = [(hid, rutinas.get(((estado.get("sesion") or {}).get(dia) or {}).get(hid)))
+                   for hid in ids if hid in deporte and hid in habs]
+        # el gimnasio o la carrera primero y el core detrás; la movilidad de la mañana, por la mañana
+        manana = lambda r: bool(r) and r.get("tipo") == "movilidad" and "ma" in str(r.get("id"))[:3]
+        del_dia.sort(key=lambda x: bool(x[1]) and x[1].get("tipo") == "movilidad")
+        hora = HORA_ENTRENO[date.fromisoformat(dia).weekday()]
+        for hid, r in del_dia:
+            ini = HORA_MANANA if manana(r) else hora
+            fin = _suma(ini, _minutos(r))
+            if not manana(r):
+                hora = fin
             # ya recortados como los dejará limpia(): si no, cada pasada los vería cambiados y los volvería a subir
             out[f"{dia}:{hid}"] = {"t": " ".join(str(r["n"] if r else habs[hid]).split())[:200], "dia": dia, "cal": "Deporte",
+                                   "inicio": ini, "fin": fin,
                                    "nota": (_bloques(r)[:2000 - len(pie) - 2] + "\n\n" + pie) if r else pie}
     return out
 
@@ -290,12 +319,8 @@ def carrera_deseada(estado, hoy):
                 {"Específico": "Llegan las series y los tempos: se entrena el ritmo de carrera.",
                  "Afinar": "Menos volumen y algo de ritmo de carrera: llegar fresco al día D."}.get(w["fase"], ""))
         fase_antes = w["fase"]
-        if w["test"]:
-            pon(f"test-{w['n']}", w["lunes"], f"⏱ Semana de test de 5k (semana {w['n']})",
-                "El primer día de carrera de esta semana es el test: 5k a tope. Con él se recalculan tus ritmos.", dom)
-        if w["descarga"] and w["estado"] != "pasada" and w["fase"] != "Afinar" and not w["test"]:
-            pon(f"descarga-{w['n']}", w["lunes"], f"🌿 Semana de descarga (semana {w['n']})",
-                "Algo menos de volumen para asimilar las tres semanas de subida. Si fallas semanas, se mueve.", dom)
+        # las semanas de test y de descarga ya no van (23/11: eventos de semana entera, todo el día). El test sale en su
+        # día como entreno («Test 5k») cuando carrera.py lo asigna
     return out
 
 
@@ -322,8 +347,10 @@ def cuadra_entrenos(estado=None, hoy=None):
             if d is None:   # quitado del plan (o repetido: el primero ya se llevó su sitio)
                 fuera.append(e)
                 continue
-            if (e["t"], e["nota"], e["cal"], e["fin_dia"]) != (d["t"], d["nota"], d["cal"], d.get("fin_dia", e["dia"])):
-                e.update(t=d["t"], nota=d["nota"], cal=d["cal"], fin_dia=d.get("fin_dia", e["dia"]), sincro=estado_inicial())
+            if (e["t"], e["nota"], e["cal"], e["fin_dia"], e["inicio"], e["fin"]) != (
+                    d["t"], d["nota"], d["cal"], d.get("fin_dia", e["dia"]), d.get("inicio", ""), d.get("fin", "")):
+                e.update(t=d["t"], nota=d["nota"], cal=d["cal"], fin_dia=d.get("fin_dia", e["dia"]),
+                         inicio=d.get("inicio", ""), fin=d.get("fin", ""), sincro=estado_inicial())
                 encolar.append(e["id"])
             quedan.append(e)
         for k, d in sorted(quiero.items()):
@@ -531,7 +558,7 @@ def icloud_calendarios():
 # Lo dijo Yago (17/11): ocio a «ocio !!», trabajo a «trabajo yaguito», vacaciones a «vacations»,
 # cumpleaños a «calendar». Nombres exactos de iCloud; mandan sobre el parecido.
 ALIAS_ICLOUD = {"day-to-day": "daytoday yago", "universidad": "estudio", "ocio": "ocio !!", "musica": "ocio !!",
-                "trabajo": "trabajo yaguito", "vacaciones": "vacations", "cumples": "calendar", "Deporte": "calendar"}
+                "trabajo": "trabajo yaguito", "vacaciones": "vacations", "cumples": "calendar"}   # «Deporte»: el de iCloud que se llame así, o el de por defecto
 
 
 def icloud_destino(cal):
@@ -592,7 +619,21 @@ def _copia(e):
     """Escribe (o reescribe) un evento en Google y en iCloud. Devuelve (ext, sincro)."""
     ext, sincro = dict(e.get("ext") or {}), {}
     g = google()
-    if g is None:
+    if e.get("entreno"):
+        # los entrenos y el plan de carrera, solo a iCloud (23/11: en el iPhone salían dos veces, Google e iCloud);
+        # si tenía copia en Google, se borra
+        try:
+            if g is not None and ext.get("google"):
+                try:
+                    g._api("DELETE", f"calendars/{_gcal(g, e['cal'])}/events/{ext['google']}")
+                except urllib.error.HTTPError as ex:
+                    if ex.code not in (404, 410):
+                        raise
+            ext.pop("google", None)
+            sincro["google"] = "solo iCloud"
+        except Exception as ex:
+            sincro["google"] = _error(ex)
+    elif g is None:
         sincro["google"] = "sin configurar"
     else:
         try:
@@ -634,7 +675,7 @@ def _copia(e):
 def _quita(e):
     ext = e.get("ext") or {}
     g = google()
-    if g and ext.get("google"):
+    if g and ext.get("google"):   # (un entreno de antes del 23/11 aún puede tenerla)
         try:
             g._api("DELETE", f"calendars/{_gcal(g, e['cal'])}/events/{ext['google']}")
         except urllib.error.HTTPError as ex:
