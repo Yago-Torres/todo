@@ -26,6 +26,10 @@ struct HabitoSemana: Identifiable, Hashable {
     var estados: [String: String]?
     /// La racha de hoy según el servidor (base + hecho hoy).
     var rachaHoy: Int?
+    /// Hoy se juega la racha: se exige, no está hecho y hay racha (en_juego del servidor).
+    var juego = false
+    /// Hoy cuenta como listo: hecho, cubierto o al día (como el círculo de Hoy). nil sin /api/rachas.
+    var listoHoy: Bool?
 }
 
 struct DatosEstado {
@@ -83,7 +87,9 @@ struct DatosEstado {
                                 hechos: Set(sem.filter { log[$0]?.contains(id) ?? false }),
                                 racha: Self.rachas(id, en: sem, log: log),
                                 estados: delServidor[id].map { ($0["dias"] as? [String: String]) ?? [:] },
-                                rachaHoy: (delServidor[id]?["racha"] as? NSNumber)?.intValue)
+                                rachaHoy: (delServidor[id]?["racha"] as? NSNumber)?.intValue,
+                                juego: (delServidor[id]?["en_juego"] as? Bool) ?? false,
+                                listoHoy: delServidor[id].map(Self.listo))
         }
 
         // sesiones de entreno: hábitos con alguna rutina que no sea de movilidad (igual que es_entreno() del servidor)
@@ -111,6 +117,15 @@ struct DatosEstado {
             }
         }
         self.sesiones = sesiones
+    }
+
+    /// Listo hoy según /api/rachas: hecho, cubierto (quincenal hecho hace poco) o al día (hoy no se exige, sin descanso y
+    /// con la racha viva). La misma cuenta que `listo` de Habito (Modelos.swift).
+    static func listo(_ h: [String: Any]) -> Bool {
+        let hecho = (h["hecho"] as? Bool) ?? false
+        let racha = (h["racha"] as? NSNumber)?.intValue ?? 0
+        let alDia = (h["exigido"] as? Bool) == false && h["libre"] as? String == nil && racha > 0
+        return hecho || h["cubierto"] as? String != nil || alDia
     }
 
     /// Para cada día de `sem` en que acaba una racha (hecho y el siguiente no, o es el último), cuántos días seguidos lleva.

@@ -598,202 +598,185 @@ struct SemanaVista: View {
 
     private func tabla(_ d: DatosEstado) -> some View {
         let t = Tinta(modo)
-        // todos, se hayan tocado o no; en el mediano no caben, así que primero los que se movieron estos 7 días
+        // primero lo que se juega la racha hoy, luego lo que falta y después las rachas más largas; el mediano lleva 4
         let grande = familia == .systemLarge
-        let quietos = d.habitos.filter { $0.plan.isEmpty && $0.hechos.isEmpty }
-        let orden = grande ? d.habitos : d.habitos.filter { !$0.plan.isEmpty || !$0.hechos.isEmpty } + quietos
+        let listo = { (h: HabitoSemana) in h.listoHoy ?? h.hechos.contains(d.hoy) }
+        let orden = d.habitos.enumerated().sorted { a, b in
+            let x = a.element, y = b.element
+            if x.juego != y.juego { return x.juego }
+            if listo(x) != listo(y) { return !listo(x) }
+            if (x.rachaHoy ?? 0) != (y.rachaHoy ?? 0) { return (x.rachaHoy ?? 0) > (y.rachaHoy ?? 0) }
+            return a.offset < b.offset
+        }.map(\.element)
         let filas = Array(orden.prefix(grande ? 14 : 4))
-        let hechos = d.habitos.reduce(0) { $0 + $1.hechos.count }
-        let previstos = d.habitos.reduce(0) { $0 + max($1.plan.count, $1.hechos.count) }
-        let apretado = filas.count > 9
-        return VStack(alignment: .leading, spacing: apretado ? 3 : 5) {
-            CabeceraWidget(titulo: "Últimos 7 días", simbolo: "calendar", cuenta: previstos > 0 ? "\(hechos)/\(previstos)" : nil)
-            HStack(spacing: 0) {
-                Spacer().frame(width: 92)
-                ForEach(d.semana, id: \.self) { dia in
-                    Text(DiasSemana.inicial(dia))
-                        .font(.system(size: 10, weight: dia == d.hoy ? .bold : .regular))
-                        .foregroundStyle(dia == d.hoy ? t.texto : t.suave)
-                        .frame(maxWidth: .infinity)
+        let listos = d.habitos.filter(listo).count
+        let lado: CGFloat = filas.count > 11 ? 15 : 17
+        return VStack(alignment: .leading, spacing: filas.count > 11 ? 3 : 4) {
+            CabeceraWidget(titulo: "Hábitos", simbolo: "flame.fill", cuenta: d.habitos.isEmpty ? nil : "\(listos)/\(d.habitos.count) hoy")
+            HStack(spacing: 6) {
+                Spacer().frame(width: FilaSemana.anchoNombre)
+                HStack(spacing: FilaSemana.hueco) {
+                    ForEach(d.semana, id: \.self) { dia in
+                        Text(DiasSemana.inicial(dia))
+                            .font(.system(size: 9.5, weight: dia == d.hoy ? .bold : .regular))
+                            .foregroundStyle(dia == d.hoy ? t.texto : t.suave)
+                            .frame(maxWidth: .infinity)
+                    }
                 }
+                Text("racha").font(.system(size: 8.5)).foregroundStyle(t.suave)
+                    .frame(width: FilaSemana.anchoRacha, alignment: .trailing)
             }
             if filas.isEmpty {
                 Spacer(minLength: 0)
                 Text("Sin hábitos").font(.system(size: 13, weight: .semibold)).foregroundStyle(t.texto)
             }
-            ForEach(filas) { h in FilaSemana(habito: h, semana: d.semana, hoy: d.hoy, lado: apretado ? 13 : 15) }
+            ForEach(filas) { h in FilaSemana(habito: h, semana: d.semana, hoy: d.hoy, lado: lado) }
             Spacer(minLength: 0)
-            HStack(spacing: 10) {
-                PuntoLeyenda(color: t.habitos, texto: "hecho")
-                PuntoLeyenda(color: t.suave, texto: "previsto")
-                PuntoLeyenda(color: t.aviso, texto: "sin hacer")
+            if grande {
+                HStack(spacing: 10) {
+                    LeyendaCasilla(texto: "hecho") { RoundedRectangle(cornerRadius: 2).fill(t.habitos) }
+                    LeyendaCasilla(texto: "no tocaba, racha viva") { RoundedRectangle(cornerRadius: 2).fill(t.habitos.opacity(0.27)) }
+                    LeyendaCasilla(texto: "se rompió") { RoundedRectangle(cornerRadius: 2).strokeBorder(t.aviso, lineWidth: 1.5) }
+                }
+                .foregroundStyle(t.suave)
             }
-            .foregroundStyle(t.suave)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 
-/// Una fila del widget. La cadena sigue la regla de rachas del servidor (/api/rachas): solo la rompe un día exigido sin
-/// hacer. Los días que no se exigían (Correr, 3/sem: los de entre medias) o libres (descanso, vacaciones, comodín) quedan
-/// dentro de una cápsula en contorno que abarca toda la racha; si sigue viva, el contorno llega hasta hoy. Los hechos van en
-/// cápsulas que se encienden hacia la derecha; la última lleva la racha escrita (desde 3) y, si es de hoy, brilla.
-/// Al marcar, la cápsula de ayer se desliza hasta hoy: se identifican por el día en que empiezan, así que al redibujar
-/// solo cambia su ancho y SwiftUI lo anima. Sin /api/rachas (sin red), la cadena son días seguidos, como antes.
+/// Un cuadradito de leyenda con su texto.
+struct LeyendaCasilla<Muestra: View>: View {
+    let texto: String
+    @ViewBuilder let muestra: () -> Muestra
+
+    var body: some View {
+        HStack(spacing: 4) {
+            muestra().frame(width: 7, height: 7)
+            Text(texto).font(.system(size: 9.5))
+        }
+    }
+}
+
+/// Rayas en diagonal (los días libres: descanso, vacaciones, enfermedad o comodín).
+struct Rayas: Shape {
+    var paso: CGFloat = 4
+
+    func path(in r: CGRect) -> Path {
+        var p = Path()
+        var x = r.minX - r.height
+        while x < r.maxX {
+            p.move(to: CGPoint(x: x, y: r.maxY))
+            p.addLine(to: CGPoint(x: x + r.height, y: r.minY))
+            x += paso
+        }
+        return p
+    }
+}
+
+/// Una fila del mosaico (lo eligió Yago en el probador del 24/11): el nombre, una casilla por día y la racha en su color.
+/// Las casillas siguen la regla de rachas del servidor (/api/rachas): hecho en el color del hábito (hoy, con brillo);
+/// los días que no se exigían dentro de una racha (Correr 3/sem entre medias, la semana sin tocar de un quincenal), en
+/// tenue; los libres, rayados; un fallo, en contorno ámbar. Hoy sin hacer va en contorno (ámbar si se juega la racha) y se
+/// marca con un toque. Sin /api/rachas (sin red), la cadena son días seguidos y solo se pinta lo hecho.
 struct FilaSemana: View {
     @Environment(\.widgetRenderingMode) private var modo
     let habito: HabitoSemana
     let semana: [String]
     let hoy: String
-    var lado: CGFloat = 15
+    var lado: CGFloat = 17
 
-    private struct Tramo: Hashable {
-        let desde: Int
-        let hasta: Int
-    }
+    static let anchoNombre: CGFloat = 88
+    static let anchoRacha: CGFloat = 24
+    static let hueco: CGFloat = 3
 
-    /// Una racha dentro de los 7 días: de su primer día hecho al último (o a hoy, si sigue viva) y sus tramos hechos.
-    private struct Cadena: Hashable {
-        let desde: Int
-        var hasta: Int
-        var hechos: [Tramo]
-        var viva = false
-        var numero = 0
-    }
-
-    private var cadenas: [Cadena] {
+    /// Índices de los 7 días que caen dentro de una racha: de un hecho al siguiente sin un fallo entre medias y, si la
+    /// racha sigue viva, hasta hoy.
+    private var enRacha: Set<Int> {
         let est = habito.estados
-        let iHoy = semana.firstIndex(of: hoy)
-        var out: [Cadena] = []
-        var abierta: Cadena?
+        guard let est else { return [] }
+        var out = Set<Int>()
+        var desde: Int?
+        var ultimo: Int?
         for (i, dia) in semana.enumerated() {
             if habito.hechos.contains(dia) {
-                if var c = abierta {
-                    if let u = c.hechos.last, u.hasta == i - 1 { c.hechos[c.hechos.count - 1] = Tramo(desde: u.desde, hasta: i) } else { c.hechos.append(Tramo(desde: i, hasta: i)) }
-                    c.hasta = i
-                    abierta = c
-                } else {
-                    abierta = Cadena(desde: i, hasta: i, hechos: [Tramo(desde: i, hasta: i)])
-                }
-            } else {
-                let estado = est?[dia]
-                // sin datos del servidor, cualquier hueco corta; con ellos, solo un fallo
-                let corta = est == nil ? dia != hoy : estado == "fallo"
-                if corta, let c = abierta { out.append(c); abierta = nil }
+                if desde == nil { desde = i }
+                ultimo = i
+            } else if est[dia] == "fallo" {
+                if let a = desde, let u = ultimo { out.formUnion(a...u) }
+                desde = nil
+                ultimo = nil
             }
         }
-        if let c = abierta { out.append(c) }
-        guard !out.isEmpty else { return out }
-        var u = out[out.count - 1]
-        let rachaViva = habito.rachaHoy ?? habito.racha[semana[u.hasta]] ?? 0
-        if rachaViva > 0, let iHoy, u.hasta >= iHoy - 1 || est != nil {
-            u.viva = true
-            u.numero = rachaViva
-            u.hasta = max(u.hasta, iHoy)   // el puente llega hasta hoy
-        }
-        out[out.count - 1] = u
-        for k in out.indices where !out[k].viva {
-            let ultimo = out[k].hechos.last!
-            out[k].numero = habito.racha[semana[ultimo.hasta]] ?? out[k].hechos.reduce(0) { $0 + $1.hasta - $1.desde + 1 }
+        if let a = desde, let u = ultimo {
+            let iHoy = semana.firstIndex(of: hoy) ?? u
+            out.formUnion(a...((habito.rachaHoy ?? 0) > 0 ? max(u, iHoy) : u))
         }
         return out
     }
 
+    private var racha: Int {
+        habito.rachaHoy ?? habito.racha[hoy] ?? habito.racha[semana.last(where: { habito.hechos.contains($0) }) ?? ""] ?? 0
+    }
+
     var body: some View {
         let t = Tinta(modo)
-        let cs = cadenas
-        let ocupados = Set(cs.flatMap { c in c.hechos.flatMap { Array($0.desde...$0.hasta) } })
-        HStack(spacing: 0) {
-            Text(habito.n).font(.system(size: lado < 15 ? 11 : 12, weight: .medium)).foregroundStyle(t.texto)
-                .lineLimit(1).minimumScaleFactor(0.7).frame(width: 92, alignment: .leading)
-            GeometryReader { g in
-                let ancho = g.size.width / CGFloat(max(semana.count, 1))
-                ZStack(alignment: .leading) {
-                    ForEach(Array(semana.enumerated()), id: \.offset) { i, dia in
-                        if !ocupados.contains(i) {
-                            vacio(dia, t).frame(width: ancho).offset(x: CGFloat(i) * ancho)
-                        }
-                    }
-                    ForEach(cs, id: \.desde) { c in
-                        if c.hasta > c.desde {   // el contorno de toda la racha, por debajo de lo hecho
-                            puente(t)
-                                .frame(width: CGFloat(c.hasta - c.desde + 1) * ancho - 4, height: lado)
-                                .offset(x: CGFloat(c.desde) * ancho + 2)
-                                .animation(.smooth(duration: 0.5), value: c.hasta)
-                        }
-                    }
-                    ForEach(cs, id: \.desde) { c in
-                        ForEach(c.hechos, id: \.desde) { tr in
-                            capsula(tr, c, t)
-                                .frame(width: max(CGFloat(tr.hasta - tr.desde + 1) * ancho - 4, lado), height: lado)
-                                .offset(x: CGFloat(tr.desde) * ancho + 2)
-                                .transition(.scale(scale: 0.2, anchor: .leading).combined(with: .opacity))
-                                .animation(.smooth(duration: 0.5), value: tr.hasta)
-                        }
-                    }
-                    if let i = semana.firstIndex(of: hoy) {
+        let dentro = enRacha
+        HStack(spacing: 6) {
+            Text(habito.n).font(.system(size: lado < 17 ? 11 : 12, weight: .medium)).foregroundStyle(t.texto)
+                .lineLimit(1).minimumScaleFactor(0.7).frame(width: Self.anchoNombre, alignment: .leading)
+            HStack(spacing: Self.hueco) {
+                ForEach(Array(semana.enumerated()), id: \.element) { i, dia in
+                    if dia == hoy {
                         Button(intent: MarcaHabitoIntent(habito: habito.id, nombre: habito.n, hecho: !habito.hechos.contains(hoy))) {
-                            Rectangle().fill(Color.white.opacity(0.001))
+                            casilla(dia, dentro: dentro.contains(i), t)
                         }
                         .buttonStyle(.plain)
-                        .frame(width: ancho, height: g.size.height)
-                        .offset(x: CGFloat(i) * ancho)
+                    } else {
+                        casilla(dia, dentro: dentro.contains(i), t)
                     }
                 }
-                .frame(width: g.size.width, height: g.size.height, alignment: .leading)
             }
-            .frame(height: lado + 2)
+            Text("\(racha)")
+                .font(.system(size: 11, weight: .heavy)).monospacedDigit()
+                .foregroundStyle(habito.juego ? t.aviso : racha > 0 ? color(t) : t.suave)
+                .contentTransition(.numericText(value: Double(racha)))
+                .frame(width: Self.anchoRacha, alignment: .trailing)
+                .widgetAccentable()
         }
+        .frame(height: lado)
     }
 
     private func color(_ t: Tinta) -> Color { t.completo ? Color(hex: habito.c) : Color.primary }
 
-    private func puente(_ t: Tinta) -> some View {
-        Capsule()
-            .strokeBorder(color(t).opacity(0.55), lineWidth: 1.5)
-            .widgetAccentable()
-    }
-
-    private func capsula(_ tr: Tramo, _ c: Cadena, _ t: Tinta) -> some View {
+    @ViewBuilder private func casilla(_ dia: String, dentro: Bool, _ t: Tinta) -> some View {
         let col = color(t)
-        let deHoy = semana[tr.hasta] == hoy
-        let ultimo = tr == c.hechos.last
-        // en una cadena con huecos, lo más reciente va más encendido
-        let tramoCadena = CGFloat(max(c.hasta - c.desde, 1))
-        let inicio = 0.28 + 0.45 * CGFloat(tr.desde - c.desde) / tramoCadena
-        return Capsule()
-            .fill(LinearGradient(colors: [col.opacity(deHoy ? max(inicio, 0.35) : inicio), col], startPoint: .leading, endPoint: .trailing))
-            .overlay {
-                if deHoy {   // el extremo de hoy, encendido
-                    Capsule().fill(LinearGradient(colors: [.clear, .white.opacity(0.22)], startPoint: .leading, endPoint: .trailing))
-                }
+        let forma = RoundedRectangle(cornerRadius: 4, style: .continuous)
+        let hecho = habito.hechos.contains(dia)
+        let estado = habito.estados?[dia]
+        let deHoy = dia == hoy
+        ZStack {
+            if hecho {
+                forma.fill(col)
+                    .shadow(color: deHoy && t.completo ? col.opacity(0.7) : .clear, radius: 4)
+                    .widgetAccentable()
+            } else if estado == "fallo" {
+                forma.strokeBorder(t.aviso, lineWidth: 1.5)
+            } else if let estado, ["descanso", "vacaciones", "enfermedad", "comodin"].contains(estado) {
+                forma.fill(t.campo)
+                Rayas().stroke(col.opacity(0.4), lineWidth: 1.5).clipShape(forma)
+            } else if dentro {
+                forma.fill(col.opacity(0.2))
+            } else {
+                forma.fill(t.campo)
             }
-            .shadow(color: deHoy && t.completo ? col.opacity(0.85) : .clear, radius: 4)
-            .overlay(alignment: .trailing) {
-                if ultimo && c.numero >= 3 {
-                    Text("\(c.numero)")
-                        .font(.system(size: lado < 15 ? 8.5 : 9.5, weight: .heavy)).monospacedDigit()
-                        .foregroundStyle(.black.opacity(0.62))
-                        .lineLimit(1).minimumScaleFactor(0.6)
-                        .contentTransition(.numericText(value: Double(c.numero)))
-                        .padding(.trailing, 5)
-                }
+            if deHoy && !hecho {
+                forma.strokeBorder(habito.juego ? t.aviso : col.opacity(0.67), lineWidth: 1.5)
             }
-            .widgetAccentable()
-    }
-
-    @ViewBuilder private func vacio(_ dia: String, _ t: Tinta) -> some View {
-        let previsto = habito.plan.contains(dia)
-        if dia == hoy {
-            Circle()
-                .strokeBorder(previsto ? color(t) : t.suave, style: StrokeStyle(lineWidth: 1.5, dash: previsto ? [] : [2.5, 2]))
-                .background(Circle().fill(t.completo ? Paleta.fondo : .clear))   // tapa el puente que llega hasta hoy
-                .frame(width: lado - 1, height: lado - 1)
-        } else if habito.estados?[dia] == "fallo" || (habito.estados == nil && previsto && dia < hoy) {
-            Circle().strokeBorder(t.aviso, lineWidth: 1.5).frame(width: lado - 4, height: lado - 4)
-        } else {
-            Circle().fill(t.campo).frame(width: 4, height: 4)
         }
+        .frame(maxWidth: .infinity)
+        .frame(height: lado)
+        .animation(.smooth(duration: 0.4), value: hecho)
     }
 }
 
@@ -803,7 +786,7 @@ struct SemanaWidget: Widget {
             SemanaVista(entrada: entrada)
         }
         .configurationDisplayName("Semana de hábitos")
-        .description("Todos tus hábitos en los últimos 7 días hasta hoy: lo hecho, lo previsto y lo que se quedó sin hacer. Marca el de hoy con un toque.")
+        .description("Tus hábitos en los últimos 7 días, en mosaico: lo hecho, lo que no tocaba con la racha viva y lo que la rompió, con la racha de cada uno. Marca el de hoy con un toque.")
         .supportedFamilies([.systemMedium, .systemLarge])
     }
 }
