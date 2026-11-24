@@ -119,9 +119,101 @@ struct TarjetaHabito: View {
     @State private var datos = DatosNativos.shared
     @State private var rachas = DatosRachas.shared
 
+    /// Un trozo de racha dentro de la semana (índices de `dias`). `entra`: viene de la semana anterior; `sale`: sigue
+    /// en la siguiente. Los dos extremos se pintan pegados al borde.
+    struct Tramo: Hashable {
+        var desde: Int
+        var hasta: Int
+        var entra = false
+        var sale = false
+    }
+
+    private func hecho(_ d: String) -> Bool { datos.log[d]?.contains(habito.id) ?? false }
+
+    private func mueve(_ d: String, _ n: Int) -> String {
+        guard let f = Fecha.fecha(d), let g = Calendar(identifier: .gregorian).date(byAdding: .day, value: n, to: f) else { return d }
+        return Fecha.dia(g)
+    }
+
+    /// ¿Rompe la racha este día? Con lo que cuenta el servidor (/api/rachas: las últimas 6 semanas), solo un fallo; los
+    /// días que no se exigían o eran libres no. Sin esos datos (más atrás o sin red) corta cualquier día sin hacer.
+    private func corta(_ d: String) -> Bool {
+        if hecho(d) { return false }
+        let conDatos = rachas.habitos.contains { $0.id == habito.id } && d >= mueve(hoy, -41)
+        return conDatos ? rachas.estado(habito.id, d) == "fallo" : true
+    }
+
+    /// Antes de `d`, ¿lo último que cuenta es un día hecho (la racha entra en la semana) o un fallo?
+    private func vieneDeAntes(_ d: String) -> Bool {
+        var x = mueve(d, -1)
+        for _ in 0..<60 {
+            if hecho(x) { return true }
+            if corta(x) { return false }
+            x = mueve(x, -1)
+        }
+        return false
+    }
+
+    /// Después de `d` (una semana pasada), ¿sigue la racha? Hasta el siguiente hecho o fallo; si llega a hoy, la de hoy.
+    private func sigueDespues(_ d: String) -> Bool {
+        var x = mueve(d, 1)
+        while x < hoy {
+            if hecho(x) { return true }
+            if corta(x) { return false }
+            x = mueve(x, 1)
+        }
+        return racha > 0
+    }
+
+    /// La cadena de la semana con la regla de rachas del servidor, como el widget de la semana (FilaSemana): solo la
+    /// rompe un día exigido sin hacer. Lo de entre medias (Correr 3/sem, o una semana sin tocar de un hábito quincenal)
+    /// queda dentro de la cápsula; si la racha sigue viva, la cápsula llega hasta hoy.
+    private var tramos: [Tramo] {
+        guard let primero = dias.first, primero <= hoy else { return [] }
+        var out: [Tramo] = []
+        var desde: Int? = nil, ultimo: Int? = nil
+        var entra = vieneDeAntes(primero)
+        if entra { desde = 0 }
+        func cierra() {
+            // se rompió: del principio al último hecho (sin hechos esta semana, la que entraba ya no llega)
+            if let a = desde, let u = ultimo, u > a || entra { out.append(Tramo(desde: a, hasta: u, entra: entra)) }
+        }
+        for (i, d) in dias.enumerated() where d <= hoy {
+            if hecho(d) {
+                if desde == nil { desde = i }
+                ultimo = i
+            } else if d < hoy && corta(d) {   // hoy sin hacer todavía no rompe
+                cierra()
+                desde = nil; ultimo = nil; entra = false
+            }
+        }
+        if let a = desde {
+            if let iHoy = dias.firstIndex(of: hoy) {
+                if racha > 0 { out.append(Tramo(desde: a, hasta: iHoy, entra: entra)) } else { cierra() }
+            } else if sigueDespues(dias[dias.count - 1]) {
+                out.append(Tramo(desde: a, hasta: dias.count - 1, entra: entra, sale: true))
+            } else {
+                cierra()
+            }
+        }
+        return out.filter { $0.hasta > $0.desde || $0.entra || $0.sale }
+    }
+
+    /// Los días que cuentan para el objetivo: la semana, o las `cada` semanas que acaban en ella (quincenal: esta y la
+    /// anterior). Así «1 vez cada 2 semanas» hecho la semana pasada sale 1/1 y no 0/1 en gris.
+    private var diasPeriodo: [String] {
+        guard habito.cada > 1, let lunes = dias.first else { return dias }
+        return (-(habito.cada - 1) * 7 ..< 7).map { mueve(lunes, $0) }
+    }
+
     var body: some View {
         let color = Color(hex: habito.c)
-        let hechos = dias.filter { datos.log[$0]?.contains(habito.id) ?? false }.count
+        let hechos = diasPeriodo.filter { hecho($0) }.count
+        let cadena = tramos
+        let enRacha = Set(cadena.flatMap { Array($0.desde...$0.hasta) })
+        // esta semana: hecho, cubierto o al día según el servidor (lo mismo que el círculo de Hoy) cuenta como cumplido
+        let alDia = dias.contains(hoy) && (datos.hoy?.habitos.first { $0.id == habito.id }?.listo ?? false)
+        let cumple = hechos >= habito.goal || alDia
         VStack(alignment: .leading, spacing: Tema.Espacio.m) {
             HStack(alignment: .firstTextBaseline, spacing: Tema.Espacio.s) {
                 Circle().fill(color).frame(width: 10, height: 10)
@@ -135,22 +227,44 @@ struct TarjetaHabito: View {
                         .contentTransition(.numericText())
                         .accessibilityLabel(congelada ? "Racha de \(racha) días, congelada hoy" : "Racha de \(racha) días")
                 }
-                Text(habito.cada > 1 ? "\(hechos)/\(habito.goal) · cada \(habito.cada) sem." : "\(hechos)/\(habito.goal)")
+                Text(habito.cada > 1 ? "\(hechos)/\(habito.goal) en \(habito.cada) sem." : "\(hechos)/\(habito.goal)")
                     .font(Tema.fuente(.pequeno)).monospacedDigit()
-                    .foregroundStyle(hechos >= habito.goal ? Tema.acento : Tema.suave)
+                    .foregroundStyle(cumple ? Tema.acento : Tema.suave)
                     .contentTransition(.numericText())
             }
             HStack(spacing: 0) {
-                ForEach(dias, id: \.self) { dia in
-                    Dia(hecho: datos.log[dia]?.contains(habito.id) ?? false,
+                ForEach(Array(dias.enumerated()), id: \.element) { i, dia in
+                    Dia(hecho: hecho(dia),
                         plan: datos.plan[dia]?.contains(habito.id) ?? false,
-                        esHoy: dia == hoy, futuro: dia > hoy, color: color, estado: rachas.estado(habito.id, dia)) {
-                        let nuevo = !(datos.log[dia]?.contains(habito.id) ?? false)
+                        esHoy: dia == hoy, futuro: dia > hoy, color: color, estado: rachas.estado(habito.id, dia),
+                        enRacha: enRacha.contains(i)) {
+                        let nuevo = !hecho(dia)
                         Haptica.shared.toca(nuevo ? .marcar : .desmarcar)
                         Task { await datos.marca(habito.id, hecho: nuevo, dia: dia) }
                     }
                     .frame(maxWidth: .infinity)
                 }
+            }
+            .background {
+                // la cápsula de cada racha, por debajo de los círculos
+                GeometryReader { g in
+                    let ancho = g.size.width / CGFloat(max(dias.count, 1))
+                    let alto: CGFloat = 38
+                    ZStack(alignment: .topLeading) {
+                        ForEach(cadena, id: \.desde) { t in
+                            let x0 = t.entra ? 0 : CGFloat(t.desde) * ancho + (ancho - alto) / 2
+                            let x1 = t.sale ? g.size.width : CGFloat(t.hasta) * ancho + (ancho + alto) / 2
+                            Capsule()
+                                .fill(color.opacity(0.08))
+                                .overlay(Capsule().strokeBorder(color.opacity(0.5), lineWidth: 1.5))
+                                .frame(width: max(x1 - x0, alto), height: alto)
+                                .offset(x: x0, y: (g.size.height - alto) / 2)
+                                .animation(Tema.Muelle.toque, value: t.hasta)
+                        }
+                    }
+                    .frame(width: g.size.width, height: g.size.height, alignment: .topLeading)
+                }
+                .accessibilityHidden(true)
             }
             Barra(valor: Double(hechos) / Double(max(habito.goal, 1)), color: color)
                 .frame(height: 4)
@@ -167,6 +281,8 @@ struct TarjetaHabito: View {
         let color: Color
         /// Lo que dice la racha de ese día (DatosRachas.estado): descanso, vacaciones, enfermedad, comodin, fallo…
         var estado: String? = nil
+        /// Dentro de una racha viva o cerrada (la cápsula de TarjetaHabito): sin hacer, pero no se exigía.
+        var enRacha = false
         let toca: () -> Void
 
         private var libre: String? {
@@ -178,7 +294,11 @@ struct TarjetaHabito: View {
             Button(action: toca) {
                 ZStack {
                     Circle()
-                        .fill(hecho ? color : libre != nil ? color.opacity(0.14) : Tema.carta2)
+                        .fill(hecho ? color : libre != nil ? color.opacity(0.14) : enRacha ? Color.clear : Tema.carta2)
+                    if enRacha && !hecho && libre == nil && !esHoy {
+                        // no tocaba: un punto del color, la cápsula de detrás dice que la racha sigue
+                        Circle().fill(color.opacity(0.5)).frame(width: 5, height: 5)
+                    }
                     if let libre {
                         // día que no cuenta: su icono, y la racha ni sube ni se rompe
                         Image(systemName: DatosRachas.icono(libre))
@@ -204,7 +324,8 @@ struct TarjetaHabito: View {
             .buttonStyle(.plain)
             .disabled(futuro)
             .accessibilityLabel(hecho ? "Hecho" : libre.map { DatosRachas.nombre($0) + ": no cuenta para la racha" }
-                                ?? (estado == "fallo" ? "Sin hacer, se rompió la racha" : plan ? "Planificado" : "Sin hacer"))
+                                ?? (estado == "fallo" ? "Sin hacer, se rompió la racha" : plan ? "Planificado"
+                                    : enRacha ? "No tocaba, la racha sigue" : "Sin hacer"))
         }
     }
 }
