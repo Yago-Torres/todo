@@ -182,6 +182,9 @@ sale con un fundido de un segundo (`TransicionFundido`). El widget y las Live Ac
 - `Datos.swift`: lee `/api/hoy` y `/api/state` (sin red, la copia de Local) y marca al momento; sin red, a la cola.
 - `PantallaHoy.swift`: anillos del día, hábitos de hoy, entreno, «Para hoy», salud, carrera y gastos.
 - `PantallaHabitos.swift`: la semana de cada hábito; tocar un día lo marca (desliza para ver semanas anteriores).
+  Desde el 25/11, en mosaico como el widget de la semana (Yago lo eligió entre mosaico, collar y banda): casillas
+  redondeadas; lo hecho relleno, lo que no tocaba con la racha viva o ya cuenta como hecho (al día, cubierto hasta…)
+  en oscurito, lo que la rompió con borde ámbar, los días libres rayados y hoy con borde del color.
   «Editar» (`Habitos/EditorHabitos.swift`, `GestorHabitos.swift`): crear, cambiar (nombre, color, días por semana, cada
   cuántas semanas), ordenar, borrar y planificar la semana. Cada cambio es una operación de la cola (ver «Sin red» abajo):
   funciona igual sin conexión. Para campos nuevos de un hábito: `GestorHabitos.edita(id, cambios: [...])` / `crea(campos:)`.

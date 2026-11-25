@@ -209,11 +209,17 @@ struct TarjetaHabito: View {
     var body: some View {
         let color = Color(hex: habito.c)
         let hechos = diasPeriodo.filter { hecho($0) }.count
-        let cadena = tramos
-        let enRacha = Set(cadena.flatMap { Array($0.desde...$0.hasta) })
+        let enRacha = Set(tramos.flatMap { Array($0.desde...$0.hasta) })
         // esta semana: hecho, cubierto o al día según el servidor (lo mismo que el círculo de Hoy) cuenta como cumplido
-        let alDia = dias.contains(hoy) && (datos.hoy?.habitos.first { $0.id == habito.id }?.listo ?? false)
+        let deHoy = datos.hoy?.habitos.first { $0.id == habito.id }
+        let alDia = dias.contains(hoy) && (deHoy?.listo ?? false)
         let cumple = hechos >= habito.goal || alDia
+        // se da por hecho sin estarlo (en el mosaico, en oscurito como en el widget): hoy «al día», y de hoy al día que
+        // cubre un «hecho · hasta el domingo»
+        let cubreHasta = deHoy?.cubierto
+        let porHecho: (String) -> Bool = { d in
+            !hecho(d) && ((d == hoy && alDia) || (cubreHasta.map { d >= hoy && d <= $0 } ?? false))
+        }
         VStack(alignment: .leading, spacing: Tema.Espacio.m) {
             HStack(alignment: .firstTextBaseline, spacing: Tema.Espacio.s) {
                 Circle().fill(color).frame(width: 10, height: 10)
@@ -232,39 +238,21 @@ struct TarjetaHabito: View {
                     .foregroundStyle(cumple ? Tema.acento : Tema.suave)
                     .contentTransition(.numericText())
             }
+            // el mosaico de la semana (como el widget, que eligió Yago): una casilla por día; la racha se ve en las
+            // casillas de entre medias, en oscurito
             HStack(spacing: 0) {
                 ForEach(Array(dias.enumerated()), id: \.element) { i, dia in
                     Dia(hecho: hecho(dia),
                         plan: datos.plan[dia]?.contains(habito.id) ?? false,
                         esHoy: dia == hoy, futuro: dia > hoy, color: color, estado: rachas.estado(habito.id, dia),
-                        enRacha: enRacha.contains(i)) {
+                        enRacha: enRacha.contains(i) || porHecho(dia)) {
                         let nuevo = !hecho(dia)
                         Haptica.shared.toca(nuevo ? .marcar : .desmarcar)
                         Task { await datos.marca(habito.id, hecho: nuevo, dia: dia) }
                     }
+                    .padding(.horizontal, 2.5)
                     .frame(maxWidth: .infinity)
                 }
-            }
-            .background {
-                // la cápsula de cada racha, por debajo de los círculos
-                GeometryReader { g in
-                    let ancho = g.size.width / CGFloat(max(dias.count, 1))
-                    let alto: CGFloat = 38
-                    ZStack(alignment: .topLeading) {
-                        ForEach(cadena, id: \.desde) { t in
-                            let x0 = t.entra ? 0 : CGFloat(t.desde) * ancho + (ancho - alto) / 2
-                            let x1 = t.sale ? g.size.width : CGFloat(t.hasta) * ancho + (ancho + alto) / 2
-                            Capsule()
-                                .fill(color.opacity(0.08))
-                                .overlay(Capsule().strokeBorder(color.opacity(0.5), lineWidth: 1.5))
-                                .frame(width: max(x1 - x0, alto), height: alto)
-                                .offset(x: x0, y: (g.size.height - alto) / 2)
-                                .animation(Tema.Muelle.toque, value: t.hasta)
-                        }
-                    }
-                    .frame(width: g.size.width, height: g.size.height, alignment: .topLeading)
-                }
-                .accessibilityHidden(true)
             }
             Barra(valor: Double(hechos) / Double(max(habito.goal, 1)), color: color)
                 .frame(height: 4)
@@ -281,7 +269,7 @@ struct TarjetaHabito: View {
         let color: Color
         /// Lo que dice la racha de ese día (DatosRachas.estado): descanso, vacaciones, enfermedad, comodin, fallo…
         var estado: String? = nil
-        /// Dentro de una racha viva o cerrada (la cápsula de TarjetaHabito): sin hacer, pero no se exigía.
+        /// Dentro de una racha viva o cerrada, o que ya cuenta como hecho (al día, cubierto): sin hacer, pero en oscurito.
         var enRacha = false
         let toca: () -> Void
 
@@ -291,34 +279,40 @@ struct TarjetaHabito: View {
         }
 
         var body: some View {
+            let forma = RoundedRectangle(cornerRadius: 9, style: .continuous)
             Button(action: toca) {
                 ZStack {
-                    Circle()
-                        .fill(hecho ? color : libre != nil ? color.opacity(0.14) : enRacha ? Color.clear : Tema.carta2)
-                    if enRacha && !hecho && libre == nil && !esHoy {
-                        // no tocaba: un punto del color, la cápsula de detrás dice que la racha sigue
-                        Circle().fill(color.opacity(0.5)).frame(width: 5, height: 5)
-                    }
-                    if let libre {
-                        // día que no cuenta: su icono, y la racha ni sube ni se rompe
+                    if hecho {
+                        forma.fill(color)
+                            .shadow(color: esHoy ? color.opacity(0.6) : .clear, radius: 5)
+                        Image(systemName: "checkmark").font(.system(size: 12, weight: .bold)).foregroundStyle(.white)
+                            .transition(.scale.combined(with: .opacity))
+                    } else if let libre {
+                        // día que no cuenta: rayado suave y su icono; la racha ni sube ni se rompe
+                        forma.fill(Tema.carta2)
+                        Rayado().stroke(color.opacity(0.35), lineWidth: 1.5).clipShape(forma)
                         Image(systemName: DatosRachas.icono(libre))
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(libre == "comodin" ? Tema.acento : Tema.suave)
-                    }
-                    if plan && !hecho {
-                        Circle().strokeBorder(color, style: StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
+                    } else if estado == "fallo" {
+                        forma.strokeBorder(Tema.aviso, lineWidth: 1.5)
+                    } else if enRacha {
+                        // no tocaba (o ya cuenta como hecho): el color en oscurito, la racha sigue
+                        forma.fill(color.opacity(0.22))
+                    } else if plan && futuro {
+                        forma.strokeBorder(color.opacity(0.55), style: StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
+                    } else {
+                        forma.fill(Tema.carta2.opacity(futuro ? 0.5 : 1))
                     }
                     if esHoy && !hecho {
-                        Circle().strokeBorder(Tema.acento, lineWidth: 2)
-                    }
-                    if hecho {
-                        Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
-                            .transition(.scale.combined(with: .opacity))
+                        forma.strokeBorder(color.opacity(0.8), lineWidth: 2)
+                    } else if plan && !hecho && !futuro && libre == nil {
+                        forma.strokeBorder(color.opacity(0.55), style: StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
                     }
                 }
-                .frame(width: 32, height: 32)
-                .scaleEffect(hecho ? 1 : 0.9)
-                .opacity(futuro ? 0.35 : 1)
+                .frame(height: 34)
+                .frame(maxWidth: .infinity)
+                .contentShape(forma)
                 .animation(Tema.Muelle.toque, value: hecho)
             }
             .buttonStyle(.plain)
