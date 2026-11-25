@@ -59,10 +59,7 @@ enum PaletaAparato {
             p.acento = .init(claro: "#0B0B0C", oscuro: "#F2F2F3")
             p.acentoTexto = .init(claro: "#FFFFFF", oscuro: "#0B0B0C")
             p.acentoSuave = .init(claro: "#ECECEE", oscuro: "#1F1F22")
-            p.dock = .init(claro: "#FFFFFF", oscuro: "#161618")
-            p.dockTexto = .init(claro: "#6B6B72", oscuro: "#9A9AA2")
-            p.gota = .init(claro: "#0B0B0C", oscuro: "#F2F2F3")
-            p.gotaTexto = .init(claro: "#FFFFFF", oscuro: "#0B0B0C")
+            // la barra de abajo no se toca: la de siempre, con los colores del tema (lo pidió Yago)
         default:
             break
         }

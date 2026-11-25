@@ -328,8 +328,8 @@ fondo, aparato}`. Elegir un tema copia sus valores; tocar cualquiera después lo
   cabecera de Hoy sobre una foto (`PortadaSolar`, `Hoy/nube.webp` y `estanque.webp`, de Wikimedia, con su crédito).
   Iconos: `Icono-solar`, `Icono-plano`, `Icono-conserje`. El widget sigue igual con estos tres.
 - **Oficina** (`oficina`, la carcasa de invest, 25/11; `Hoy/Oficina.swift`): `Tema.oficina`. Colores de invest (blanco y negro,
-  `PaletaAparato`), Inter y cartas planas con borde fino (`EstiloCarta`), sin dibujo de fondo y el menú como píldora con
-  la sección actual en negro (`Dock`). En Hoy, `FranjaOficina` tras la cabecera (cada hábito de hoy en su mesa: pendiente,
+  `PaletaAparato`), Inter y cartas planas con borde fino (`EstiloCarta`), sin dibujo de fondo; la barra de abajo no
+  cambia (la de siempre, con su gota). En Hoy, `FranjaOficina` tras la cabecera (cada hábito de hoy en su mesa: pendiente,
   teclea; `listo`, se va a casa; tu despacho a la derecha) y `BecariosOficina` al final (en la web van en la esquina).
   Pixel art en `Canvas` + `TimelineView` (`DibujoOficina`, `Pixeles`), luz por la altura real del sol (`LuzOficina`, la
   misma mezcla que `luz()` de `~/estilo/oficina.js`). Los becarios no guardan estado: sus rondas salen del reloj.

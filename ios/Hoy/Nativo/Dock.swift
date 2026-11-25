@@ -76,21 +76,12 @@ struct Dock: View {
         let muelle: Animation = dedo == nil ? Tema.Muelle.gota : .interactiveSpring(response: 0.18, dampingFraction: 0.86)
         return ZStack(alignment: .topLeading) {
             if let x {
-                if Tema.oficina {
-                    // Oficina: la sección actual en una píldora negra (en oscuro, blanca), sin la gota
-                    Capsule()
-                        .fill(Tema.gota)
-                        .frame(width: max(30, celda - 4), height: 52)
-                        .position(x: x, y: 31)
-                        .animation(muelle, value: x)
-                } else {
-                    Circle()
-                        .fill(Tema.gota)
-                        .frame(width: 50, height: 50)
-                        .shadow(color: .black.opacity(0.25), radius: 8, y: 4)
-                        .position(x: x, y: 9)
-                        .animation(muelle, value: x)
-                }
+                Circle()
+                    .fill(Tema.gota)
+                    .frame(width: 50, height: 50)
+                    .shadow(color: .black.opacity(0.25), radius: 8, y: 4)
+                    .position(x: x, y: 9)
+                    .animation(muelle, value: x)
             }
             HStack(spacing: 0) {
                 ForEach(Array(lista.enumerated()), id: \.element.id) { i, e in
@@ -101,10 +92,7 @@ struct Dock: View {
             .animation(Tema.Muelle.gota, value: marcada)
         }
         .frame(width: total, height: 62)
-        .background(Tema.dock, in: RoundedRectangle(cornerRadius: Tema.oficina ? 31 : Tema.Radio.dock, style: .continuous))
-        .overlay {
-            if Tema.oficina { RoundedRectangle(cornerRadius: 31, style: .continuous).strokeBorder(Tema.linea, lineWidth: 1) }
-        }
+        .background(Tema.dock, in: RoundedRectangle(cornerRadius: Tema.Radio.dock, style: .continuous))
         .contentShape(Rectangle())
         // tocar y arrastrar son el mismo gesto: la gota sigue al dedo y al soltar se va a la sección de debajo
         .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .local)
@@ -145,13 +133,13 @@ private struct ItemDock: View {
                 .font(.system(size: 19, weight: .medium))
                 .foregroundStyle(activa ? Tema.gotaTexto : Tema.dockTexto)
                 .frame(height: 50)
-                .offset(y: activa && !Tema.oficina ? -22 : 0)
+                .offset(y: activa ? -22 : 0)
             Text(entrada.nombre)
                 .font(.system(size: 10, weight: activa ? .semibold : .medium))
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
-                .foregroundStyle(activa ? (Tema.oficina ? Tema.gotaTexto : Color.white) : Tema.dockTexto)
-                .offset(y: activa && !Tema.oficina ? -14 : -8)
+                .foregroundStyle(activa ? Color.white : Tema.dockTexto)
+                .offset(y: activa ? -14 : -8)
         }
         .frame(width: ancho, height: 62)
         .contentShape(Rectangle())
