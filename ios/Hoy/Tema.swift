@@ -173,6 +173,13 @@ struct EstiloCarta: ViewModifier {
                 .padding(.top, relleno < Tema.Espacio.m ? 4 : 0)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(PanelJuno(color: Tema.carta, radio: min(Tema.Radio.carta, 8), tornillos: relleno >= Tema.Espacio.m))
+        } else if Tema.oficina {
+            // Oficina: la carta de invest, plana con un borde fino y sin sombra
+            content
+                .padding(relleno)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Tema.carta, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Tema.linea, lineWidth: 1))
         } else if Tema.solar || Tema.plano || Tema.conserje {
             content
                 .padding(relleno)

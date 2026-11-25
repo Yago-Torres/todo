@@ -2,6 +2,7 @@ import SwiftUI
 
 // Las carcasas Solarpunk, Plano y Conserje (ids "solar", "plano", "conserje"): las de la web (~/estilo/solar.css,
 // plano.css y conserje.css) en SwiftUI. juno1980 vive en Compartido/Juno.swift porque la usa también el widget.
+// Oficina (id "oficina", la de invest) tiene su pixel art en Hoy/Oficina.swift; aquí, solo sus colores.
 // Calma no pasa por aquí.
 
 extension Tema {
@@ -13,7 +14,7 @@ extension Tema {
     static var conserje: Bool { actual.aparato == "conserje" }
 }
 
-/// Plano y Conserje mandan sobre los colores del tema (en la web, sus tokens van con !important).
+/// Plano, Conserje y Oficina mandan sobre los colores del tema (en la web, sus tokens van con !important).
 enum PaletaAparato {
     static func aplica(_ p: inout Paleta, aparato: String) {
         switch aparato {
@@ -45,6 +46,23 @@ enum PaletaAparato {
             p.acentoSuave = .init(claro: "#F4D8DC", oscuro: "#48223A")
             p.dock = .init(claro: "#6B1E37", oscuro: "#4A1A2C")
             p.dockTexto = .init(claro: "#F6E2B8", oscuro: "#F2D69A")
+        case "oficina":
+            // la base de invest: blanco y negro; el acento es el texto (nunca verde ni rojo: son subir y bajar)
+            p.fondo = .init(claro: "#FFFFFF", oscuro: "#0B0B0C")
+            p.carta = .init(claro: "#FFFFFF", oscuro: "#0B0B0C")
+            p.cartaLuz = p.carta
+            p.carta2 = .init(claro: "#F4F4F5", oscuro: "#1A1A1D")
+            p.texto = .init(claro: "#0B0B0C", oscuro: "#F2F2F3")
+            p.suave = .init(claro: "#6B6B72", oscuro: "#9A9AA2")
+            p.tenue = .init(claro: "#A1A1A8", oscuro: "#5F5F66")
+            p.linea = .init(claro: "#E7E7EA", oscuro: "#26262A")
+            p.acento = .init(claro: "#0B0B0C", oscuro: "#F2F2F3")
+            p.acentoTexto = .init(claro: "#FFFFFF", oscuro: "#0B0B0C")
+            p.acentoSuave = .init(claro: "#ECECEE", oscuro: "#1F1F22")
+            p.dock = .init(claro: "#FFFFFF", oscuro: "#161618")
+            p.dockTexto = .init(claro: "#6B6B72", oscuro: "#9A9AA2")
+            p.gota = .init(claro: "#0B0B0C", oscuro: "#F2F2F3")
+            p.gotaTexto = .init(claro: "#FFFFFF", oscuro: "#0B0B0C")
         default:
             break
         }

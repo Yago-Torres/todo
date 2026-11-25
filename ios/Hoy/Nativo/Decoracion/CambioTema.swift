@@ -60,7 +60,7 @@ enum IconoTema {
     /// Los temas que traen icono en esta versión (un tema nuevo del servidor sin icono deja el que haya).
     static let conIcono: Set<String> = ["hormigon", "shibuya", "kioto", "sakura", "calma", "terminal", "prensa", "fiordo",
                                         "cafe", "bauhaus", "miami", "matcha", "lavanda", "medianoche", "braun", "bosque",
-                                        "arena", "grafito", "hardware", "solar", "plano", "conserje"]
+                                        "arena", "grafito", "hardware", "solar", "plano", "conserje", "oficina"]
 
     static var activo: Bool { Almacen.defaults.object(forKey: clave) as? Bool ?? true }
 

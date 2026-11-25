@@ -300,6 +300,11 @@ final class Aspecto {
         t.aparato = eleccion.aparato
         PaletaAparato.aplica(&t.paleta, aparato: t.aparato)
         if t.aparato == "hardware" { Letras.lista("Share Tech Mono"); Letras.lista("VT323") }
+        // Oficina: Inter en todo y esquinas de invest (14 las cartas), como en la web
+        if t.aparato == "oficina" {
+            if Letras.lista("Inter") { t.fuentes = Fuentes(texto: "Inter", titulo: "Inter", cifras: "Inter") }
+            t.radios = Radios(carta: 14, boton: 10, celda: 7)
+        }
         return t
     }
 

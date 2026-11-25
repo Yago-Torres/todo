@@ -32,6 +32,8 @@ struct PantallaHoy: View {
                 cabecera(editar: editar)
                     .modifier(PortadaSolar())
                 if let copia = datos.copia { avisoCopia(copia) }
+                // Oficina: tus hábitos de hoy como un equipo, cada uno en su mesa (Hoy/Oficina.swift)
+                if Tema.oficina && !datos.habitosDeHoy.isEmpty { FranjaOficina(habitos: datos.habitosDeHoy) }
             }
         } bloque: { id in
             bloque(id)
@@ -39,11 +41,22 @@ struct PantallaHoy: View {
             if let error = datos.error, hoy == nil {
                 Text(error).font(Tema.fuente(.pequeno)).foregroundStyle(Tema.peligro)
             }
+            // Oficina: los becarios, al final (en la web van en la esquina; aquí no caben)
+            if Tema.oficina { BecariosOficina(datos: frasesBecarios) }
         }
         .task { await datos.carga() }
         // completar el día: confeti con los colores del tema, háptica y sonido
         .overlay { CelebracionDia(disparo: toques).ignoresSafeArea() }
         .celebraHitos()   // llegar a 7, 30, 100… días de racha (Rachas/CelebracionHito.swift)
+    }
+
+    /// Lo que comentan los becarios de tus cifras de hoy (Oficina).
+    private var frasesBecarios: [String] {
+        let hs = datos.habitosDeHoy
+        var f = ["hábitos \(hs.filter(\.listo).count)/\(hs.count)... el jefe mira", "\(hs.filter(\.listo).count) de \(hs.count), hfgnc..."]
+        if let p = hoy?.salud?.pasos?.ultimo { f.append("\(Self.miles(p)) pasos, nose nose") }
+        if let s = hoy?.salud?.sueno?.ultimo { f.append("durmió \(Self.hm(s)) zzz") }
+        return f
     }
 
     @ViewBuilder private func bloque(_ id: String) -> some View {

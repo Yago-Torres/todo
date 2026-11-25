@@ -16,7 +16,7 @@ struct FondoTema: View {
         let intensidad = Tema.actual.fondo
         let id = Aspecto.shared.decoracion
         Group {
-            if intensidad <= 0 {
+            if intensidad <= 0 || Tema.oficina {   // Oficina es la carcasa limpia: sin dibujo de fondo
                 Color.clear
             } else if let deco = Decoracion(rawValue: id) {
                 let colores = ColoresFondo()

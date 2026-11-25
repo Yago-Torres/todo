@@ -327,6 +327,13 @@ fondo, aparato}`. Elegir un tema copia sus valores; tocar cualquiera después lo
   sus colores (`PaletaAparato.aplica` en `Aspecto.construye`), como el `!important` de la web. Solarpunk pone la
   cabecera de Hoy sobre una foto (`PortadaSolar`, `Hoy/nube.webp` y `estanque.webp`, de Wikimedia, con su crédito).
   Iconos: `Icono-solar`, `Icono-plano`, `Icono-conserje`. El widget sigue igual con estos tres.
+- **Oficina** (`oficina`, la carcasa de invest, 25/11; `Hoy/Oficina.swift`): `Tema.oficina`. Colores de invest (blanco y negro,
+  `PaletaAparato`), Inter y cartas planas con borde fino (`EstiloCarta`), sin dibujo de fondo y el menú como píldora con
+  la sección actual en negro (`Dock`). En Hoy, `FranjaOficina` tras la cabecera (cada hábito de hoy en su mesa: pendiente,
+  teclea; `listo`, se va a casa; tu despacho a la derecha) y `BecariosOficina` al final (en la web van en la esquina).
+  Pixel art en `Canvas` + `TimelineView` (`DibujoOficina`, `Pixeles`), luz por la altura real del sol (`LuzOficina`, la
+  misma mezcla que `luz()` de `~/estilo/oficina.js`). Los becarios no guardan estado: sus rondas salen del reloj.
+  Icono: `Icono-oficina` (el muñeco en su mesa). El widget sigue igual.
 - `Compartido/Oklch.swift`: la fórmula de calma.js `genera()` cifra a cifra (OKLCH de Ottosson): base + acento →
   todos los tokens de claro y oscuro, la gota y el ascii. #F2F2F2 + #4E7A62 → oscuro fondo #131313, acento #87B098.
 - `Hoy/Aspecto.swift` construye `Tema.actual` (@Observable: se repinta todo con un fundido), lo guarda en el app group,
