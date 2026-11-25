@@ -236,7 +236,7 @@ struct FranjaOficina: View {
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Tema.linea, lineWidth: 1))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Tu equipo de hábitos: \(habitos.filter { !$0.listo }.count) trabajando y \(habitos.filter(\.listo).count) ya en casa")
+        .accessibilityLabel("Tu equipo de hábitos: \(habitos.filter({ !$0.listo }).count) trabajando y \(habitos.filter(\.listo).count) ya en casa")
     }
 }
 
@@ -318,7 +318,7 @@ struct BecariosOficina: View {
         let ranura = t / 44
         let s = DibujoOficina.semilla("globo\(ranura)")
         guard s % 3 != 0, t % 44 < 22 else { return nil }
-        let quien = s % 3
+        let quien = (s / 3) % 3   // 0 = el de la mesa
         let x = quien == 0 ? 17.0 : paseo[quien - 1].0 + 4
         if quien == 0 && durmiendo { return ("zzz...", x) }
         let r = (s / 7) % 100
