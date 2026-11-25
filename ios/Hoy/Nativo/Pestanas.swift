@@ -9,6 +9,10 @@ struct Pestanas: View {
     @Environment(\.scenePhase) private var fase
     /// Lo que se ha arrastrado de lado: la pantalla sigue al dedo antes de pasar de página.
     @State private var arrastre: CGFloat = 0
+    /// La dirección del arrastre, decidida una vez al empezar: de lado (y hacia una sección que existe) o cualquier otra
+    /// cosa. Si no es de lado, en todo ese gesto la página no se mueve (antes un scroll en diagonal la desplazaba).
+    @State private var eje: Eje?
+    private enum Eje { case lado, otro }
 
     var body: some View {
         let haciaDelante = Self.indice(navegador.pestana) >= Self.indice(navegador.anterior)
@@ -25,13 +29,17 @@ struct Pestanas: View {
             // deslizar a los lados: la página sigue al dedo y, pasado un tercio (o rápido), pasa a la de al lado
             .simultaneousGesture(DragGesture(minimumDistance: 24, coordinateSpace: .global)
                 .onChanged { g in
-                    guard puedeArrastrar(g) else { return }
+                    if eje == nil { eje = puedeArrastrar(g) && hayVecina(g.translation.width) ? .lado : .otro }
+                    // solo se mueve si tiene sentido: de lado y hacia una sección que existe (y sin pasarse al volver)
+                    guard eje == .lado, hayVecina(g.translation.width) else { arrastre = 0; return }
                     arrastre = g.translation.width * 0.6
                 }
                 .onEnded { g in
                     let dx = g.translation.width, rapido = abs(g.predictedEndTranslation.width) > 260
+                    let decidido = eje
+                    eje = nil
                     defer { withAnimation(Tema.Muelle.pantalla) { arrastre = 0 } }
-                    guard puedeArrastrar(g), abs(dx) > 80 || rapido else { return }
+                    guard decidido == .lado, hayVecina(dx), abs(dx) > 80 || rapido else { return }
                     paso(dx < 0 ? 1 : -1)
                 })
             VStack(spacing: Tema.Espacio.s) {
@@ -71,6 +79,11 @@ struct Pestanas: View {
             return x < 28 || x > ancho - 28
         }
         return true
+    }
+
+    /// ¿Hay sección al lado hacia donde va el dedo? (arrastrar a la izquierda = la siguiente)
+    private func hayVecina(_ dx: CGFloat) -> Bool {
+        Dock.visibles().indices.contains(Self.indice(navegador.pestana) + (dx < 0 ? 1 : -1))
     }
 
     private static let conFilasDeslizables: Set<String> = ["/pendientes.html", "/documentos.html", "/gastos.html"]
